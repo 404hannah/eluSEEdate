@@ -84,7 +84,7 @@ for filename in os.listdir(input_folder):
                 .output(
                     output_template, 
                     # Scale
-                    vf='scale=64:64',
+                    vf='scale=128:128',
                     # Grayscale and Scale
                     # vf='format=gray,scale=64:64', 
                     # Framerate
@@ -93,10 +93,10 @@ for filename in os.listdir(input_folder):
                     an=None, 
                     # Remove rotation metadata
                     metadata='s:v:0 rotate=0',
-                    # Segment logic: Split every 5 seconds
+                    # Segment logic: Split every 3 seconds
                     f='segment',
-                    segment_time=5,
-                    force_key_frames='expr:gte(t,n_forced*5)',
+                    segment_time=3,
+                    force_key_frames='expr:gte(t,n_forced*3)',
                     reset_timestamps=1,
                     # Start count of the specific vid
                     segment_start_number=global_segment_counter
@@ -112,8 +112,8 @@ for filename in os.listdir(input_folder):
                     try:
                         seg_probe = ffmpeg.probe(seg_path)
                         seg_dur = float(seg_probe['format']['duration'])
-                        # If duration is less than 4.9s, it's a "leftover" fragment
-                        if seg_dur < 4.9: 
+                        # If duration is less than 2.9s, it's a "leftover" fragment
+                        if seg_dur < 2.9: 
                             os.remove(seg_path)
                     except Exception:
                         # If the file is corrupted/0kb, probe fails, so we delete it

@@ -35,9 +35,9 @@ def get_video_stats(folder_path):
 
 # Define I/O folders
 
-input_folder = r'' 
+input_folder = r'C:\Users\ejans\OneDrive\Documents\Thesis Stuff\Test' 
 parent_folder = os.path.dirname(input_folder)
-output_folder = os.path.join(parent_folder, 'Rescaled & Muted Dataset Videos')
+output_folder = os.path.join(parent_folder, 'Rescaled & Muted Dataset Videos Test')
 
 # Create the output folder if it doesn't exist
 
@@ -80,7 +80,7 @@ for filename in os.listdir(input_folder):
                 .input(input_path)
                 .output(
                     output_path, 
-                    vf='scale=-1:480, fps=10', 
+                    vf='scale=-1:480, fps=24', 
                     an=None, 
                     metadata='s:v:0 rotate=0')
                 .overwrite_output() # Overwrites if file exists
