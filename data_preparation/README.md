@@ -73,6 +73,9 @@ Prediction Logic
 | RIGHT | >1.25∘ | 2 |
 
 ## 🛠️ Setup & Usage
+
+To be updated pa
+
 1. Dependencies: Ensure you have Python 3.x installed with the libraries listed in the badges above.
 2. Initialize Folders:
   * Place raw videos in Datasets/videos/.
