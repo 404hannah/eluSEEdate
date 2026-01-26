@@ -40,7 +40,11 @@ class VisualOdometry():
         """
         Setting up the VO system. Loads calibration and opens video stream.
         """
-        self.K, self.P = self._load_calib(os.path.join(os.getcwd(), 'calib.txt'))
+        # Updated: Use script's actual directory instead of current working directory
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        calib_path = os.path.join(script_dir, 'calib.txt')
+        
+        self.K, self.P = self._load_calib(calib_path)
         
         # Streaming setup
         self.cap = cv2.VideoCapture(video_path)
@@ -290,7 +294,7 @@ def main():
     print("-" * 30)     
     
     # Input path for the videos folder
-    video_folder = r'D:\Thesis 2\VO_Test\Videos'
+    video_folder = r''
     vid_dir_name = os.path.basename(video_folder)
     
     data_dir = os.path.dirname(video_folder)
