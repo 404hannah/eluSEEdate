@@ -184,7 +184,7 @@ def main():
     print("Starting Monocular Visual Odometry")
     print("-" * 30)     
     
-    data_dir = "Datasets"
+    data_dir = "datasets"
     video_folder = os.path.join(data_dir, "videos")
     
     input_size_mb = get_folder_size(video_folder) 
