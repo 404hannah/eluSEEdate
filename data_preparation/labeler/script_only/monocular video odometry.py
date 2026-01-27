@@ -421,7 +421,7 @@ def main():
         if os.path.exists(os.path.join(labels_dir, f"{video_name}_labels.csv")):
             continue # Skips processed videos
         else: 
-            process_video(data_dir, vid_dir_name, video_file)
+            process_video(data_dir, vid_dir_name, video_file, labels_dir, video_name)
             vid_counter += 1
 
     fixing_outlier(labels_dir)
