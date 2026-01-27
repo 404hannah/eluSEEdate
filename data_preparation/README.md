@@ -1,7 +1,3 @@
-To be updated still
-
-Update it first though at its origin repo
-
 # 🛠️ Data Preparation & Labeling Pipeline
 
 This repository contains a specialized pipeline designed for processing raw video data, applying augmentations, and generating ground-truth labels using Monocular Visual Odometry (MVO).
@@ -17,12 +13,13 @@ All assets are contained within the data_preparation root folder, organized into
 ```text
 data_preparation/
 ├── video_preparation/
+│   ├── augmentor.py     # Step 2: Diverse visual variations 
+│   ├── cleaner.py       # Step 5: Final cleanup
 │   ├── rescaler.py      # Step 1: Standardize resolution/FPS
-│   ├── augmentor.py     # Step 2: Diverse visual variations
-│   └── cleaner.py     # Step 4: Final segmentation & cleanup
+│   └── segmenter        # Step 3: Segments the videos to 3 sec durations
 └── labeler/
-    ├── MVO_script.py    # Step 3 (Fast): Labeling without visualization
-    └── MVO_gui.py       # Step 3 (Visual): Labeling with matching preview
+    ├── MVO_script.py    # Step 4: Fast labeling without visualization
+    └── MVO_gui.py       # Step 4: Visual labeling with matching preview
 ```
 
 ## 🚀 Workflow Execution Order
@@ -30,14 +27,15 @@ data_preparation/
 To ensure data integrity and proper formatting, scripts must be executed in the following order:
 1. **rescaler**: Standardizes all input videos to a manageable resolution (480p) and fixed frame rate.
 2. **augmentor**: Generates variants (Brightness, Noise, etc.) to increase dataset diversity.
-3. **MVO**: Generates turn labels (Left, Right, Front) using Visual Odometry.
-4. **sequencer**: Segments the labeled videos into consistent 5-second clips for model training.
+3. **segmenter**: Segments the labeled videos into consistent 3-second clips for model training.
+4. **MVO**: Generates turn labels (Left, Right, Front) using Visual Odometry.
+5. **cleaner**: Scales the videos to 128x128 and 10 fps for model training.
 
 ## 🎥 Video Preparation Tools
 1. **Rescaler** (rescaler.py)
 Standardizes raw footage.
 * Scale: -1:480 (maintains aspect ratio).
-* FPS: 10.
+* FPS: 24.
 * Action: Removes audio and clears rotation metadata to prevent orientation errors.
 
 2. **Augmentor** (augmentor.py)
@@ -49,12 +47,14 @@ Applies a 30% probability of augmentation to videos, creating three distinct var
 
 3. **Segmenter** (segmenter.py)
 Prepares the videos for the MVO
-* Segmentation: Splits videos into exact 5-second segments.
+* Segmentation: Splits videos into exact 3-second segments.
+* Cleanup: Automatically deletes "leftover" fragments shorter than 2.9 seconds.
 
 4. **Cleaner** (sequencer.py)
 The final processing step.
 * Scaling: Downscales to 64×64 for neural network input.
-* Cleanup: Automatically deletes "leftover" fragments shorter than 4.9 seconds.
+* Frame rate reduction: Reduced to 10fps for neural network input.
+
 
 ## 🏷️ Labeler (Monocular Visual Odometry)
 The labeling tool uses geometric computer vision to track camera movement and predict turns based on Yaw rotation.
