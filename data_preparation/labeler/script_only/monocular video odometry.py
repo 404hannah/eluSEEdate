@@ -124,11 +124,8 @@ class VisualOdometry():
     def get_yaw(self, R):
         return -math.degrees(math.atan2(R[0, 2], R[2, 2]))
 
-def process_video(data_dir, vid_dir_name, video_file):
+def process_video(data_dir, vid_dir_name, video_file, labels_dir, video_name):
     video_path = os.path.join(data_dir, vid_dir_name, video_file)
-    video_name = os.path.splitext(video_file)[0]
-    labels_dir = os.path.join(data_dir, "labels")
-    os.makedirs(labels_dir, exist_ok=True)
     
     vo = VisualOdometry(data_dir, video_path)
     csv_labels = []
@@ -287,6 +284,104 @@ def fixing_outlier(labels_dir):
             shutil.copy(csv_path, os.path.join(processed_lbl_folder, csv_file))         
     return
 
+def fixing_outlier(labels_dir):
+    # Locating and reading CSV files
+    yaw_limit = 1.5 * 1.5 # Equal to the squared of turn_threshold 
+
+    processed_lbl_folder = os.path.join(labels_dir, 'processed_labels') 
+    os.makedirs(processed_lbl_folder, exist_ok=True)
+    print(f"Verified folder: {processed_lbl_folder}")
+
+    for csv_file in os.listdir(labels_dir):
+        if csv_file.endswith("_labels.csv"):
+            csv_path = os.path.join(labels_dir, csv_file)
+            if os.path.exists(os.path.join(processed_lbl_folder, csv_file)):
+                continue
+            with open(csv_path, 'r') as f:
+                reader = csv.DictReader(f)
+                label_yaw = []
+                label_ids = []
+                label_yaw_corrected = []
+                label_id_corrected = []
+                label_name_corrected = []
+
+                # Extract label_name and label_yaw columns
+                for row in reader:
+                    label_yaw.append(row['yaw_degrees'])
+                    label_ids.append(row['label_id'])
+
+            counter = 0
+            # Identifying and correcting outliers
+            for i, ids in enumerate(label_ids):
+                if i == 0 or i == len(label_ids) - 1:
+                    label_id_corrected.append(ids)
+                    label_yaw_corrected.append(float(label_yaw[i])) 
+                    continue
+                # An outlier is detected if it is dissimilar from both neighbors
+                if label_id_corrected[i-1] == label_ids[i+1] and ids != label_id_corrected[i-1]:
+                    # Keep lone outlier with high yaw_degrees
+                    if float(label_yaw[i]) > yaw_limit:
+                        # A high yaw degree is retained and influences the next neighbor 
+                        # So the user has enough time for a direction
+                        label_yaw[i+1] = float(label_yaw[i+1]) + (float(label_yaw[i]) - yaw_limit)
+                        label_yaw_corrected.append(float(label_yaw[i]) - ((float(label_yaw[i]) - yaw_limit))) 
+                        label_id_corrected.append(ids)
+                    elif float(label_yaw[i]) < -(yaw_limit):
+                        label_yaw[i+1] = float(label_yaw[i+1]) + (float(label_yaw[i]) + 2.25)
+                        label_yaw_corrected.append(float(label_yaw[i]) - ((float(label_yaw[i]) + yaw_limit))) 
+                        label_id_corrected.append(ids)
+                    else: 
+                        label_id_corrected.append(label_ids[i-1]) # Correct the outlier  
+                        label_yaw_corrected.append(float(label_yaw[i]))
+                        counter += 1
+                else:
+                    label_id_corrected.append(ids)
+                    label_yaw_corrected.append(float(label_yaw[i]))
+
+            print(f"{os.path.splitext(csv_file)[0]}.csv -> No. of outliers: {counter}")
+
+            # Providing the corresponding corrected label names
+            for label in label_id_corrected:
+                if label == '0':
+                    label_name_corrected.append('FRONT')
+                elif label == '1':
+                    label_name_corrected.append('LEFT')
+                elif label == '2':
+                    label_name_corrected.append('SLIGHT LEFT')
+                elif label == '3':
+                    label_name_corrected.append('SLIGHT RIGHT')
+                elif label == '4':
+                    label_name_corrected.append('RIGHT')
+                else:
+                    label_name_corrected.append('SKIPPED')
+
+            # Read the file again from the beginning
+            with open(csv_path, 'r') as f:
+                reader = csv.reader(f)
+                rows = list(reader)
+
+            # Now write the corrected data
+            with open(csv_path, 'w', newline='') as f:
+                writer = csv.writer(f)
+
+                for i, row in enumerate(rows):
+                    # Write header row with new columns
+                    if i == 0:
+                        row.append('label_yaw_corrected')
+                        row.append('label_id_corrected')
+                        row.append('label_name_corrected')
+                        writer.writerow(row)
+                    # Add the modified values in each row of the CSV file
+                    else:
+                        row.append(label_yaw_corrected[i-1])
+                        row.append(label_id_corrected[i-1])
+                        row.append(label_name_corrected[i-1])
+                        writer.writerow(row)
+
+            # All processed csv files are copied to a folder 
+            shutil.copy(csv_path, os.path.join(processed_lbl_folder, csv_file))         
+    return
+
 def main():
     start = time.time()
     print("-" * 30)
@@ -317,14 +412,23 @@ def main():
     extensions = ('.mp4', '.avi', '.mov', '.mkv')
     video_files = [f for f in os.listdir(video_folder) if f.lower().endswith(extensions)]
     
+    labels_dir = os.path.join(data_dir, "labels")
+    os.makedirs(labels_dir, exist_ok=True)
+    
+    vid_counter = 0
     for video_file in video_files:
-        process_video(data_dir, vid_dir_name, video_file)
+        video_name = os.path.splitext(video_file)[0]
+        if os.path.exists(os.path.join(labels_dir, f"{video_name}_labels.csv")):
+            continue # Skips processed videos
+        else: 
+            process_video(data_dir, vid_dir_name, video_file)
+            vid_counter += 1
 
-    fixing_outlier(os.path.join(data_dir, "labels"))
+    fixing_outlier(labels_dir)
     
     print("\n" + "-" * 30)     
     print(f"Total duration of source videos: {formatted_original_time}")
-    print(f"Processing finished for all {len(video_files)} videos")    
+    print(f"Processing finished for all {vid_counter} videos")    
     print(f"Total size of source videos: {input_size_mb} MB")    
     
     end = time.time()
