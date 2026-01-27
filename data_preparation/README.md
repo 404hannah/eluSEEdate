@@ -86,14 +86,9 @@ Prediction Logic
 
 ## 🛠️ Setup & Usage
 
-To be updated pa
-
 1. Dependencies: Ensure you have Python 3.x installed with the libraries listed in the badges above.
-2. Initialize Folders:
-
-- Place raw videos in Datasets/videos/.
-- Ensure Datasets/calib.txt is present.
-
+2. Initialize Dataset Folder: Initialize the input path of the videos folder.<br>
+   `video_folder = r''`
 3. Run Pipeline:
 
 ```text
