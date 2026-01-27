@@ -37,7 +37,7 @@ def get_video_stats(folder_path):
 
 input_folder = r'' 
 parent_folder = os.path.dirname(input_folder)
-output_folder = os.path.join(parent_folder, 'Cleaned Dataset Videos')
+output_folder = os.path.join(parent_folder, 'Segmented Dataset Videos')
 
 # Create the output folder if it doesn't exist
 
