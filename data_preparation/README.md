@@ -28,49 +28,58 @@ data_preparation/
 ## 🚀 Workflow Execution Order
 
 To ensure data integrity and proper formatting, scripts must be executed in the following order:
+
 1. **rescaler**: Standardizes all input videos to a manageable resolution (480p) and fixed frame rate.
 2. **augmentor**: Generates variants (Brightness, Noise, etc.) to increase dataset diversity.
 3. **MVO**: Generates turn labels (Left, Right, Front) using Visual Odometry.
 4. **sequencer**: Segments the labeled videos into consistent 5-second clips for model training.
 
 ## 🎥 Video Preparation Tools
+
 1. **Rescaler** (rescaler.py)
-Standardizes raw footage.
-* Scale: -1:480 (maintains aspect ratio).
-* FPS: 10.
-* Action: Removes audio and clears rotation metadata to prevent orientation errors.
+   Standardizes raw footage.
+
+- Scale: -1:480 (maintains aspect ratio).
+- FPS: 10.
+- Action: Removes audio and clears rotation metadata to prevent orientation errors.
 
 2. **Augmentor** (augmentor.py)
-Applies a 30% probability of augmentation to videos, creating three distinct variants:
-* Brighter/Dimmer: Simulates lighting changes.
-* Noise: Adds luminance-based grain.
-* Translation: Shifts the frame 5 pixels.
-* Superpixel: Applies 16x16 block pixelization.
+   Applies a 30% probability of augmentation to videos, creating three distinct variants:
+
+- Brighter/Dimmer: Simulates lighting changes.
+- Noise: Adds luminance-based grain.
+- Translation: Shifts the frame 5 pixels.
+- Superpixel: Applies 16x16 block pixelization.
 
 3. **Sequencer** (sequencer.py)
-The final processing step.
-* Segmentation: Splits videos into exact 5-second segments.
-* Scaling: Downscales to 64×64 for neural network input.
-* Cleanup: Automatically deletes "leftover" fragments shorter than 4.9 seconds.
+   The final processing step.
+
+- Segmentation: Splits videos into exact 5-second segments.
+- Scaling: Downscales to 64×64 for neural network input.
+- Cleanup: Automatically deletes "leftover" fragments shorter than 4.9 seconds.
 
 ## 🏷️ Labeler (Monocular Visual Odometry)
+
 The labeling tool uses geometric computer vision to track camera movement and predict turns based on Yaw rotation.
 
     [!IMPORTANT] Both labeling scripts require a calib.txt file in the dataset directory containing your camera's projection matrix.
 
 Choose Your Mode:
-* **Script Only**: Optimized for speed. Processes videos in the background and exports CSVs directly to the labels/ folder. Use this for large-scale batch processing.
-* **With GUI**: Best for debugging or verification. Provides a real-time window showing:
-  * Feature Matching: ORB landmarks being tracked between frames.
-  * Trajectory: Real-time turn prediction (LEFT/RIGHT/FRONT).
-  * Visual Feedback: Green/Red lines indicating match quality.
+
+- **Script Only**: Optimized for speed. Processes videos in the background and exports CSVs directly to the labels/ folder. Use this for large-scale batch processing.
+- **With GUI**: Best for debugging or verification. Provides a real-time window showing:
+  - Feature Matching: ORB landmarks being tracked between frames.
+  - Trajectory: Real-time turn prediction (LEFT/RIGHT/FRONT).
+  - Visual Feedback: Green/Red lines indicating match quality.
 
 Prediction Logic
 | Direction | Yaw Threshold | Label ID |
 |----------|----------|----------|
-| FRONT | Within ±1.25∘ | 0 |
-| LEFT | <−1.25∘ | 1 |
-| RIGHT | >1.25∘ | 2 |
+| FRONT | Within ±1.5∘ | 0 |
+| LEFT | <−1.5∘ | 1 |
+| SLIGHT LEFT | <-2.25∘ | 2 |
+| SLIGHT RIGHT | >1.5∘ | 3 |
+| RIGHT | >2.25∘ | 4 |
 
 ## 🛠️ Setup & Usage
 
@@ -78,9 +87,12 @@ To be updated pa
 
 1. Dependencies: Ensure you have Python 3.x installed with the libraries listed in the badges above.
 2. Initialize Folders:
-  * Place raw videos in Datasets/videos/.
-  * Ensure Datasets/calib.txt is present.
+
+- Place raw videos in Datasets/videos/.
+- Ensure Datasets/calib.txt is present.
+
 3. Run Pipeline:
+
 ```text
 # Example Step 1
 python video_preparation/rescaler.py
