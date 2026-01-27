@@ -389,7 +389,7 @@ def main():
     print("-" * 30)     
     
     # Input path for the videos folder
-    video_folder = r'D:\Thesis 2\VO_Test\Videos'
+    video_folder = r''
     vid_dir_name = os.path.basename(video_folder)
     
     data_dir = os.path.dirname(video_folder)

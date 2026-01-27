@@ -87,8 +87,14 @@ Prediction Logic
 ## 🛠️ Setup & Usage
 
 1. Dependencies: Ensure you have Python 3.x installed with the libraries listed in the badges above.
-2. Initialize Dataset Folder: Initialize the input path of the videos folder.<br>
-   `video_folder = r''`
+2. Initialize Folders:
+
+Initialize the input path of the videos folder in monocular visual odometry.py.<br>
+`video_folder = r''`
+
+Initialize the input path of the videos folder in augmentor.py.<br>
+`input_folder = r''`
+
 3. Run Pipeline:
 
 ```text
