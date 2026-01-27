@@ -35,7 +35,7 @@ def get_video_stats(folder_path):
 
 # Define I/O folders
 
-input_folder = r'' 
+input_folder = r'' # Remember to change author
 parent_folder = os.path.dirname(input_folder)
 output_folder = os.path.join(parent_folder, 'Segmented Dataset Videos')
 

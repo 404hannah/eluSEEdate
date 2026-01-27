@@ -35,7 +35,7 @@ def get_video_stats(folder_path):
 
 # Define I/O folders
 
-input_folder = r'' 
+input_folder = r''
 parent_folder = os.path.dirname(input_folder)
 output_folder = os.path.join(parent_folder, 'Cleaned Dataset Videos')
 
@@ -43,9 +43,6 @@ output_folder = os.path.join(parent_folder, 'Cleaned Dataset Videos')
 
 if not os.path.exists(output_folder):
     os.makedirs(output_folder)
-    
-# Change for first letter of the name of who is using this
-author = "E"
 
 print("-" * 30)
 
