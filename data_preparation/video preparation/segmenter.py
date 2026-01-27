@@ -35,7 +35,7 @@ def get_video_stats(folder_path):
 
 # Define I/O folders
 
-input_folder = r'' 
+input_folder = r'C:\Users\ejans\OneDrive\Documents\Thesis Stuff\Test' 
 parent_folder = os.path.dirname(input_folder)
 output_folder = os.path.join(parent_folder, 'Segmented Dataset Videos')
 
@@ -80,7 +80,7 @@ for filename in os.listdir(input_folder):
         try:
             probe = ffmpeg.probe(input_path)
             duration = float(probe['format']['duration'])
-            num_segments = int(duration // 5) + (1 if duration % 5 > 0 else 0)
+            num_segments = int(duration // 3) + (1 if duration % 3 > 0 else 0)
             (
                 ffmpeg
                 .input(input_path)
@@ -89,18 +89,19 @@ for filename in os.listdir(input_folder):
                     # Segment logic: Split every 3 seconds
                     f='segment',
                     segment_time=3,
-                    force_key_frames='expr:gte(t,n_forced*3)',
                     reset_timestamps=1,
                     # Start count of the specific vid
-                    segment_start_number=global_segment_counter
+                    segment_start_number=global_segment_counter,
+                    force_key_frames='expr:gte(t,n_forced*3)'
                     )
                 .overwrite_output() # Overwrites if file exists
                 .run(quiet=True)
             )
             
             # Cleanup Logic
+            segments_actually_kept = 0
             for i in range(global_segment_counter, global_segment_counter + num_segments):
-                seg_path = os.path.join(output_folder, f"{i:010d}.mp4")
+                seg_path = os.path.join(output_folder, f"{author}{i:010d}.mp4")
                 if os.path.exists(seg_path):
                     try:
                         seg_probe = ffmpeg.probe(seg_path)
@@ -108,11 +109,13 @@ for filename in os.listdir(input_folder):
                         # If duration is less than 2.9s, it's a "leftover" fragment
                         if seg_dur < 2.9: 
                             os.remove(seg_path)
+                        else:
+                            segments_actually_kept += 1
                     except Exception:
                         # If the file is corrupted/0kb, probe fails, so we delete it
                         os.remove(seg_path)
             
-            global_segment_counter += num_segments
+            global_segment_counter += segments_actually_kept
         except ffmpeg.Error as e:
             print(f"Error processing {filename}: {e.stderr.decode() if e.stderr else 'Unknown error'}")
 
