@@ -19,7 +19,7 @@ data_preparation/
 ├── video_preparation/
 │   ├── rescaler.py      # Step 1: Standardize resolution/FPS
 │   ├── augmentor.py     # Step 2: Diverse visual variations
-│   └── sequencer.py     # Step 4: Final segmentation & cleanup
+│   └── cleaner.py     # Step 4: Final segmentation & cleanup
 └── labeler/
     ├── MVO_script.py    # Step 3 (Fast): Labeling without visualization
     └── MVO_gui.py       # Step 3 (Visual): Labeling with matching preview
@@ -47,9 +47,12 @@ Applies a 30% probability of augmentation to videos, creating three distinct var
 * Translation: Shifts the frame 5 pixels.
 * Superpixel: Applies 16x16 block pixelization.
 
-3. **Sequencer** (sequencer.py)
-The final processing step.
+3. **Segmenter** (segmenter.py)
+Prepares the videos for the MVO
 * Segmentation: Splits videos into exact 5-second segments.
+
+4. **Cleaner** (sequencer.py)
+The final processing step.
 * Scaling: Downscales to 64×64 for neural network input.
 * Cleanup: Automatically deletes "leftover" fragments shorter than 4.9 seconds.
 
