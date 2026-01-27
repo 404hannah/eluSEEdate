@@ -37,12 +37,15 @@ def get_video_stats(folder_path):
 
 input_folder = r'' 
 parent_folder = os.path.dirname(input_folder)
-output_folder = os.path.join(parent_folder, 'Segmented Dataset Videos 1')
+output_folder = os.path.join(parent_folder, 'Cleaned Dataset Videos')
 
 # Create the output folder if it doesn't exist
 
 if not os.path.exists(output_folder):
     os.makedirs(output_folder)
+
+# Change for first letter of the name of who is using this
+author = "E"
 
 print("-" * 30)
 
@@ -60,40 +63,56 @@ print("-" * 30)
 
 # Loop through all files in the input folder
 
-print(f"Starting video segmenting\n")
+print(f"Starting video cleaning and segmentation\n")
 
 start = time.time()
+
+global_segment_counter = 1
 
 for filename in os.listdir(input_folder):
     if filename.endswith(".mp4"):
         input_path = os.path.join(input_folder, filename)
-        # Keeps the original filename for the output
-        output_path = os.path.join(output_folder, filename)
+        output_template = os.path.join(output_folder, author + "%010d.mp4")
         
         # Shows file being processed
-        print(f"Processing: {filename}...")
+        print(f"Processing: {filename} (Starting at index {global_segment_counter:010d})...")
 
         try:
+            probe = ffmpeg.probe(input_path)
+            duration = float(probe['format']['duration'])
+            num_segments = int(duration // 5) + (1 if duration % 5 > 0 else 0)
             (
                 ffmpeg
                 .input(input_path)
                 .output(
-                    output_path, 
-                    # Scale
-                    vf='scale=128:128',
-                    # Grayscale and Scale
-                    # vf='format=gray,scale=64:64', 
-                    # Framerate
-                    r=10,
-                    # Disable audio
-                    an=None, 
-                    # Remove rotation metadata
-                    metadata='s:v:0 rotate=0'
-                )
+                    output_template, 
+                    # Segment logic: Split every 3 seconds
+                    f='segment',
+                    segment_time=3,
+                    force_key_frames='expr:gte(t,n_forced*3)',
+                    reset_timestamps=1,
+                    # Start count of the specific vid
+                    segment_start_number=global_segment_counter
+                    )
                 .overwrite_output() # Overwrites if file exists
                 .run(quiet=True)
             )
             
+            # Cleanup Logic
+            for i in range(global_segment_counter, global_segment_counter + num_segments):
+                seg_path = os.path.join(output_folder, f"{i:010d}.mp4")
+                if os.path.exists(seg_path):
+                    try:
+                        seg_probe = ffmpeg.probe(seg_path)
+                        seg_dur = float(seg_probe['format']['duration'])
+                        # If duration is less than 2.9s, it's a "leftover" fragment
+                        if seg_dur < 2.9: 
+                            os.remove(seg_path)
+                    except Exception:
+                        # If the file is corrupted/0kb, probe fails, so we delete it
+                        os.remove(seg_path)
+            
+            global_segment_counter += num_segments
         except ffmpeg.Error as e:
             print(f"Error processing {filename}: {e.stderr.decode() if e.stderr else 'Unknown error'}")
 
