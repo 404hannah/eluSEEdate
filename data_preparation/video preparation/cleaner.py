@@ -37,12 +37,15 @@ def get_video_stats(folder_path):
 
 input_folder = r'' 
 parent_folder = os.path.dirname(input_folder)
-output_folder = os.path.join(parent_folder, 'Rescaled & Muted Dataset Videos Test')
+output_folder = os.path.join(parent_folder, 'Cleaned Dataset Videos')
 
 # Create the output folder if it doesn't exist
 
 if not os.path.exists(output_folder):
     os.makedirs(output_folder)
+    
+# Change for first letter of the name of who is using this
+author = "E"
 
 print("-" * 30)
 
@@ -58,21 +61,22 @@ print(f"Total size of input folder: {input_size_mb} MB")
 
 print("-" * 30)
 
+# Loop through all files in the input folder
+
+print(f"Starting video cleaning\n")
+
 start = time.time()
 
-# Loop through all files in the input folder
+global_file_counter = 1
+
 for filename in os.listdir(input_folder):
     if filename.endswith(".mp4"):
         input_path = os.path.join(input_folder, filename)
-        output_path = os.path.join(output_folder, filename)
-        
-        # Skip Existing Logic
-        if os.path.exists(output_path):
-            print(f"Skipping: {filename} (Already exists)")
-            continue
+        # Each file is saved as a unique numbered video
+        output_path = os.path.join(output_folder, f"{global_file_counter:010d}.mp4")
         
         # Shows file being processed
-        print(f"Processing: {filename}...")
+        print(f"Processing: {filename} (Saving as {global_file_counter:010d}.mp4)...")
 
         try:
             (
@@ -80,14 +84,25 @@ for filename in os.listdir(input_folder):
                 .input(input_path)
                 .output(
                     output_path, 
-                    vf='scale=-1:480, fps=24', 
+                    # Scale
+                    vf='scale=128:128',
+                    # Grayscale and Scale
+                    # vf='format=gray,scale=64:64', 
+                    # Framerate
+                    r=10,
+                    # Disable audio
                     an=None, 
-                    metadata='s:v:0 rotate=0')
+                    # Remove rotation metadata
+                    metadata='s:v:0 rotate=0'
+                )
                 .overwrite_output() # Overwrites if file exists
                 .run(quiet=True)
             )
+            
+            global_file_counter += 1
+            
         except ffmpeg.Error as e:
-            print(f"Error processing {filename}: {e.stderr}")
+            print(f"Error processing {filename}: {e.stderr.decode() if e.stderr else 'Unknown error'}")
 
 end = time.time()
 
@@ -102,11 +117,13 @@ formatted_final_time, total_output_seconds, output_file_count = get_video_stats(
 print("-" * 30)
 print("All videos have been processed\n")
 
+print(f"Processing time: {round(end-start, 2)} seconds\n")
 
-print(f"Total duration of all videos: {formatted_original_time}")
-print(f"Processing time: {round(end-start, 2)} seconds")
-print(f"Total videos: {input_file_count}\n")
+print(f"Total duration of all source videos: {formatted_original_time}")
+print(f"Total raw videos: {input_file_count}")
+print(f"Total size of input folder: {input_size_mb} MB\n")
 
-print(f"Total size of input folder: {input_size_mb} MB")
+print(f"Total duration of all cleaned videos: {formatted_final_time}")
+print(f"Total processed videos: {output_file_count}")
 print(f"Total size of output folder: {output_size_mb} MB")
 print("-" * 30)

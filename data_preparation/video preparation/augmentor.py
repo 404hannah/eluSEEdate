@@ -99,9 +99,6 @@ augmentations = [
     {'name': 'Brighter', 'vf': 'eq=brightness=0.3'},
     {'name': 'Dimmer', 'vf': 'eq=brightness=-0.3'},
     # noise=Luminance=Strength:Function=Uniform
-        # Luminance for the brightness
-        # Strength for the intensity
-        # Uniform to make the noise brighter or darker
     {'name': 'Noise', 'vf': 'noise=c0s=50:c0f=t+u'},
     # pad=iw+5:ih+5:5:5: Adds 5 pixels of padding to the top and left
     {'name': 'Translation', 'vf': 'setpts=PTS-STARTPTS,pad=iw+5:ih+5:5:5:black'},
