@@ -43,7 +43,7 @@ def get_video_stats(folder_path):
 
 # Define input folder
 
-input_folder = r'D:\Thesis 2\VO_Test\Cleaned Dataset Videos'
+input_folder = r''
 
 # Get parent folder
 parent_folder = os.path.dirname(input_folder)
