@@ -100,7 +100,7 @@ augmentations = [
     {'name': 'Dimmer', 'vf': 'eq=brightness=-0.3'},
     # noise=Luminance=Strength:Function=Uniform
     {'name': 'Noise', 'vf': 'noise=c0s=50:c0f=t+u'},
-    # pad=iw+5:ih+5:5:5: Adds 5 pixels of padding to the top and left
+    # crop=128:128:5:5: Crops 5 pixels of the video's top and left
     {'name': 'Translation', 'vf': 'crop=128:128:5:5,setpts=PTS-STARTPTS'},
     # pixelize=width=16:height=16: Tells FFmpeg to divide the image into 16×16 pixel blocks
     {'name': 'Superpixel', 'vf': 'pixelize=width=16:height=16'}
