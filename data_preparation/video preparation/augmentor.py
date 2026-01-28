@@ -43,7 +43,7 @@ def get_video_stats(folder_path):
 
 # Define input folder
 
-input_folder = r''
+input_folder = r'D:\Thesis 2\VO_Test\Cleaned Dataset Videos'
 
 # Get parent folder
 parent_folder = os.path.dirname(input_folder)
@@ -101,7 +101,7 @@ augmentations = [
     # noise=Luminance=Strength:Function=Uniform
     {'name': 'Noise', 'vf': 'noise=c0s=50:c0f=t+u'},
     # pad=iw+5:ih+5:5:5: Adds 5 pixels of padding to the top and left
-    {'name': 'Translation', 'vf': 'setpts=PTS-STARTPTS,pad=iw+5:ih+5:5:5:black'},
+    {'name': 'Translation', 'vf': 'crop=128:128:5:5,setpts=PTS-STARTPTS'},
     # pixelize=width=16:height=16: Tells FFmpeg to divide the image into 16×16 pixel blocks
     {'name': 'Superpixel', 'vf': 'pixelize=width=16:height=16'}
 ]

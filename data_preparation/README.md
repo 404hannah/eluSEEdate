@@ -27,10 +27,10 @@ data_preparation/
 To ensure data integrity and proper formatting, scripts must be executed in the following order:
 
 1. **rescaler**: Standardizes all input videos to a manageable resolution (480p) and fixed frame rate.
-2. **augmentor**: Generates variants (Brightness, Noise, etc.) to increase dataset diversity.
-3. **segmenter**: Segments the labeled videos into consistent 3-second clips for model training.
-4. **MVO**: Generates turn labels (Left, Right, Front) using Visual Odometry.
-5. **cleaner**: Scales the videos to 128x128 and 10 fps for model training.
+2. **segmenter**: Segments the labeled videos into consistent 3-second clips for model training.
+3. **MVO**: Generates turn labels (Left, Slight Left, Slight Right, Front) using Visual Odometry.
+4. **cleaner**: Scales the videos to 128x128 and 10 fps for model training.
+5. **augmentor**: Generates variants (Brightness, Noise, etc.) to increase dataset diversity.
 
 ## 🎥 Video Preparation Tools
 
@@ -41,25 +41,25 @@ To ensure data integrity and proper formatting, scripts must be executed in the 
 - FPS: 24.
 - Action: Removes audio and clears rotation metadata to prevent orientation errors.
 
-2. **Augmentor** (augmentor.py)
+2. **Segmenter** (segmenter.py)
+   Prepares the videos for the MVO
+
+- Segmentation: Splits videos into exact 3-second segments.
+- Cleanup: Automatically deletes "leftover" fragments shorter than 2.9 seconds.
+
+3. **Cleaner** (sequencer.py)
+   The final processing step.
+
+- Scaling: Downscales to 64×64 for neural network input.
+- Frame rate reduction: Reduced to 10fps for neural network input.
+
+4. **Augmentor** (augmentor.py)
    Applies a 30% probability of augmentation to videos, creating three distinct variants:
 
 - Brighter/Dimmer: Simulates lighting changes.
 - Noise: Adds luminance-based grain.
 - Translation: Shifts the frame 5 pixels.
 - Superpixel: Applies 16x16 block pixelization.
-
-3. **Segmenter** (segmenter.py)
-   Prepares the videos for the MVO
-
-- Segmentation: Splits videos into exact 3-second segments.
-- Cleanup: Automatically deletes "leftover" fragments shorter than 2.9 seconds.
-
-4. **Cleaner** (sequencer.py)
-   The final processing step.
-
-- Scaling: Downscales to 64×64 for neural network input.
-- Frame rate reduction: Reduced to 10fps for neural network input.
 
 ## 🏷️ Labeler (Monocular Visual Odometry)
 
@@ -104,7 +104,12 @@ In rescaler.py <br>
 In segmenter.py <br>
 `input_folder = r''`
 
-3. Run Pipeline:
+3. Input author initial:
+
+In segmenter.py <br>
+`author = ""`
+
+4. Run Pipeline:
 
 ```text
 # Example Step 1
