@@ -13,13 +13,13 @@ All assets are contained within the data_preparation root folder, organized into
 ```text
 data_preparation/
 ├── video_preparation/
-│   ├── augmentor.py     # Step 2: Diverse visual variations
-│   ├── cleaner.py       # Step 5: Final cleanup
+│   ├── augmentor.py     # Step 5: Diverse visual variations
+│   ├── cleaner.py       # Step 4: Final cleanup
 │   ├── rescaler.py      # Step 1: Standardize resolution/FPS
-│   └── segmenter        # Step 3: Segments the videos to 3 sec durations
+│   └── segmenter        # Step 2: Segments the videos to 3 sec durations
 └── labeler/
-    ├── MVO_script.py    # Step 4: Fast labeling without visualization
-    └── MVO_gui.py       # Step 4: Visual labeling with matching preview
+    ├── MVO_script.py    # Step 3: Fast labeling without visualization
+    └── MVO_gui.py       # Step 3: Visual labeling with matching preview
 ```
 
 ## 🚀 Workflow Execution Order
