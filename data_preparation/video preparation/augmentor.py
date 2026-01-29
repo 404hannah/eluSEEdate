@@ -109,8 +109,8 @@ augmentations = [
 start = time.time()
 for filename in os.listdir(input_folder):
 
-    # A video has a 30% chance of undergoing augmentation
-    if filename.lower().endswith(".mp4") and random.randrange(1, 101) <= 30:
+    # A video has a 20% chance of undergoing augmentation
+    if filename.lower().endswith(".mp4") and random.randrange(1, 101) <= 20:
         input_path = os.path.join(input_folder, filename)
         processed_count += 1
         
