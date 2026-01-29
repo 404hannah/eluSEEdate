@@ -38,6 +38,12 @@ def get_video_stats(folder_path):
 input_folder = r''
 parent_folder = os.path.dirname(input_folder)
 output_folder = os.path.join(parent_folder, 'Cleaned Dataset Videos')
+"""
+Replace with above for augmented videos
+
+grandparent_folder = os.path.dirname(parent_folder)
+output_folder = os.path.join(grandparent_folder, 'Cleaned Dataset Videos')
+"""
 
 # Create the output folder if it doesn't exist
 
@@ -70,10 +76,10 @@ for filename in os.listdir(input_folder):
     if filename.endswith(".mp4"):
         input_path = os.path.join(input_folder, filename)
         # Each file is saved as a unique numbered video
-        output_path = os.path.join(output_folder, f"{global_file_counter:010d}.mp4")
+        output_path = os.path.join(output_folder, filename)
         
         # Shows file being processed
-        print(f"Processing: {filename} (Saving as {global_file_counter:010d}.mp4)...")
+        print(f"Processing: {filename}...")
 
         try:
             (
