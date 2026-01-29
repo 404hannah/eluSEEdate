@@ -12,14 +12,17 @@ All assets are contained within the data_preparation root folder, organized into
 
 ```text
 data_preparation/
-├── video_preparation/
-│   ├── augmentor.py     # Step 5: Diverse visual variations
-│   ├── cleaner.py       # Step 4: Final cleanup
-│   ├── rescaler.py      # Step 1: Standardize resolution/FPS
-│   └── segmenter        # Step 2: Segments the videos to 3 sec durations
-└── labeler/
-    ├── MVO_script.py    # Step 3: Fast labeling without visualization
-    └── MVO_gui.py       # Step 3: Visual labeling with matching preview
+├── csv preparation/
+│   ├── csv migrator.py  # Step 7: Duplicates CSVs for augmented data 
+│   └── data balancer.py # Step 4: Cleans csv data
+├── labeler/
+│   ├── MVO_script.py    # Step 3: Fast labeling without visualization
+│   └── MVO_gui.py       # Step 3: Visual labeling with matching preview
+└──video preparation/
+    ├── augmentor.py     # Step 6: Diverse visual variations
+    ├── cleaner.py       # Step 5: Final cleanup
+    ├── rescaler.py      # Step 1: Standardize resolution/FPS
+    └── segmenter        # Step 2: Segments the videos to 3 sec durations
 ```
 
 ## 🚀 Workflow Execution Order
@@ -29,8 +32,10 @@ To ensure data integrity and proper formatting, scripts must be executed in the 
 1. **rescaler**: Standardizes all input videos to a manageable resolution (480p) and fixed frame rate.
 2. **segmenter**: Segments the labeled videos into consistent 3-second clips for model training.
 3. **MVO**: Generates turn labels (Left, Slight Left, Slight Right, Front) using Visual Odometry.
-4. **cleaner**: Scales the videos to 128x128 and 10 fps for model training.
-5. **augmentor**: Generates variants (Brightness, Noise, etc.) to increase dataset diversity.
+4. **Data Balancer**: Wait for Hannah for this 
+5. **cleaner**: Scales the videos to 128x128 and 10 fps for model training.
+6. **augmentor**: Generates variants (Brightness, Noise, etc.) to increase dataset diversity.
+7. **csv migrator**: Duplicates CSVs for augmented videos
 
 ## 🎥 Video Preparation Tools
 

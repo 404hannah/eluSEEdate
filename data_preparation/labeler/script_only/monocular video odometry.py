@@ -418,7 +418,7 @@ def main():
     vid_counter = 0
     for video_file in video_files:
         video_name = os.path.splitext(video_file)[0]
-        if os.path.exists(os.path.join(labels_dir, f"{video_name}_labels.csv")):
+        if os.path.exists(os.path.join(labels_dir, f"{video_name}")):
             continue # Skips processed videos
         else: 
             process_video(data_dir, vid_dir_name, video_file, labels_dir, video_name)
