@@ -98,8 +98,7 @@ augmentations = [
     {'name': 'Gaussian Blur', 'vf': 'gblur=sigma=2'},
     {'name': 'Color Jitter', 'vf':'hue=h=30:s=1.5'},
     {'name': 'Postivie Rotation', 'vf':'rotate=PI/20*sin(t)'},
-    {'name': 'Negative Rotation', 'vf':'rotate=PI/-20*sin(t)'},
-    {'name': 'No Change', 'vf':'eq=brightness=0'}
+    {'name': 'Negative Rotation', 'vf':'rotate=PI/-20*sin(t)'}
 ]
 
 start = time.time()
