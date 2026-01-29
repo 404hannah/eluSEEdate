@@ -98,7 +98,8 @@ augmentations = [
     # crop=128:128:5:5: Crops 5 pixels of the video's top and left
     {'name': 'Translation', 'vf': 'scale=133:133,crop=128:128:5:5,setpts=PTS-STARTPTS'},
     # pixelize=width=16:height=16: Tells FFmpeg to divide the image into 16×16 pixel blocks
-    {'name': 'Superpixel', 'vf': 'pixelize=width=16:height=16'}
+    {'name': 'Superpixel', 'vf': 'pixelize=width=16:height=16'},
+    {'name': 'No Change', 'vf':'eq=brightness=0'}
 ]
 
 start = time.time()
@@ -171,7 +172,7 @@ print(f"\nTotal source videos: {input_file_count}")
 print(f"Total augmented videos: {output_file_count}")
 
 print(f"\nTotal size of input folder: {input_size_mb} MB")
-print(f"Total size of augmented main folder: {output_size_mb} MB")
+print(f"Total size of augmented  folder: {output_size_mb} MB")
 print("-" * 30)
 
 # test
