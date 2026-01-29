@@ -14,7 +14,7 @@ All assets are contained within the data_preparation root folder, organized into
 data_preparation/
 ├── video_preparation/
 │   ├── augmentor.py     # Step 5: Diverse visual variations
-│   ├── cleaner.py       # Step 4: Final cleanup
+│   ├── cleaner.py       # Step 4: Resolution and FPS rescaling
 │   ├── rescaler.py      # Step 1: Standardize resolution/FPS
 │   └── segmenter        # Step 2: Segments the videos to 3 sec durations
 └── labeler/
