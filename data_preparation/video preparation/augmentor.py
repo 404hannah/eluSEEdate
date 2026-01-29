@@ -93,12 +93,12 @@ processed_count = 0
 augmentations = [
     {'name': 'Brighter', 'vf': 'eq=brightness=0.3'},
     {'name': 'Dimmer', 'vf': 'eq=brightness=-0.3'},
-    # noise=Luminance=Strength:Function=Uniform
-    {'name': 'Noise', 'vf': 'noise=c0s=50:c0f=t+u'},
-    # crop=128:128:5:5: Crops 5 pixels of the video's top and left
+    {'name': 'Noise', 'vf': 'noise=c0s=20:c0f=t+u'},
     {'name': 'Translation', 'vf': 'scale=133:133,crop=128:128:5:5,setpts=PTS-STARTPTS'},
-    # pixelize=width=16:height=16: Tells FFmpeg to divide the image into 16×16 pixel blocks
-    {'name': 'Superpixel', 'vf': 'pixelize=width=16:height=16'},
+    {'name': 'Gaussian Blur', 'vf': 'gblur=sigma=2'},
+    {'name': 'Color Jitter', 'vf':'hue=h=30:s=1.5'},
+    {'name': 'Postivie Rotation', 'vf':'rotate=PI/20*sin(t)'},
+    {'name': 'Negative Rotation', 'vf':'rotate=PI/-20*sin(t)'},
     {'name': 'No Change', 'vf':'eq=brightness=0'}
 ]
 

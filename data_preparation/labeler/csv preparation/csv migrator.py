@@ -66,10 +66,6 @@ def inspect_csv_folder(directory_path):
         "details": csv_stats
     }
     
-# Usage:
-# results = inspect_csv_folder('./your_data_folder')
-# print(results)
-
 # Define I/O folders
 
 input_augmented_folder = r'' 
