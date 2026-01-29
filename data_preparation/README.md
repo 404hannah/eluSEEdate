@@ -47,10 +47,10 @@ To ensure data integrity and proper formatting, scripts must be executed in the 
 - Segmentation: Splits videos into exact 3-second segments.
 - Cleanup: Automatically deletes "leftover" fragments shorter than 2.9 seconds.
 
-3. **Cleaner** (sequencer.py)
+3. **Cleaner** (cleaner.py)
    The final processing step.
 
-- Scaling: Downscales to 64×64 for neural network input.
+- Scaling: Downscales to 128x128 for neural network input.
 - Frame rate reduction: Reduced to 10fps for neural network input.
 
 4. **Augmentor** (augmentor.py)
