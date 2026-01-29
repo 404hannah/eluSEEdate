@@ -104,7 +104,7 @@ print("All videos have been processed\n")
 
 
 print(f"Total duration of all videos: {formatted_original_time}")
-print(f"Processing time: {round(end-start, 2)} seconds")
+print(f"Processing time: {round(end-start, 2)} seconds or {round((end-start)/60, 2)} minutes")
 print(f"Total videos: {input_file_count}\n")
 
 print(f"Total size of input folder: {input_size_mb} MB")

@@ -23,21 +23,19 @@ def get_folder_size(folder_path):
 def get_video_stats(folder_path):
     total_seconds = 0
     file_count = 0
-    for filename in os.listdir(folder_path):
-        if filename.lower().endswith(".mp4"):
-            path = os.path.join(folder_path, filename)
-            try:
-                probe = ffmpeg.probe(path)
-                duration = float(probe['format']['duration'])
-                total_seconds += duration
-                file_count += 1
-            except Exception:
-                # Skip files that are corrupted or not readable by ffmpeg
-                pass
-    
+    for dirpath, _, filenames in os.walk(folder_path):
+        for filename in filenames:
+            if filename.lower().endswith(".mp4"):
+                path = os.path.join(folder_path, filename)
+                try:
+                    probe = ffmpeg.probe(path)
+                    duration = float(probe['format']['duration'])
+                    total_seconds += duration
+                    file_count += 1
+                except Exception:
+                    pass
     formatted_time = str(datetime.timedelta(seconds=int(total_seconds)))
     return formatted_time, total_seconds, file_count
-
 
 # FOLDER PREPARATION
 
@@ -49,13 +47,12 @@ input_folder = r''
 parent_folder = os.path.dirname(input_folder)
 augmented_main_folder = os.path.join(parent_folder, 'Augmented Dataset Videos')
 
-# Create the path for a folder of not augmented videos 
-not_augmented_folder = os.path.join(parent_folder, 'Not Augmented Videos')
-
 # Define output folders
 
 output_1variant_folder = os.path.join(augmented_main_folder, '1Variant')
 output_2variants_folder = os.path.join(augmented_main_folder, '2Variants')
+# You can delete contents of the two above if you so wish after the augtmentation finishes
+# Note that this folder is within another folder, so you must first remove it from within its parent folder
 output_final_folder = os.path.join(augmented_main_folder, 'Augmented Data')
 
 # List to check
@@ -69,7 +66,6 @@ output_folders = [
 # Create the output folder if it doesn't exist
 
 os.makedirs(augmented_main_folder, exist_ok=True)
-os.makedirs(not_augmented_folder, exist_ok=True)
 for folder in output_folders:
     os.makedirs(folder, exist_ok=True)
     print(f"Verified folder: {folder}")
@@ -93,7 +89,6 @@ print("-" * 30)
 
 # Limitations
 processed_count = 0
-total_augmented_seconds = 0
 
 augmentations = [
     {'name': 'Brighter', 'vf': 'eq=brightness=0.3'},
@@ -101,7 +96,7 @@ augmentations = [
     # noise=Luminance=Strength:Function=Uniform
     {'name': 'Noise', 'vf': 'noise=c0s=50:c0f=t+u'},
     # crop=128:128:5:5: Crops 5 pixels of the video's top and left
-    {'name': 'Translation', 'vf': 'crop=128:128:5:5,setpts=PTS-STARTPTS'},
+    {'name': 'Translation', 'vf': 'scale=133:133,crop=128:128:5:5,setpts=PTS-STARTPTS'},
     # pixelize=width=16:height=16: Tells FFmpeg to divide the image into 16×16 pixel blocks
     {'name': 'Superpixel', 'vf': 'pixelize=width=16:height=16'}
 ]
@@ -119,7 +114,6 @@ for filename in os.listdir(input_folder):
             probe = ffmpeg.probe(input_path)
             vid_duration = float(probe['format']['duration'])
             # Since we create 3 variants per chosen video, we add it 3 times
-            total_augmented_seconds += (vid_duration * 3)
         except:
             vid_duration = 0
         
@@ -158,20 +152,17 @@ for filename in os.listdir(input_folder):
                 print(f"  ! Error on {current_var['name']}: {e}")
     else:
         input_path = os.path.join(input_folder, filename)
-        output_path = os.path.join(not_augmented_folder, filename)
-        shutil.copy(input_path, output_path)
 
 # FINISHING TOUCHES
 
 end = time.time()
-formatted_augmented_time = str(datetime.timedelta(seconds=int(total_augmented_seconds)))
 
 output_size_mb = get_folder_size(output_final_folder) 
 formatted_augmented_time, total_output_seconds, output_file_count = get_video_stats(output_final_folder)
 
 print("-" * 30)
 print("Videos have been augmented")
-print(f"Processing time: {round(end-start, 2)} seconds")
+print(f"Processing time: {round(end-start, 2)} seconds or {round((end-start)/60, 2)} minutes")
 
 print(f"\nTotal duration of all source videos: {formatted_original_time}")
 print(f"Total duration of augmented videos: {formatted_augmented_time}")

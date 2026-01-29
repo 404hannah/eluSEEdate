@@ -432,7 +432,7 @@ def main():
     print(f"Total size of source videos: {input_size_mb} MB")    
     
     end = time.time()
-    print(f"\nProcessing time: {round(end-start, 2)} seconds")
+    print(f"Processing time: {round(end-start, 2)} seconds or {round((end-start)/60, 2)} minutes")
     
     print("-" * 30)   
 

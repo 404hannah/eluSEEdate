@@ -120,7 +120,7 @@ formatted_final_time, total_output_seconds, output_file_count = get_video_stats(
 print("-" * 30)
 print("All videos have been processed\n")
 
-print(f"Processing time: {round(end-start, 2)} seconds\n")
+print(f"Processing time: {round(end-start, 2)} seconds or {round((end-start)/60, 2)} minutes\n")
 
 print(f"Total duration of all source videos: {formatted_original_time}")
 print(f"Total raw videos: {input_file_count}")
