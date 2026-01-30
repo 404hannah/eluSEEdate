@@ -89,27 +89,36 @@ Prediction Logic
 | SLIGHT RIGHT | >1.5∘ | 3 |
 | RIGHT | >2.25∘ | 4 |
 
+## ⚖️ Balancer
+
+This script uses majority undersampling to reduce the class imbalance.
+
 ## 🛠️ Setup & Usage
 
 1. Dependencies: Ensure you have Python 3.x installed with the libraries listed in the badges above.
+
 2. Initialize Video Folder Paths:
 
-In monocular visual odometry.py.<br>
+In labeler/script_only/monocular visual odometry.py.<br>
 `video_folder = r''`
 
-In augmentor.py.<br>
+In video preparation/augmentor.py.<br>
 `input_folder = r''`
 
-In cleaner.py <br>
+In video preparation/cleaner.py <br>
 `input_folder = r''`
 
-In rescaler.py <br>
+In video preparation/rescaler.py <br>
 `input_folder = r''`
 
-In segmenter.py <br>
+In video preparation/segmenter.py <br>
 `input_folder = r''`
 
-3. Input author initial:
+In labeler/balancer/balancer.py <br>
+`label_folder = r''` <br>
+`video_folder = r'' `
+
+3. video preparation/Input author initial:
 
 In segmenter.py <br>
 `author = ""`
