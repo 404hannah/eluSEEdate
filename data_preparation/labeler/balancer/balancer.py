@@ -44,23 +44,38 @@ def class_counter(label_folder):
             
     return total_count, front_csv, file_count, pred_removed
 
-def undersampling(label_folder, front_csv):
+def undersampling(label_folder, video_folder, front_csv):
+    # Create sampled directories
     sampled_labels = os.path.join(label_folder, 'sampled_labels')
     os.makedirs(sampled_labels, exist_ok=True)
     print(f"Verified folder: {sampled_labels}")
 
-    # Copies csv files with heterogenous labels to a folder.
-    for file in os.listdir(label_folder):
-        if file.endswith(".csv"):
-            csv_path = os.path.join(label_folder, file)
+    sampled_videos = os.path.join(video_folder, 'sampled_videos')
+    os.makedirs(sampled_videos, exist_ok=True)
+    print(f"Verified folder: {sampled_videos}")
+
+    # Copies csv files with heterogenous labels along with their corresponding videos to sampled folders.
+    for csv_file in os.listdir(label_folder):
+        if csv_file.endswith(".csv"):
+            
+            csv_path = os.path.join(label_folder, csv_file)
             if csv_path not in front_csv:
                 shutil.copy(csv_path, sampled_labels)
-                print(f"Added to the sample: {file}")
+                # Copy corresponding video file
+                video_file = csv_file.replace("_labels.csv", ".mp4")
+                video_path = os.path.join(video_folder, video_file)
+                if os.path.exists(video_path):
+                    shutil.copy(video_path, sampled_videos)
+                print(f"Added to the sample: {csv_file} & {video_file}")
+                
     return sampled_labels
 
 def main():
     # Input processed label folder path
-    label_folder = r''
+    label_folder = r'D:\Thesis 2\VO_Test\labels\processed_labels'
+    # Input processed video folder path
+    video_folder = r'D:\Thesis 2\VO_Test\Segmented Dataset Videos'  
+
     count, front_csv, file_count, pred_removed = class_counter(label_folder)
 
     # Display class instances
@@ -69,14 +84,14 @@ def main():
 
     print("-" * 30)
     print(f"Number of all front class csv files: {len(front_csv)} / {file_count} csv files")
-    print(f"Removing all front csv removes front instances: {pred_removed}")
+    print(f"Predicted front instances to be removed: {pred_removed}")
     print("-" * 30)
     
     
     # Remove all front csv files if user agrees
-    user_input = input("Remove all front csv (Y/N)? ")
+    user_input = input("Remove all front csv and corresponding videos (Y/N)? ")
     if(user_input.lower() == 'y'):
-        sampled_labels = undersampling(label_folder, front_csv)
+        sampled_labels = undersampling(label_folder, video_folder, front_csv)
 
         count, front_csv, file_count, pred_removed = class_counter(sampled_labels)
         
