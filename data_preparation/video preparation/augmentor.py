@@ -97,7 +97,7 @@ augmentations = [
     {'name': 'Translation', 'vf': 'scale=133:133,crop=128:128:5:5,setpts=PTS-STARTPTS'},
     {'name': 'Gaussian Blur', 'vf': 'gblur=sigma=2'},
     {'name': 'Color Jitter', 'vf':'hue=h=30:s=1.5'},
-    {'name': 'Postivie Rotation', 'vf':'rotate=PI/20*sin(t)'},
+    {'name': 'Postive Rotation', 'vf':'rotate=PI/20*sin(t)'},
     {'name': 'Negative Rotation', 'vf':'rotate=PI/-20*sin(t)'}
 ]
 
@@ -125,7 +125,8 @@ for filename in os.listdir(input_folder):
             aug = random.choice(augmentations)
             # Repeatedly chooses a variant if the generated variant is chosen previously
             # Only one between brightness and dimmer could be chosen
-            while aug in variants or (aug['name'] == 'Brighter' and {'name': 'Dimmer', 'vf': 'eq=brightness=-0.3'} in variants) or (aug['name'] == 'Dimmer' and {'name': 'Brighter', 'vf': 'eq=brightness=0.3'} in variants):
+            # Only one between positive rotation and negative rotation could be chosen
+            while aug in variants or (aug['name'] == 'Brighter' and {'name': 'Dimmer', 'vf': 'eq=brightness=-0.3'} in variants) or (aug['name'] == 'Dimmer' and {'name': 'Brighter', 'vf': 'eq=brightness=0.3'} in variants) or (aug['name'] == 'Postive Rotation' and {'name': 'Negative Rotation', 'vf':'rotate=PI/-20*sin(t)'} in variants) or (aug['name'] == 'Negative Rotation' and {'name': 'Postive Rotation', 'vf':'rotate=PI/20*sin(t)'} in variants):
                 aug = random.choice(augmentations)
 
             variants.append(aug)

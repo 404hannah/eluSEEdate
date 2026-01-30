@@ -13,7 +13,7 @@ All assets are contained within the data_preparation root folder, organized into
 ```text
 data_preparation/
 ├── csv preparation/
-│   ├── csv migrator.py  # Step 7: Duplicates CSVs for augmented data 
+│   ├── csv migrator.py  # Step 7: Duplicates CSVs for augmented data
 │   └── data balancer.py # Step 4: Cleans csv data
 ├── labeler/
 │   ├── MVO_script.py    # Step 3: Fast labeling without visualization
@@ -32,7 +32,7 @@ To ensure data integrity and proper formatting, scripts must be executed in the 
 1. **rescaler**: Standardizes all input videos to a manageable resolution (480p) and fixed frame rate.
 2. **segmenter**: Segments the labeled videos into consistent 3-second clips for model training.
 3. **MVO**: Generates turn labels (Left, Slight Left, Slight Right, Front) using Visual Odometry.
-4. **Data Balancer**: Wait for Hannah for this 
+4. **Data Balancer**: Wait for Hannah for this
 5. **cleaner**: Scales the videos to 128x128 and 10 fps for model training.
 6. **augmentor**: Generates variants (Brightness, Noise, etc.) to increase dataset diversity.
 7. **csv migrator**: Duplicates CSVs for augmented videos
