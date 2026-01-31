@@ -13,18 +13,18 @@ All assets are contained within the data_preparation root folder, organized into
 ```text
 data_preparation/
 ├── balancer/
-│   └── balancer.py       # Step 5: Majority undersampling
+│   └── balancer.py          # Step 5: Majority undersampling
 ├── csv preparation/
-│   └── csv migrator.py   # Step 8: Duplicates CSVs for augmented data
-│   └── class outliers.py # Step 4: Removes outliers
+│   └── csv migrator.py      # Step 8: Duplicates CSVs for augmented data
+│   └── class outliers.py    # Step 4: Removes outliers
 ├── labeler/
-│   ├── MVO_script.py     # Step 3: Fast labeling without visualization
-│   └── MVO_gui.py        # Step 3: Visual labeling with matching preview
+│   ├── MVO_script.py        # Step 3: Fast labeling without visualization
+│   └── MVO_gui.py           # Step 3: Visual labeling with matching preview
 └──video preparation/
-    ├── augmentor.py      # Step 7: Diverse visual variations
-    ├── cleaner.py        # Step 6: Final cleanup
-    ├── rescaler.py       # Step 1: Standardize resolution/FPS
-    └── segmenter         # Step 2: Segments the videos to 3 sec durations
+    ├── augmentor.py         # Step 7: Diverse visual variations
+    ├── cleaner.py           # Step 6: Final cleanup
+    ├── rescaler.py          # Step 1: Standardize resolution/FPS
+    └── segmenter            # Step 2: Segments the videos to 3 sec durations
 ```
 
 ## 🚀 Workflow Execution Order
