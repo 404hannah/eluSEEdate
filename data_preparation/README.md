@@ -100,24 +100,17 @@ This script uses majority undersampling to reduce the class imbalance. It also c
 
 2. Initialize Video Folder Paths:
 
-In labeler/script_only/monocular visual odometry.py.<br>
-`video_folder = r''`
+Labeler and Balancer
+| Script | monocular visual odometry.py | balancer.py | csv migrator.py | class outliers.py |
+| -------- | -------- | -------- | -------- | -------- |
+| Variable | `video_folder = r''` | `label_folder = r'' video_folder = r'' ` | `input_augmented_folder = r'' input_csv_folder = r''` | `labels_dir = r''`
+| Directory | labeler/script_only/ | balancer/ | labeler/csv preparation/ | labeler/csv preparation/ |
 
-In video preparation/augmentor.py.<br>
-`input_folder = r''`
-
-In video preparation/cleaner.py <br>
-`input_folder = r''`
-
-In video preparation/rescaler.py <br>
-`input_folder = r''`
-
-In video preparation/segmenter.py <br>
-`input_folder = r''`
-
-In labeler/balancer/balancer.py <br>
-`label_folder = r''` <br>
-`video_folder = r'' `
+Video preparation
+| Script | augmentor.py | cleaner.py | rescaler.py | segmenter.py |
+| -------- | -------- | -------- | -------- | -------- |
+| Variable | `video_folder = r''` | `input_folder = r''` | `input_folder = r''` | `input_folder = r''` | `input_folder = r''` |
+| Directory | video preparation/ | video preparation/ | video preparation/ | video preparation/ |
 
 3. video preparation/Input author initial:
 
