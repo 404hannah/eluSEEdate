@@ -13,7 +13,7 @@ All assets are contained within the data_preparation root folder, organized into
 ```text
 data_preparation/
 ├── csv preparation/
-│   ├── csv migrator.py  # Step 7: Duplicates CSVs for augmented data 
+│   ├── csv migrator.py  # Step 7: Duplicates CSVs for augmented data
 │   └── data balancer.py # Step 4: Cleans csv data
 ├── labeler/
 │   ├── MVO_script.py    # Step 3: Fast labeling without visualization
@@ -32,7 +32,7 @@ To ensure data integrity and proper formatting, scripts must be executed in the 
 1. **rescaler**: Standardizes all input videos to a manageable resolution (480p) and fixed frame rate.
 2. **segmenter**: Segments the labeled videos into consistent 3-second clips for model training.
 3. **MVO**: Generates turn labels (Left, Slight Left, Slight Right, Front) using Visual Odometry.
-4. **Data Balancer**: Wait for Hannah for this 
+4. **Data Balancer**: Wait for Hannah for this
 5. **cleaner**: Scales the videos to 128x128 and 10 fps for model training.
 6. **augmentor**: Generates variants (Brightness, Noise, etc.) to increase dataset diversity.
 7. **csv migrator**: Duplicates CSVs for augmented videos
@@ -89,27 +89,36 @@ Prediction Logic
 | SLIGHT RIGHT | >1.5∘ | 3 |
 | RIGHT | >2.25∘ | 4 |
 
+## ⚖️ Balancer
+
+This script uses majority undersampling to reduce the class imbalance.
+
 ## 🛠️ Setup & Usage
 
 1. Dependencies: Ensure you have Python 3.x installed with the libraries listed in the badges above.
+
 2. Initialize Video Folder Paths:
 
-In monocular visual odometry.py.<br>
+In labeler/script_only/monocular visual odometry.py.<br>
 `video_folder = r''`
 
-In augmentor.py.<br>
+In video preparation/augmentor.py.<br>
 `input_folder = r''`
 
-In cleaner.py <br>
+In video preparation/cleaner.py <br>
 `input_folder = r''`
 
-In rescaler.py <br>
+In video preparation/rescaler.py <br>
 `input_folder = r''`
 
-In segmenter.py <br>
+In video preparation/segmenter.py <br>
 `input_folder = r''`
 
-3. Input author initial:
+In labeler/balancer/balancer.py <br>
+`label_folder = r''` <br>
+`video_folder = r'' `
+
+3. video preparation/Input author initial:
 
 In segmenter.py <br>
 `author = ""`
