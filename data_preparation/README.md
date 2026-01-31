@@ -12,15 +12,17 @@ All assets are contained within the data_preparation root folder, organized into
 
 ```text
 data_preparation/
+├── balancer/
+│   └── balancer.py  # Step 5: Majority undersampling
 ├── csv preparation/
-│   ├── csv migrator.py  # Step 7: Duplicates CSVs for augmented data
-│   └── data balancer.py # Step 4: Cleans csv data
+│   └── csv migrator.py  # Step 8: Duplicates CSVs for augmented data
+│   └── class outliers.py # Step 4: Removes outliers
 ├── labeler/
 │   ├── MVO_script.py    # Step 3: Fast labeling without visualization
 │   └── MVO_gui.py       # Step 3: Visual labeling with matching preview
 └──video preparation/
-    ├── augmentor.py     # Step 6: Diverse visual variations
-    ├── cleaner.py       # Step 5: Final cleanup
+    ├── augmentor.py     # Step 7: Diverse visual variations
+    ├── cleaner.py       # Step 6: Final cleanup
     ├── rescaler.py      # Step 1: Standardize resolution/FPS
     └── segmenter        # Step 2: Segments the videos to 3 sec durations
 ```
@@ -32,10 +34,11 @@ To ensure data integrity and proper formatting, scripts must be executed in the 
 1. **rescaler**: Standardizes all input videos to a manageable resolution (480p) and fixed frame rate.
 2. **segmenter**: Segments the labeled videos into consistent 3-second clips for model training.
 3. **MVO**: Generates turn labels (Left, Slight Left, Slight Right, Front) using Visual Odometry.
-4. **Data Balancer**: Wait for Hannah for this
-5. **cleaner**: Scales the videos to 128x128 and 10 fps for model training.
-6. **augmentor**: Generates variants (Brightness, Noise, etc.) to increase dataset diversity.
-7. **csv migrator**: Duplicates CSVs for augmented videos
+4. **class outliers**: Removes class instance by copying the neighbor if both neighbors are the same.
+5. **balancer**: Reduces class imbalance by removing data with all front classes.
+6. **cleaner**: Scales the videos to 128x128 and 10 fps for model training.
+7. **augmentor**: Generates variants (Brightness, Noise, etc.) to increase dataset diversity.
+8. **csv migrator**: Duplicates CSVs for augmented videos
 
 ## 🎥 Video Preparation Tools
 
@@ -85,13 +88,11 @@ Prediction Logic
 |----------|----------|----------|
 | FRONT | Within ±1.5∘ | 0 |
 | LEFT | <−1.5∘ | 1 |
-| SLIGHT LEFT | <-2.25∘ | 2 |
-| SLIGHT RIGHT | >1.5∘ | 3 |
-| RIGHT | >2.25∘ | 4 |
+| RIGHT | >1.5∘ | 2 |
 
 ## ⚖️ Balancer
 
-This script uses majority undersampling to reduce the class imbalance.
+This script uses majority undersampling to reduce the class imbalance. It also calculates the instances of each class.
 
 ## 🛠️ Setup & Usage
 
