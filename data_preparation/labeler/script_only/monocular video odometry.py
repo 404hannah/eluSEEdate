@@ -161,15 +161,10 @@ def process_video(data_dir, vid_dir_name, video_file, labels_dir, video_name):
                 yaw_history.append(raw_yaw)
                 if len(yaw_history) > window_size: yaw_history.pop(0)
                 smoothed_yaw = sum(yaw_history) / len(yaw_history)
-                
-
-                if smoothed_yaw > (turn_threshold * turn_threshold):
-                    l_id, label_name = 4, "RIGHT"
-                elif smoothed_yaw > turn_threshold:
-                    l_id, label_name = 3, "SLIGHT RIGHT"
-                elif smoothed_yaw < -turn_threshold and smoothed_yaw > -(turn_threshold * turn_threshold):
-                    l_id, label_name = 2, "SLIGHT LEFT"
-                elif smoothed_yaw < -(turn_threshold * turn_threshold):
+            
+                if smoothed_yaw > turn_threshold:
+                    l_id, label_name = 2, "RIGHT"
+                elif smoothed_yaw < -turn_threshold:
                     l_id, label_name = 1, "LEFT"
                 else:
                     l_id, label_name = 0, "FRONT"

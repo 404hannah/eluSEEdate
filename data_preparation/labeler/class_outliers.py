@@ -65,10 +65,6 @@ def fixing_outlier(labels_dir):
                 elif label == '1':
                     label_name_corrected.append('LEFT')
                 elif label == '2':
-                    label_name_corrected.append('SLIGHT LEFT')
-                elif label == '3':
-                    label_name_corrected.append('SLIGHT RIGHT')
-                elif label == '4':
                     label_name_corrected.append('RIGHT')
                 else:
                     label_name_corrected.append('SKIPPED')
