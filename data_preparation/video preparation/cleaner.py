@@ -31,7 +31,7 @@ def get_video_stats(folder_path):
                 pass
     
     formatted_time = str(datetime.timedelta(seconds=int(total_seconds)))
-    return formatted_time, total_seconds, file_count
+    return formatted_time, file_count
 
 # Define I/O folders
 
@@ -39,7 +39,7 @@ input_folder = r''
 parent_folder = os.path.dirname(input_folder)
 output_folder = os.path.join(parent_folder, 'Cleaned Dataset Videos')
 """
-Replace with above for augmented videos
+Replace with above for augmented videos if you need it
 
 grandparent_folder = os.path.dirname(parent_folder)
 output_folder = os.path.join(grandparent_folder, 'Cleaned Dataset Videos')
@@ -57,7 +57,7 @@ print("-" * 30)
 print("Calculating total duration and size of input videos...")
 
 input_size_mb = get_folder_size(input_folder) 
-formatted_original_time, total_input_seconds, input_file_count = get_video_stats(input_folder)
+formatted_original_time, input_file_count = get_video_stats(input_folder)
 
 print(f"Total duration of all source videos: {formatted_original_time}")
 print(f"Total size of input folder: {input_size_mb} MB")
@@ -69,8 +69,6 @@ print("-" * 30)
 print(f"Starting video cleaning\n")
 
 start = time.time()
-
-global_file_counter = 1
 
 for filename in os.listdir(input_folder):
     if filename.endswith(".mp4"):
@@ -87,22 +85,14 @@ for filename in os.listdir(input_folder):
                 .input(input_path)
                 .output(
                     output_path, 
-                    # Scale
-                    vf='scale=128:128',
-                    # Grayscale and Scale
-                    # vf='format=gray,scale=64:64', 
-                    # Framerate
-                    r=10,
-                    # Disable audio
-                    an=None, 
+                    # Scale and FPS
+                    vf='scale=128:128,fps=10',
                     # Remove rotation metadata
                     metadata='s:v:0 rotate=0'
                 )
                 .overwrite_output() # Overwrites if file exists
                 .run(quiet=True)
             )
-            
-            global_file_counter += 1
             
         except ffmpeg.Error as e:
             print(f"Error processing {filename}: {e.stderr.decode() if e.stderr else 'Unknown error'}")
@@ -115,7 +105,7 @@ print("-" * 30)
 print("Calculating final dataset duration...")
 
 output_size_mb = get_folder_size(output_folder)
-formatted_final_time, total_output_seconds, output_file_count = get_video_stats(output_folder)
+formatted_final_time, output_file_count = get_video_stats(output_folder)
 
 print("-" * 30)
 print("All videos have been processed\n")
