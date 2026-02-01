@@ -34,7 +34,7 @@ def get_video_stats(folder_path):
                 pass
     
     formatted_time = str(datetime.timedelta(seconds=int(total_seconds)))
-    return formatted_time, total_seconds, file_count
+    return formatted_time, file_count
 
 def inspect_csv_folder(directory_path):
     csv_stats = []
@@ -86,23 +86,22 @@ print("-" * 30)
 
 print("Calculating total duration and size of input videos...")
 
-input_size_mb = get_folder_size(input_augmented_folder) 
-formatted_original_time, total_input_seconds, input_file_count = get_video_stats(input_augmented_folder)
+vid_input_size_mb = get_folder_size(input_augmented_folder) 
+formatted_original_time, input_file_count = get_video_stats(input_augmented_folder)
 
-input_size_mb = get_folder_size(input_csv_folder) 
-formatted_original_time, total_input_seconds, input_file_count = get_video_stats(input_augmented_folder)
+csv_input_size_mb = get_folder_size(input_csv_folder) 
 
 input_csv_results = inspect_csv_folder(input_csv_folder)
 print(input_csv_results)
 
 print(f"Total duration of all source videos: {formatted_original_time}")
-print(f"Total size of input folder: {input_size_mb} MB")
+print(f"Total size of input folder: {vid_input_size_mb} MB")
 
 print("-" * 30)
 
 start = time.time()
 
-csv_map = {Path(f).stem: f for f in os.listdir(input_csv_folder) if f.endswith('.csv')}
+csv_map = {Path(f).stem.removesuffix('_labels'): f for f in os.listdir(input_csv_folder) if f.endswith('.csv')}
 
 video_extensions = ('.mp4', '.avi', '.mov', '.mkv', '.wmv')
 match_count = 0
@@ -115,9 +114,9 @@ for vid_filename in os.listdir(input_augmented_folder):
         if vid_stem in csv_map:
             csv_filename = csv_map[vid_stem]
             
-            # Create the new names with the "_A" prefix
-            new_vid_name = "_A" + vid_filename
-            new_csv_name = "_A" + csv_filename
+            # Create the new names with the "_A" postfix
+            new_vid_name = vid_filename + "_A" 
+            new_csv_name = csv_filename + "_A" 
             
             # Define full paths
             src_vid = os.path.join(input_augmented_folder, vid_filename)
@@ -144,18 +143,18 @@ print("-" * 30)
 print("Calculating final dataset duration...")
 
 output_size_augmented_mb = get_folder_size(video_out)
-formatted_final_augmented_time, total_output_augmented_seconds, output_file_augmented_count = get_video_stats(video_out)
+formatted_final_augmented_time, output_file_augmented_count = get_video_stats(video_out)
 
-input_csv_results = inspect_csv_folder(csv_out)
+final_csv_results = inspect_csv_folder(csv_out)
 
 print(f"Processing time: {round(end-start, 2)} seconds or {round((end-start)/60, 2)} minutes\n")
 
 print(f"Total duration of all videos: {formatted_final_augmented_time}")
 print(f"Total videos: {output_file_augmented_count}\n")
 
-print(f"Total size of input folder: {input_size_mb} MB")
+print(f"Total size of input folder: {vid_input_size_mb} MB")
 print(f"Total size of output folder: {output_size_augmented_mb} MB")
 
-print(input_csv_results)
+print(final_csv_results)
 
 print("-" * 30)
