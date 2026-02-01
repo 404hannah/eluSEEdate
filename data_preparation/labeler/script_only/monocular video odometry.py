@@ -33,7 +33,7 @@ def get_video_stats(folder_path):
                 pass
     
     formatted_time = str(datetime.timedelta(seconds=int(total_seconds)))
-    return formatted_time, total_seconds, file_count
+    return formatted_time, file_count
 
 class VisualOdometry():
     def __init__(self, data_dir, video_path):
@@ -194,13 +194,19 @@ def main():
     vid_dir_name = os.path.basename(video_folder)
     
     data_dir = os.path.dirname(video_folder)
+    """
+    grandparent_folder = os.path.dirname(video_folder)
+    label_folder = os.path.join(grandparent_folder, 'labels')
+    """
     label_folder = os.path.join(data_dir, 'labels')
 
     os.makedirs(label_folder, exist_ok=True)
     print(f"Verified folder: {label_folder}")
     
+    print("Calculating input folder statistics...")
+    
     input_size_mb = get_folder_size(video_folder) 
-    formatted_original_time, total_input_seconds, input_file_count = get_video_stats(video_folder)
+    formatted_original_time, input_file_count = get_video_stats(video_folder)
     
     print(f"Total duration: {formatted_original_time}")
     print(f"Total size: {input_size_mb} MB")
@@ -228,10 +234,13 @@ def main():
     print("\n" + "-" * 30)     
     print(f"Total duration of source videos: {formatted_original_time}")
     print(f"Processing finished for all {vid_counter} videos")    
-    print(f"Total size of source videos: {input_size_mb} MB")    
+    print(f"Total size of source videos: {input_size_mb} MB\n")    
     
     end = time.time()
-    print(f"Processing time: {round(end-start, 2)} seconds or {round((end-start)/60, 2)} minutes")
+    print(f"Processing time: {round(end-start, 2)} seconds or {round((end-start)/60, 2)} minutes\n")
+    
+    labels_size_mb = get_folder_size(labels_dir) 
+    print(f"Total size of generated labels: {labels_size_mb} MB")
     
     print("-" * 30)   
 

@@ -1,6 +1,7 @@
 import csv
 import os
 import shutil
+import time
 
 def fixing_outlier(labels_dir):
     # Locating and reading CSV files
@@ -10,6 +11,8 @@ def fixing_outlier(labels_dir):
     processed_lbl_folder = os.path.join(data_dir, 'processed_labels') 
     os.makedirs(processed_lbl_folder, exist_ok=True)
     print(f"Verified folder: {processed_lbl_folder}")
+    
+    total_outliers = 0
 
     for csv_file in os.listdir(labels_dir):
         if csv_file.endswith("_labels.csv"):
@@ -58,6 +61,7 @@ def fixing_outlier(labels_dir):
                     label_yaw_corrected.append(float(label_yaw[i]))
 
             print(f"{os.path.splitext(csv_file)[0]}.csv -> No. of outliers: {counter}")
+            total_outliers += counter
 
             # Providing the corresponding corrected label names
             for label in label_id_corrected:
@@ -96,11 +100,20 @@ def fixing_outlier(labels_dir):
                         row.append(label_id_corrected[i-1])
                         row.append(label_name_corrected[i-1])
                         writer.writerow(row)
+                            
+    print(f"\nTotal outliers corrected across all files: {total_outliers}")
     return
 
 def main():
     labels_dir = r''
+    start = time.time()
+    print("-" * 30)
+    print("Starting CSV Outlier Fixing\n")
+    
     fixing_outlier(labels_dir)
+    end = time.time()
+    
+    print(f"Processing time: {round(end-start, 2)} seconds or {round((end-start)/60, 2)} minutes\n")
 
 if __name__ == "__main__":
     main()
