@@ -3,7 +3,7 @@ import csv
 import shutil
 
 def class_counter(label_folder):
-    total_count = {'front': 0, 'left': 0, 'slight left': 0, 'slight right': 0, 'right': 0}
+    total_count = {'front': 0, 'left': 0, 'right': 0}
     front_csv = []
     file_count = 0
     pred_removed = 0
@@ -29,10 +29,6 @@ def class_counter(label_folder):
                     elif int(row['label_id_corrected']) == 1:
                         total_count['left'] += 1
                     elif int(row['label_id_corrected']) == 2:
-                        total_count['slight left'] += 1
-                    elif int(row['label_id_corrected']) == 3:
-                        total_count['slight right'] += 1
-                    elif int(row['label_id_corrected']) == 4: 
                         # No else because of skipped class
                         total_count['right'] += 1
             
@@ -46,11 +42,13 @@ def class_counter(label_folder):
 
 def undersampling(label_folder, video_folder, front_csv):
     # Create sampled directories
-    sampled_labels = os.path.join(label_folder, 'sampled_labels')
+    parent_label_dir = os.path.dirname(label_folder)
+    sampled_labels = os.path.join(parent_label_dir, 'sampled_labels')
     os.makedirs(sampled_labels, exist_ok=True)
     print(f"Verified folder: {sampled_labels}")
 
-    sampled_videos = os.path.join(video_folder, 'sampled_videos')
+    parent_vid_dir = os.path.dirname(video_folder)
+    sampled_videos = os.path.join(parent_vid_dir, 'sampled_videos')
     os.makedirs(sampled_videos, exist_ok=True)
     print(f"Verified folder: {sampled_videos}")
 
