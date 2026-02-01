@@ -7,7 +7,8 @@ def fixing_outlier(labels_dir):
     # Locating and reading CSV files
     yaw_limit = 1.5 * 1.5 # Equal to the squared of turn_threshold 
 
-    processed_lbl_folder = os.path.join(labels_dir, 'processed_labels') 
+    data_dir = os.path.dirname(labels_dir)
+    processed_lbl_folder = os.path.join(data_dir, 'processed_labels') 
     os.makedirs(processed_lbl_folder, exist_ok=True)
     print(f"Verified folder: {processed_lbl_folder}")
     
