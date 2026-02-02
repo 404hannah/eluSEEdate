@@ -39,37 +39,45 @@ def fixing_outlier(labels_dir):
                     label_id_corrected.append(ids)
                     label_yaw_corrected.append(float(label_yaw[i])) 
                     continue
+
+                # Initialize corrected label id according to corrected yaw degrees
+                # change append below
+                turn_threshold = 1.5
+                if float(label_yaw[i]) > turn_threshold:
+                    label_id_corrected.append('2')
+                elif float(label_yaw[i]) < -turn_threshold:
+                    label_id_corrected.append('1')
+                else:
+                    label_id_corrected.append('0')
+
                 # An outlier is detected if it is dissimilar from both neighbors
-                if label_id_corrected[i-1] == label_ids[i+1] and ids != label_id_corrected[i-1]:
+                if int(label_id_corrected[i-1]) == int(label_ids[i+1]) and int(ids) != int(label_id_corrected[i-1]):
                     # Keep lone outlier with high yaw_degrees
                     if float(label_yaw[i]) > yaw_limit:
                         # A high yaw degree is retained and influences the next neighbor 
                         # So the user has enough time for a direction
                         label_yaw[i+1] = float(label_yaw[i+1]) + (float(label_yaw[i]) - yaw_limit)
-                        label_yaw_corrected.append(float(label_yaw[i]) - ((float(label_yaw[i]) - yaw_limit))) 
-                        label_id_corrected.append(ids)
+                        label_yaw_corrected.append(float(label_yaw[i]) - ((float(label_yaw[i]) - yaw_limit)))
                     elif float(label_yaw[i]) < -(yaw_limit):
                         label_yaw[i+1] = float(label_yaw[i+1]) + (float(label_yaw[i]) + 2.25)
-                        label_yaw_corrected.append(float(label_yaw[i]) - ((float(label_yaw[i]) + yaw_limit))) 
-                        label_id_corrected.append(ids)
+                        label_yaw_corrected.append(float(label_yaw[i]) - ((float(label_yaw[i]) + yaw_limit)))
                     else: 
-                        label_id_corrected.append(label_ids[i-1]) # Correct the outlier  
+                        label_id_corrected[i] = label_ids[i-1] # Correct the outlier  
                         label_yaw_corrected.append(float(label_yaw[i]))
                         counter += 1
                 else:
-                    label_id_corrected.append(ids)
                     label_yaw_corrected.append(float(label_yaw[i]))
 
             print(f"{os.path.splitext(csv_file)[0]}.csv -> No. of outliers: {counter}")
             total_outliers += counter
 
             # Providing the corresponding corrected label names
-            for label in label_id_corrected:
-                if label == '0':
+            for label_id in label_id_corrected:
+                if label_id == '0':
                     label_name_corrected.append('FRONT')
-                elif label == '1':
+                elif label_id == '1':
                     label_name_corrected.append('LEFT')
-                elif label == '2':
+                elif label_id == '2':
                     label_name_corrected.append('RIGHT')
                 else:
                     label_name_corrected.append('SKIPPED')
