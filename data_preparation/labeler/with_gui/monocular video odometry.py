@@ -213,6 +213,7 @@ def main():
     print("Starting Monocular Visual Odometry")
     print("-" * 30)     
     
+    # segmented videos
     data_dir = "datasets"
     video_folder = os.path.join(data_dir, "videos")
     

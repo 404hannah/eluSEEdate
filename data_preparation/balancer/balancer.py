@@ -70,8 +70,10 @@ def undersampling(label_folder, video_folder, front_csv):
 
 def main():
     # Input processed label folder path
+    # processed_labels folder
     label_folder = r''
     # Input processed video folder path
+    # segmented videos
     video_folder = r''  
 
     count, front_csv, file_count, pred_removed = class_counter(label_folder)

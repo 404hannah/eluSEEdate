@@ -105,6 +105,7 @@ def fixing_outlier(labels_dir):
     return
 
 def main():
+    # labels folder
     labels_dir = r''
     start = time.time()
     print("-" * 30)

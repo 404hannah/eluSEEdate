@@ -41,6 +41,7 @@ def get_video_stats(folder_path):
 
 # Define input folder
 
+# cleaned videos
 input_folder = r''
 
 # Get parent folder

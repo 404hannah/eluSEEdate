@@ -190,6 +190,7 @@ def main():
     print("-" * 30)     
     
     # Input path for the videos folder
+    # segmented videos
     video_folder = r''
     vid_dir_name = os.path.basename(video_folder)
     
