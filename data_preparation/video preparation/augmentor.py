@@ -54,7 +54,7 @@ output_1variant_folder = os.path.join(augmented_main_folder, '1Variant')
 output_2variants_folder = os.path.join(augmented_main_folder, '2Variants')
 # You can delete contents of the two above if you so wish after the augtmentation finishes
 # Note that this folder is within another folder, so you must first remove it from within its parent folder
-output_final_folder = os.path.join(augmented_main_folder, 'augmented_videos')
+output_final_folder = os.path.join(augmented_main_folder, 'Augmented Data')
 
 # List to check
 
