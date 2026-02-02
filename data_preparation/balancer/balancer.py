@@ -1,12 +1,13 @@
+from itertools import count
 import os
 import csv
 import shutil
 
-def class_counter(label_folder):
+def class_counter(label_folder, threshold):
     total_count = {'front': 0, 'left': 0, 'right': 0}
     front_csv = []
     file_count = 0
-    pred_removed = 0
+    pred_removed = {'front': 0, 'left': 0, 'right': 0}
 
     # Counts the occurrences of each class label in the given folder.
     print(f"Counting instances of each class from the csv files.")
@@ -14,7 +15,7 @@ def class_counter(label_folder):
     for file in os.listdir(label_folder):
         if file.endswith(".csv"):
             csv_path = os.path.join(label_folder, file)
-            in_file_count = {'front': 0}
+            in_file_count = {'front': 0, 'left': 0, 'right': 0}
             row_count = 0
 
             with open(csv_path, 'r') as f:
@@ -28,15 +29,18 @@ def class_counter(label_folder):
                         in_file_count['front'] += 1
                     elif int(row['label_id_corrected']) == 1:
                         total_count['left'] += 1
+                        in_file_count['left'] += 1
                     elif int(row['label_id_corrected']) == 2:
                         # No else because of skipped class
                         total_count['right'] += 1
+                        in_file_count['right'] += 1
             
             file_count += 1
-            # Change percentage threshold as needed
-            if in_file_count['front'] >= int(row_count * (1)):
+            if in_file_count['front'] >= int(row_count * (threshold)):
                 front_csv.append(csv_path)
-                pred_removed += in_file_count['front']
+                # Tracks number of predicted classes to be removed
+                for key in in_file_count.keys():
+                    pred_removed[key] += in_file_count[key]
             
     return total_count, front_csv, file_count, pred_removed
 
@@ -68,6 +72,12 @@ def undersampling(label_folder, video_folder, front_csv):
                 
     return sampled_labels
 
+def ratio(count):
+    max_turn = max(count['left'], count['right'])
+    if max_turn == 0:
+        max_turn = 1  # To avoid division by zero
+    print(f"Ratio (Front:Max Turn): {int(count['front']/max_turn)}:{int(max_turn/max_turn)}")
+
 def main():
     # Input processed label folder path
     # processed_labels folder
@@ -76,29 +86,35 @@ def main():
     # segmented videos
     video_folder = r''  
 
-    count, front_csv, file_count, pred_removed = class_counter(label_folder)
+    # Change percentage threshold as needed (ex. 0.99 for 99%)
+    threshold = 0.95
+
+    count, front_csv, file_count, pred_removed = class_counter(label_folder, threshold)
 
     # Display class instances
     for key in count.keys():
         print(f"{key.capitalize()} class: {count[key]}")
+    ratio(count)
 
     print("-" * 30)
-    print(f"Number of all front class csv files: {len(front_csv)} / {file_count} csv files")
-    print(f"Predicted front instances to be removed: {pred_removed}")
+    print(f"Number of {threshold*100}% front class csv files: {len(front_csv)} / {file_count} csv files")
+    print(f"Predicted number of classes to be removed: ")
+    for key in pred_removed.keys():
+        print(f"{key.capitalize()} class: {pred_removed[key]}")
     print("-" * 30)
-    
     
     # Remove all front csv files if user agrees
     user_input = input("Remove all front csv and corresponding videos (Y/N)? ")
     if(user_input.lower() == 'y'):
         sampled_labels = undersampling(label_folder, video_folder, front_csv)
 
-        count, front_csv, file_count, pred_removed = class_counter(sampled_labels)
+        count, front_csv, file_count, pred_removed = class_counter(sampled_labels, threshold)
         
         print("-" * 30)
         print("Post-undersampling class counts:")
         for key in count.keys():
             print(f"{key.capitalize()} class: {count[key]}")
+        ratio(count)
 
 if __name__ == "__main__":
     main()
