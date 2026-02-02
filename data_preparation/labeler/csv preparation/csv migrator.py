@@ -68,7 +68,9 @@ def inspect_csv_folder(directory_path):
     
 # Define I/O folders
 
+# augmented_videos
 input_augmented_folder = r'' 
+# sampled_labels
 input_csv_folder = r''
 
 parent_folder = os.path.dirname(input_augmented_folder)
