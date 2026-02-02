@@ -74,9 +74,9 @@ input_augmented_folder = r''
 input_csv_folder = r''
 
 parent_folder = os.path.dirname(input_augmented_folder)
-output_folder = os.path.join(parent_folder, 'Full Augmented Videos')
+output_folder = os.path.join(parent_folder, 'Augmented Data')
 video_out = os.path.join(output_folder, "augmented_videos")
-csv_out = os.path.join(output_folder, "augmented_csvs")
+csv_out = os.path.join(output_folder, "augmented_labels")
 
 os.makedirs(output_folder, exist_ok=True)
 os.makedirs(video_out, exist_ok=True)
