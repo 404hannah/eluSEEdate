@@ -1,4 +1,3 @@
-from itertools import count
 import os
 import csv
 import shutil
@@ -87,7 +86,7 @@ def main():
     video_folder = r''  
 
     # Change percentage threshold as needed (ex. 0.99 for 99%)
-    threshold = 0.95
+    threshold = 1
 
     count, front_csv, file_count, pred_removed = class_counter(label_folder, threshold)
 
@@ -98,6 +97,7 @@ def main():
 
     print("-" * 30)
     print(f"Number of {threshold*100}% front class csv files: {len(front_csv)} / {file_count} csv files")
+    
     print(f"Predicted number of classes to be removed: ")
     for key in pred_removed.keys():
         print(f"{key.capitalize()} class: {pred_removed[key]}")
