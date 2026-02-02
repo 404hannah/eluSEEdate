@@ -115,8 +115,8 @@ for vid_filename in os.listdir(input_augmented_folder):
             csv_filename = csv_map[vid_stem]
             
             # Create the new names with the "_A" postfix
-            new_vid_name = vid_filename + "_A" 
-            new_csv_name = csv_filename + "_A" 
+            new_vid_name = vid_filename.replace(".", "_A.")
+            new_csv_name = csv_filename.replace(".", "_A.")
             
             # Define full paths
             src_vid = os.path.join(input_augmented_folder, vid_filename)
