@@ -106,7 +106,7 @@ def main():
     print("-" * 30)
 
     # Remove all front csv files if user agrees
-    user_input = input("Remove all front csv and corresponding videos (Y/N)? ")
+    user_input = input(f"Remove {threshold*100}% front csv and corresponding videos (Y/N)? ")
     if(user_input.lower() == 'y'):
         sampled_labels = undersampling(label_folder, video_folder, front_csv)
 
