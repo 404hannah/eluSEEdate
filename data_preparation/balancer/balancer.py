@@ -1,6 +1,7 @@
 import os
 import csv
 import shutil
+import time
 
 def class_counter(label_folder, threshold):
     total_count = {'front': 0, 'left': 0, 'right': 0}
@@ -88,6 +89,7 @@ def main():
     # Change percentage threshold as needed (ex. 0.99 for 99%)
     threshold = 1
 
+    start = time.time()
     count, front_csv, file_count, pred_removed = class_counter(label_folder, threshold)
 
     # Display class instances
@@ -102,7 +104,7 @@ def main():
     for key in pred_removed.keys():
         print(f"{key.capitalize()} class: {pred_removed[key]}")
     print("-" * 30)
-    
+
     # Remove all front csv files if user agrees
     user_input = input("Remove all front csv and corresponding videos (Y/N)? ")
     if(user_input.lower() == 'y'):
@@ -115,6 +117,8 @@ def main():
         for key in count.keys():
             print(f"{key.capitalize()} class: {count[key]}")
         ratio(count)
+    end = time.time()
+    print(f"Total time taken: {end - start:.2f} seconds")
 
 if __name__ == "__main__":
     main()
