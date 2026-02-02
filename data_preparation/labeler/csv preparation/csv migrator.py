@@ -69,9 +69,9 @@ def inspect_csv_folder(directory_path):
 # Define I/O folders
 
 # augmented_videos
-input_augmented_folder = r'C:\Users\ejans\OneDrive\Documents\Thesis Stuff\Eric Thesis Datasets\Final Training Datasets\Augmented Data\augmented_videos' 
+input_augmented_folder = r'' 
 # sampled_labels
-input_csv_folder = r'C:\Users\ejans\OneDrive\Documents\Thesis Stuff\Eric Thesis Datasets\Final Training Datasets\Sampled Data\sampled_labels'
+input_csv_folder = r''
 
 parent_folder = os.path.dirname(input_augmented_folder)
 output_folder = os.path.join(parent_folder, 'Augmented Data')
