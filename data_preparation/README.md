@@ -16,7 +16,7 @@ data_preparation/
 │   └── balancer.py          # Step 5: Majority undersampling
 ├── csv preparation/
 │   └── csv migrator.py      # Step 8: Duplicates CSVs for augmented data
-│   └── class outliers.py    # Step 4: Removes outliers
+│   └── outlier remover.py    # Step 4: Removes outliers
 ├── labeler/
 │   ├── MVO_script.py        # Step 3: Fast labeling without visualization
 │   └── MVO_gui.py           # Step 3: Visual labeling with matching preview
@@ -34,7 +34,7 @@ To ensure data integrity and proper formatting, scripts must be executed in the 
 1. **rescaler**: Standardizes all input videos to a manageable resolution (480p) and fixed frame rate.
 2. **segmenter**: Segments the labeled videos into consistent 3-second clips for model training.
 3. **MVO**: Generates turn labels (Left, Slight Left, Slight Right, Front) using Visual Odometry.
-4. **class outliers**: Removes class instance by copying the neighbor if both neighbors are the same.
+4. **outlier remover**: Removes class instance by copying the neighbor if both neighbors are the same.
 5. **balancer**: Reduces class imbalance by removing data with all front classes.
 6. **cleaner**: Scales the videos to 128x128 and 10 fps for model training.
 7. **augmentor**: Generates variants (Brightness, Noise, etc.) to increase dataset diversity.
@@ -101,7 +101,7 @@ This script uses majority undersampling to reduce the class imbalance. It also c
 2. Initialize Video Folder Paths:
 
 Labeler and Balancer
-| Script | monocular visual odometry.py | balancer.py | csv migrator.py | class outliers.py |
+| Script | monocular visual odometry.py | balancer.py | csv migrator.py | outlier remover.py |
 | -------- | -------- | -------- | -------- | -------- |
 | Variable | `video_folder = r''` | `label_folder = r'' video_folder = r'' ` | `input_augmented_folder = r'' input_csv_folder = r''` | `labels_dir = r''`
 | Directory | labeler/script_only/ | balancer/ | labeler/csv preparation/ | labeler/csv preparation/ |
