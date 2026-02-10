@@ -83,8 +83,8 @@ def fixing_outlier(labels_dir):
                     label_name_corrected.append('SKIPPED')
 
             # All processed csv files are placed to a new folder 
-            shutil.copy(csv_path, os.path.join(processed_lbl_folder, csv_file)) 
             processed_csv_path = os.path.join(processed_lbl_folder, csv_file)
+            shutil.copy(csv_path, processed_csv_path) 
    
             # Read the file again from the beginning
             with open(processed_csv_path, 'r') as f:
