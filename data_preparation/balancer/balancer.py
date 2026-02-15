@@ -64,7 +64,7 @@ def undersampling(label_folder, video_folder, front_csv):
             if csv_path not in front_csv:
                 shutil.copy(csv_path, sampled_labels)
                 # Copy corresponding video file
-                video_file = csv_file.replace("_labels.csv", ".mp4")
+                video_file = csv_file.replace(".csv", ".mp4")
                 video_path = os.path.join(video_folder, video_file)
                 if os.path.exists(video_path):
                     shutil.copy(video_path, sampled_videos)

@@ -15,7 +15,7 @@ def fixing_outlier(labels_dir):
     total_outliers = 0
 
     for csv_file in os.listdir(labels_dir):
-        if csv_file.endswith("_labels.csv"):
+        if csv_file.endswith(".csv"):
             csv_path = os.path.join(labels_dir, csv_file)
             if os.path.exists(os.path.join(processed_lbl_folder, csv_file)):
                 continue

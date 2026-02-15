@@ -103,7 +103,7 @@ print("-" * 30)
 
 start = time.time()
 
-csv_map = {Path(f).stem.removesuffix('_labels'): f for f in os.listdir(input_csv_folder) if f.endswith('.csv')}
+csv_map = {Path(f).stem: f for f in os.listdir(input_csv_folder) if f.endswith('.csv')}
 
 video_extensions = ('.mp4', '.avi', '.mov', '.mkv', '.wmv')
 match_count = 0
