@@ -1,5 +1,13 @@
 # 🚗 ConvLSTM Turn Prediction Model
 
+![Python](https://img.shields.io/badge/-Python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
+![Pandas](https://img.shields.io/badge/-Pandas-150458?style=for-the-badge&logo=pandas)
+![NumPy](https://img.shields.io/badge/Numpy-777BB4?style=for-the-badge&logo=numpy&logoColor=white)
+![Scikit-learn](https://img.shields.io/badge/scikit--learn-F7931E?style=for-the-badge&logo=scikit-learn&logoColor=white)
+![TensorFlow](https://img.shields.io/badge/TensorFlow-FF6F00?style=for-the-badge&logo=tensorflow&logoColor=white)
+![Jupyter](https://img.shields.io/badge/Jupyter-F37626?style=for-the-badge&logo=jupyter&logoColor=white)
+![Google Colab](https://img.shields.io/badge/Colab-F9AB00?style=for-the-badge&logo=google-colab&logoColor=white)
+
 A deep learning pipeline for assistive navigation that predicts maneuvers from video sequences using a ConvLSTM architecture. This model takes 3-second video clips and outputs turn predictions (Front, Left, Right) with user intent integration.
 
 ## 📋 Table of Contents
@@ -432,3 +440,4 @@ ModuleNotFoundError: No module named 'split-folders'
 ---
 
 **Note**: This is a research prototype. Real-world deployment requires extensive safety validation and testing.
+
