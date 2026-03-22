@@ -11,6 +11,8 @@
 import { YOLO_NUM_CLASSES, YOLO_CLASS_NAMES } from '../config/modelConfig';
 import { FrameData } from './preprocessor';
 
+const ALLOWED_CLASS_IDS = new Set<number>([0, 1, 2, 3, 5, 7, 9, 11, 13, 14, 15, 16, 39]);
+
 // TFLite import - requires development build
 let loadTensorflowModel: any = null;
 
@@ -67,7 +69,7 @@ class YOLOModelManager {
   private isLoaded: boolean = false;
   private model: any = null;
   private demoMode: boolean = isDemoMode;
-  private confidenceThreshold: number = 0.5; // Minimum confidence to report detection
+  private confidenceThreshold: number = 0.25; // Minimum confidence to report detection
 
   /**
    * Load the YOLO TFLite model
@@ -191,14 +193,7 @@ class YOLOModelManager {
       };
     } catch (error: any) {
       console.error('[YOLO-TFLite] Inference failed:', error?.message || error);
-      
-      // Fallback to empty detections on error
-      return {
-        detections: [],
-        inferenceTimeMs: performance.now() - startTime,
-        frameWidth: frame.width,
-        frameHeight: frame.height
-      };
+      throw new Error(error?.message || 'YOLO inference failed');
     }
   }
 
@@ -389,7 +384,7 @@ class YOLOModelManager {
         }
         
         // Filter by confidence threshold (use actual threshold, not temp one)
-        if (confidence >= this.confidenceThreshold) {
+        if (confidence >= this.confidenceThreshold && ALLOWED_CLASS_IDS.has(maxClassId)) {
           // Convert from center format (x, y, w, h) to corner format (x, y, width, height)
           const boxX = Math.max(0, Math.min(1, x - w / 2)); // Top-left X
           const boxY = Math.max(0, Math.min(1, y - h / 2)); // Top-left Y

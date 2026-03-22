@@ -31,6 +31,7 @@ export interface FrameData {
   width: number;         // Original frame width
   height: number;        // Original frame height
   timestamp: number;     // Capture timestamp in ms
+  sequenceId?: number;   // Monotonic capture sequence ID for debugging/tracing
 }
 
 /**
@@ -134,6 +135,35 @@ export class FrameBuffer {
     }
     
     return frames;
+  }
+
+  /**
+   * Get bootstrap frames for the first prediction.
+   *
+   * Strategy:
+   * - Take up to the latest half-sequence of unique frames.
+   * - Duplicate each frame in order: 1,1,2,2,3,3...
+   * - If still short, pad using the last frame.
+   */
+  getFramesBootstrapDoubled(): FrameData[] {
+    if (this.frames.length === 0) {
+      return [];
+    }
+
+    const maxUniqueFrames = Math.ceil(SEQ_LEN / 2);
+    const sourceFrames = this.frames.slice(-maxUniqueFrames);
+    const doubled: FrameData[] = [];
+
+    for (const frame of sourceFrames) {
+      doubled.push(frame);
+      doubled.push(frame);
+    }
+
+    while (doubled.length < SEQ_LEN) {
+      doubled.push(doubled[doubled.length - 1]);
+    }
+
+    return doubled.slice(0, SEQ_LEN);
   }
 
   /**

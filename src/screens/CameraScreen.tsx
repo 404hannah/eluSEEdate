@@ -99,6 +99,11 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
   const isInferencingRef = useRef<boolean>(false);
   const isCapturingRef = useRef<boolean>(false);
   const isYOLOInferencingRef = useRef<boolean>(false);
+  const isModelLoadedRef = useRef<boolean>(false);
+  const isYOLOModelLoadedRef = useRef<boolean>(false);
+  const hasFirstPredictionRef = useRef<boolean>(false);
+  const captureSequenceRef = useRef<number>(0);
+  const predictionCountRef = useRef<number>(0);
   
   // Capture interval reference (now using setTimeout for async control)
   const captureIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -117,22 +122,32 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
       // Initialize ConvLSTM model
       const convlstmLoaded = await initializeModel();
       setIsModelLoaded(convlstmLoaded);
+      isModelLoadedRef.current = convlstmLoaded;
       if (convlstmLoaded) {
         console.log('[Camera] ConvLSTM model initialized successfully');
       } else {
-        console.log('[Camera] ConvLSTM model failed to load - using demo mode');
+        console.log('[Camera] ConvLSTM model failed to load');
       }
       
       // Initialize YOLO model
       const yoloLoaded = await initializeYOLOModel();
       setIsYOLOModelLoaded(yoloLoaded);
+      isYOLOModelLoadedRef.current = yoloLoaded;
       if (yoloLoaded) {
         console.log('[Camera] YOLO model initialized successfully');
       } else {
-        console.log('[Camera] YOLO model failed to load - using demo mode');
+        console.log('[Camera] YOLO model failed to load');
       }
-      
-      setDebugStatus('Models ready');
+
+      if (convlstmLoaded && yoloLoaded) {
+        setDebugStatus('Models ready');
+      } else if (!convlstmLoaded && !yoloLoaded) {
+        setDebugStatus('Model load failed: ConvLSTM + YOLO unavailable');
+      } else if (!convlstmLoaded) {
+        setDebugStatus('Model load failed: ConvLSTM unavailable');
+      } else {
+        setDebugStatus('Model load failed: YOLO unavailable');
+      }
     };
     
     initModels();
@@ -161,6 +176,14 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
     };
   }, [permission?.granted]);
 
+  useEffect(() => {
+    isModelLoadedRef.current = isModelLoaded;
+  }, [isModelLoaded]);
+
+  useEffect(() => {
+    isYOLOModelLoadedRef.current = isYOLOModelLoaded;
+  }, [isYOLOModelLoaded]);
+
   /**
    * Start continuous frame capture
    */
@@ -168,6 +191,9 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
     if (captureIntervalRef.current || isCapturingRef.current) return;
     
     isCapturingRef.current = true;
+    hasFirstPredictionRef.current = false;
+    predictionCountRef.current = 0;
+    setPredictionCount(0);
     setIsCapturing(true);
     setDebugStatus('Starting capture...');
     console.log(`[Camera] Starting continuous capture at ${REALISTIC_CAPTURE_FPS} FPS...`);
@@ -196,6 +222,7 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
    */
   const stopCapture = useCallback(() => {
     isCapturingRef.current = false;
+    hasFirstPredictionRef.current = false;
     if (captureIntervalRef.current) {
       clearTimeout(captureIntervalRef.current);
       captureIntervalRef.current = null;
@@ -244,35 +271,27 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
         try {
           // Decode the base64 image to actual pixel data
           const decoded = await decodeBase64ToPixels(photo.base64, FRAME_WIDTH, FRAME_HEIGHT);
+          const sequenceId = ++captureSequenceRef.current;
           
           frameData = {
             data: decoded.data,
             width: decoded.width,
             height: decoded.height,
             timestamp: Date.now(),
+            sequenceId,
           };
           
-          console.log(`[Camera] Frame decoded: ${decoded.width}x${decoded.height}, ${decoded.data.length} bytes`);
+          console.log(`[Camera] Frame decoded #${sequenceId}: ${decoded.width}x${decoded.height}, ${decoded.data.length} bytes`);
         } catch (decodeError: any) {
-          console.warn('[Camera] Failed to decode image, using fallback:', decodeError?.message);
-          
-          // Fallback to placeholder if decoding fails
-          frameData = {
-            data: new Uint8Array(FRAME_WIDTH * FRAME_HEIGHT * 4).fill(128),
-            width: FRAME_WIDTH,
-            height: FRAME_HEIGHT,
-            timestamp: Date.now(),
-          };
+          console.warn('[Camera] Failed to decode image:', decodeError?.message);
+          setDebugStatus(`Decode error: ${decodeError?.message || 'invalid frame'}`);
+          return;
         }
       } else {
-        // No base64 data available - use placeholder
+        // No base64 data available.
         console.warn('[Camera] No base64 data in photo');
-        frameData = {
-          data: new Uint8Array(FRAME_WIDTH * FRAME_HEIGHT * 4).fill(128),
-          width: FRAME_WIDTH,
-          height: FRAME_HEIGHT,
-          timestamp: Date.now(),
-        };
+        setDebugStatus('Capture error: no base64 frame data');
+        return;
       }
       
       // Add frame to buffer
@@ -285,18 +304,18 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
           const buffer = frameBufferRef.current;
           const bufferCount = buffer.getFrameCount();
           setDebugStatus(`Captured: ${newCount} | Buffer: ${bufferCount}/${SEQ_LEN}`);
-          console.log(`[Camera] Frame ${newCount} added to buffer (${bufferCount}/${SEQ_LEN})`);
+          console.log(`[Camera] Frame ${newCount} added to buffer (${bufferCount}/${SEQ_LEN}) seq=${frameData.sequenceId ?? -1}`);
           return newCount;
         });
         
         // Run inference when buffer is ready (or can predict early with padding)
         const buffer = frameBufferRef.current;
-        if (buffer.canPredictEarly() && !isInferencingRef.current) {
+        if (isModelLoadedRef.current && buffer.canPredictEarly() && !isInferencingRef.current) {
           await runInferenceWithPadding();
         }
         
         // Run YOLO detection on this frame (parallel with ConvLSTM)
-        if (!isYOLOInferencingRef.current) {
+        if (isYOLOModelLoadedRef.current && !isYOLOInferencingRef.current) {
           await runYOLODetection(frameData);
         }
       }
@@ -310,6 +329,10 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
    * Run YOLO object detection on single frame
    */
   const runYOLODetection = async (frame: FrameData) => {
+    if (!isYOLOModelLoadedRef.current) {
+      return;
+    }
+
     if (isYOLOInferencingRef.current) {
       return; // Skip if already running
     }
@@ -323,6 +346,7 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
     } catch (error: any) {
       console.error('[YOLO] Detection error:', error?.message || error);
       setYoloDetections([]);
+      setDebugStatus(`YOLO error: ${error?.message || 'inference failed'}`);
     } finally {
       isYOLOInferencingRef.current = false;
     }
@@ -332,6 +356,10 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
    * Run model inference with frame padding if buffer not full
    */
   const runInferenceWithPadding = async () => {
+    if (!isModelLoadedRef.current) {
+      return;
+    }
+
     const buffer = frameBufferRef.current;
     
     if (isInferencingRef.current) {
@@ -342,8 +370,25 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
     setDebugStatus('Running inference...');
     
     try {
-      // Get frames with padding (duplicates last frame to fill SEQ_LEN)
-      const frames = buffer.getFramesPadded();
+      // Before first prediction, duplicate each buffered frame in order
+      // (1,1,2,2,...) to bootstrap sequence length faster.
+      const isFirstPrediction = !hasFirstPredictionRef.current;
+      const strategy = isFirstPrediction ? 'bootstrap-doubled' : 'tail-padded';
+      const frames = isFirstPrediction
+        ? buffer.getFramesBootstrapDoubled()
+        : buffer.getFramesPadded();
+
+      if (frames.length !== SEQ_LEN) {
+        throw new Error(`Invalid frame sequence length: ${frames.length}`);
+      }
+
+      const sequenceIds = frames.map((f, idx) => f.sequenceId ?? -(idx + 1));
+      const uniqueIds = Array.from(new Set(sequenceIds));
+      const runTag = predictionCountRef.current + 1;
+      console.log(
+        `[TRACK][ConvLSTM][Run ${runTag}] strategy=${strategy} buffer=${buffer.getFrameCount()}/${SEQ_LEN} unique=${uniqueIds.length}/${frames.length}`
+      );
+      console.log(`[TRACK][ConvLSTM][Run ${runTag}] sequence=${sequenceIds.join(',')}`);
       
       // Preprocess frames
       const preprocessor = preprocessorRef.current;
@@ -357,10 +402,12 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
       setDirectionLabel(prediction.className);
       setConfidence(prediction.confidence);
       setMetrics(newMetrics);
+      hasFirstPredictionRef.current = true;
       
       // Use functional update to avoid stale closure
       setPredictionCount(prev => {
         const newPredCount = prev + 1;
+        predictionCountRef.current = newPredCount;
         setDebugStatus(`Prediction #${newPredCount}: ${prediction.className}`);
         console.log(`[Camera] Prediction #${newPredCount}: ${prediction.className} (${(prediction.confidence * 100).toFixed(1)}%)`);
         console.log(`[Camera] Latency: ${newMetrics.totalLatencyMs.toFixed(1)}ms`);

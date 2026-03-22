@@ -183,19 +183,7 @@ class TFLiteModelManager {
       };
     } catch (error: any) {
       console.error('[ConvLSTM-Intent-TFLite] Inference failed:', error?.message || error);
-
-      // Deterministic fallback: return neutral logits, not simulated/random output
-      const output = [0, 0, 0];
-      const probabilities = this.softmax(output);
-      const classId = this.argmax(probabilities) as ClassId;
-      
-      return {
-        classId,
-        className: CLASS_NAMES[classId] as PredictionClass,
-        confidence: probabilities[classId],
-        probabilities,
-        inferenceTimeMs: performance.now() - startTime
-      };
+      throw new Error(error?.message || 'ConvLSTM intent inference failed');
     }
   }
 
