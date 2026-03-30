@@ -101,7 +101,7 @@ DON'T:
 ✗ Use spaces or special characters (except hyphen and slash)
 ✗ Use CamelCase or snake_case
 ✗ Make names too long or too vague
-✗ Include your name (Git tracks author automatically)
+✗ Include personal names (Git tracks author automatically)
 ✗ Use generic names like "fix" or "update"
 
 GOOD EXAMPLES:
@@ -148,15 +148,15 @@ Creating a New Branch:
     2. Create branch with proper naming:
        git checkout develop
        git pull origin develop
-       git checkout -b feature/your-feature-name
+       git checkout -b feature/feature-name
 
-    3. Work on your changes:
+    3. Work on branch changes:
        - Make commits regularly
        - Use descriptive commit messages
        - Keep commits focused and atomic
 
-    4. Push your branch:
-       git push -u origin feature/your-feature-name
+    4. Push the branch:
+       git push -u origin feature/feature-name
 
     5. Create Pull Request:
        - Target: develop (or main for hotfixes)
@@ -284,11 +284,11 @@ Fix a bug:
 Update documentation:
     git checkout develop
     git pull origin develop
-    git checkout -b docs/what-you-updated
+    git checkout -b docs/what-was-updated
     [update docs]
     git add .
     git commit -m "docs: update description"
-    git push -u origin docs/what-you-updated
+    git push -u origin docs/what-was-updated
 
 Critical production fix:
     git checkout main
@@ -314,7 +314,7 @@ TIPS FOR SUCCESS
    - Faster integration
 
 3. Stay Up to Date
-   - Regularly merge develop into your feature branch
+   - Regularly merge develop into the feature branch
    - Reduces merge conflicts later
 
 4. Clean Up
@@ -323,11 +323,11 @@ TIPS FOR SUCCESS
 
 5. Communicate
    - Use descriptive names and commit messages
-   - Others should understand your work without asking
+   - Others should understand the work without asking
 
 6. Test Before PR
-   - Make sure your changes work
-   - Run the app and test your feature
+   - Ensure the changes work
+   - Run the app and test the feature
    - Check for errors
 
 ================================================================================

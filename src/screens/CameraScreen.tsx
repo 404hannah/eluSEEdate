@@ -3,12 +3,12 @@
  * 
  * Live camera view with real-time turn prediction
  * - Captures frames silently from rear camera (no sound/flash)
- * - Uses simplified capture approach compatible with Expo Go
+ * - Runs real ConvLSTM and YOLO inference in native builds
  * - Shows predicted direction at bottom
  * - Shows inference/latency metrics at top-left
  * 
- * NOTE: takePictureAsync is slow (~200-500ms), so we capture at 2-3 FPS
- * and duplicate frames to fill the 20-frame buffer for inference.
+ * NOTE: takePictureAsync is relatively slow (~200-500ms), so effective
+ * capture FPS is device-dependent.
  */
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
@@ -19,7 +19,6 @@ import {
   StatusBar,
   TouchableOpacity,
   Dimensions,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -33,25 +32,28 @@ import {
 import {
   runPrediction,
   initializeModel,
+  getModelLoadError,
   PredictionResult,
   PerformanceMetrics,
 } from '../services/convlstmWithoutIntentInference';
 import {
   runYOLODetection as detectObjects,
   initializeYOLOModel,
+  getYOLOModelLoadError,
   YOLOResult,
   Detection,
 } from '../services/yoloInference';
 import BoundingBoxOverlay from '../components/BoundingBoxOverlay';
-import { SEQ_LEN, DEVICE_CONFIG, FRAME_WIDTH, FRAME_HEIGHT } from '../config/modelConfig';
+import { SEQ_LEN, FRAME_WIDTH, FRAME_HEIGHT } from '../config/modelConfig';
 import { decodeBase64ToPixels } from '../utils/imageUtils';
 
 type CameraScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Camera'>;
 };
 
-// Realistic capture FPS for takePictureAsync (slow but works in Expo Go)
+// Conservative target capture FPS for takePictureAsync flow.
 const REALISTIC_CAPTURE_FPS = 2;
+const TARGET_CAPTURE_AREA = 640 * 480;
 
 export default function CameraScreen({ navigation }: CameraScreenProps) {
   // Camera permission state
@@ -62,6 +64,8 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
   
   // Camera mount state
   const [isCameraReady, setIsCameraReady] = useState<boolean>(false);
+  const [cameraPictureSize, setCameraPictureSize] = useState<string | undefined>(undefined);
+  const [isPictureSizeConfigured, setIsPictureSizeConfigured] = useState<boolean>(false);
   
   // Frame buffer for storing captured frames (use realistic FPS)
   const frameBufferRef = useRef<FrameBuffer>(new FrameBuffer(REALISTIC_CAPTURE_FPS));
@@ -99,9 +103,69 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
   const isInferencingRef = useRef<boolean>(false);
   const isCapturingRef = useRef<boolean>(false);
   const isYOLOInferencingRef = useRef<boolean>(false);
+  const isModelLoadedRef = useRef<boolean>(false);
+  const isYOLOModelLoadedRef = useRef<boolean>(false);
+
+  // Latest function references for stable capture loop callbacks
+  const captureFrameRef = useRef<() => Promise<void>>(async () => {});
+  const runInferenceRef = useRef<() => Promise<void>>(async () => {});
+  const runYOLORef = useRef<(frame: FrameData) => Promise<void>>(async () => {});
   
   // Capture interval reference (now using setTimeout for async control)
   const captureIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    isModelLoadedRef.current = isModelLoaded;
+  }, [isModelLoaded]);
+
+  useEffect(() => {
+    isYOLOModelLoadedRef.current = isYOLOModelLoaded;
+  }, [isYOLOModelLoaded]);
+
+  const configurePictureSize = useCallback(async () => {
+    if (!cameraRef.current) {
+      setIsPictureSizeConfigured(true);
+      return;
+    }
+
+    try {
+      const sizes = await cameraRef.current.getAvailablePictureSizesAsync();
+
+      if (!sizes?.length) {
+        console.warn('[Camera] No picture sizes reported by device, using default camera size');
+        return;
+      }
+
+      const parsedSizes = sizes
+        .map((raw) => {
+          const match = raw.match(/^(\d+)x(\d+)$/);
+          if (!match) return null;
+
+          const width = Number(match[1]);
+          const height = Number(match[2]);
+          if (!Number.isFinite(width) || !Number.isFinite(height)) return null;
+
+          return { raw, area: width * height };
+        })
+        .filter((size): size is { raw: string; area: number } => size !== null)
+        .sort((a, b) => a.area - b.area);
+
+      if (!parsedSizes.length) {
+        console.warn('[Camera] Unable to parse picture sizes, using default camera size');
+        return;
+      }
+
+      const preferredSize = parsedSizes.find((size) => size.area >= TARGET_CAPTURE_AREA)
+        ?? parsedSizes[parsedSizes.length - 1];
+
+      setCameraPictureSize(preferredSize.raw);
+      console.log(`[Camera] Selected picture size: ${preferredSize.raw}`);
+    } catch (error: any) {
+      console.warn('[Camera] Failed to query picture sizes, using default camera size:', error?.message || error);
+    } finally {
+      setIsPictureSizeConfigured(true);
+    }
+  }, []);
 
   /**
    * Initialize model on screen mount
@@ -120,7 +184,7 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
       if (convlstmLoaded) {
         console.log('[Camera] ConvLSTM model initialized successfully');
       } else {
-        console.log('[Camera] ConvLSTM model failed to load - using demo mode');
+        console.error('[Camera] ConvLSTM model failed to load:', getModelLoadError() || 'unknown error');
       }
       
       // Initialize YOLO model
@@ -129,10 +193,16 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
       if (yoloLoaded) {
         console.log('[Camera] YOLO model initialized successfully');
       } else {
-        console.log('[Camera] YOLO model failed to load - using demo mode');
+        console.warn('[Camera] YOLO model failed to load:', getYOLOModelLoadError() || 'unknown error');
       }
-      
-      setDebugStatus('Models ready');
+
+      if (convlstmLoaded && yoloLoaded) {
+        setDebugStatus('Models ready');
+      } else if (convlstmLoaded) {
+        setDebugStatus('ConvLSTM ready | YOLO unavailable');
+      } else {
+        setDebugStatus('ConvLSTM model unavailable');
+      }
     };
     
     initModels();
@@ -145,10 +215,10 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
 
   /**
    * Start continuous frame capture when permission is granted
-   * Start regardless of model status (demo mode works too)
+   * Capture starts only when ConvLSTM model is available
    */
   useEffect(() => {
-    if (permission?.granted) {
+    if (permission?.granted && isModelLoaded && isCameraReady && isPictureSizeConfigured) {
       // Small delay to ensure camera is ready
       const timer = setTimeout(() => {
         startCapture();
@@ -159,7 +229,7 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
     return () => {
       stopCapture();
     };
-  }, [permission?.granted]);
+  }, [permission?.granted, isModelLoaded, isCameraReady, isPictureSizeConfigured]);
 
   /**
    * Start continuous frame capture
@@ -177,7 +247,12 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
       if (!isCapturingRef.current) return;
       
       const startTime = Date.now();
-      await captureFrame();
+      await captureFrameRef.current();
+
+      if (!isCapturingRef.current) {
+        return;
+      }
+
       const elapsed = Date.now() - startTime;
       
       // Schedule next capture, accounting for time spent
@@ -195,14 +270,19 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
    * Stop frame capture
    */
   const stopCapture = useCallback(() => {
+    const hadActiveCapture = isCapturingRef.current || captureIntervalRef.current !== null;
+
     isCapturingRef.current = false;
     if (captureIntervalRef.current) {
       clearTimeout(captureIntervalRef.current);
       captureIntervalRef.current = null;
     }
+
     setIsCapturing(false);
-    setDebugStatus('Capture stopped');
-    console.log('[Camera] Capture stopped');
+    if (hadActiveCapture) {
+      setDebugStatus('Capture stopped');
+      console.log('[Camera] Capture stopped');
+    }
   }, []);
 
   /**
@@ -210,7 +290,7 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
    * Uses takePictureAsync which is slow but works in Expo Go
    */
   const captureFrame = async () => {
-    if (!cameraRef.current) {
+    if (!cameraRef.current || !isCameraReady || !isPictureSizeConfigured || !isCapturingRef.current) {
       return;
     }
     
@@ -254,25 +334,14 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
           
           console.log(`[Camera] Frame decoded: ${decoded.width}x${decoded.height}, ${decoded.data.length} bytes`);
         } catch (decodeError: any) {
-          console.warn('[Camera] Failed to decode image, using fallback:', decodeError?.message);
-          
-          // Fallback to placeholder if decoding fails
-          frameData = {
-            data: new Uint8Array(FRAME_WIDTH * FRAME_HEIGHT * 4).fill(128),
-            width: FRAME_WIDTH,
-            height: FRAME_HEIGHT,
-            timestamp: Date.now(),
-          };
+          console.warn('[Camera] Failed to decode image, skipping frame:', decodeError?.message);
+          setDebugStatus('Decode failed - frame skipped');
+          return;
         }
       } else {
-        // No base64 data available - use placeholder
-        console.warn('[Camera] No base64 data in photo');
-        frameData = {
-          data: new Uint8Array(FRAME_WIDTH * FRAME_HEIGHT * 4).fill(128),
-          width: FRAME_WIDTH,
-          height: FRAME_HEIGHT,
-          timestamp: Date.now(),
-        };
+        console.warn('[Camera] No base64 data in photo, skipping frame');
+        setDebugStatus('Capture missing base64 - frame skipped');
+        return;
       }
       
       // Add frame to buffer
@@ -289,15 +358,15 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
           return newCount;
         });
         
-        // Run inference when buffer is ready (or can predict early with padding)
+        // Run inference only when full frame sequence is available
         const buffer = frameBufferRef.current;
-        if (buffer.canPredictEarly() && !isInferencingRef.current) {
-          await runInferenceWithPadding();
+        if (isModelLoadedRef.current && buffer.isReady() && !isInferencingRef.current) {
+          await runInferenceRef.current();
         }
         
         // Run YOLO detection on this frame (parallel with ConvLSTM)
-        if (!isYOLOInferencingRef.current) {
-          await runYOLODetection(frameData);
+        if (isYOLOModelLoadedRef.current && !isYOLOInferencingRef.current) {
+          await runYOLORef.current(frameData);
         }
       }
     } catch (error: any) {
@@ -310,6 +379,10 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
    * Run YOLO object detection on single frame
    */
   const runYOLODetection = async (frame: FrameData) => {
+    if (!isYOLOModelLoadedRef.current) {
+      return;
+    }
+
     if (isYOLOInferencingRef.current) {
       return; // Skip if already running
     }
@@ -329,10 +402,18 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
   };
 
   /**
-   * Run model inference with frame padding if buffer not full
+   * Run model inference when a full frame buffer is available
    */
-  const runInferenceWithPadding = async () => {
+  const runInferenceFromBuffer = async () => {
     const buffer = frameBufferRef.current;
+
+    if (!isModelLoadedRef.current) {
+      return;
+    }
+
+    if (!buffer.isReady()) {
+      return;
+    }
     
     if (isInferencingRef.current) {
       return;
@@ -342,8 +423,8 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
     setDebugStatus('Running inference...');
     
     try {
-      // Get frames with padding (duplicates last frame to fill SEQ_LEN)
-      const frames = buffer.getFramesPadded();
+      // Use the full frame sequence expected by the ConvLSTM model
+      const frames = buffer.getFrames();
       
       // Preprocess frames
       const preprocessor = preprocessorRef.current;
@@ -374,6 +455,11 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
       isInferencingRef.current = false;
     }
   };
+
+  // Keep async callbacks fresh for the long-lived capture loop.
+  captureFrameRef.current = captureFrame;
+  runInferenceRef.current = runInferenceFromBuffer;
+  runYOLORef.current = runYOLODetection;
 
   /**
    * Handle back button press
@@ -420,12 +506,15 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
         style={styles.camera}
         facing="back"
         mode="picture"
+        pictureSize={cameraPictureSize}
         animateShutter={false}
         enableTorch={false}
         onCameraReady={() => {
           console.log('[Camera] Camera is ready!');
           setIsCameraReady(true);
-          setDebugStatus('Camera ready');
+          setDebugStatus('Camera ready | configuring capture size');
+          setIsPictureSizeConfigured(false);
+          void configurePictureSize();
         }}
         onMountError={(error) => {
           console.error('[Camera] Mount error:', error);
@@ -498,8 +587,11 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
           <Text style={styles.statusText}>
             {!isCameraReady ? 'Camera initializing...' : isCapturing ? 'Capturing' : 'Paused'}
           </Text>
-          {(!isModelLoaded || !isYOLOModelLoaded) && (
-            <Text style={styles.statusText}> | Demo Mode</Text>
+          {!isModelLoaded && (
+            <Text style={styles.statusText}> | ConvLSTM offline</Text>
+          )}
+          {isModelLoaded && !isYOLOModelLoaded && (
+            <Text style={styles.statusText}> | YOLO offline</Text>
           )}
         </View>
 

@@ -13,20 +13,17 @@ import { FrameData } from './preprocessor';
 
 // TFLite import - requires development build
 let loadTensorflowModel: any = null;
-
-// Track if we're in demo mode (Expo Go) or real mode (dev build)
-let isDemoMode = true;
+let tfliteAvailabilityError: string | null = null;
 
 // Try to load TFLite (will fail in Expo Go, work in dev build)
 try {
   const tfliteModule = require('react-native-fast-tflite');
   loadTensorflowModel = tfliteModule.loadTensorflowModel;
-  isDemoMode = false;
   console.log('[YOLO-TFLite] react-native-fast-tflite loaded successfully');
-} catch (e) {
-  console.log('[YOLO-TFLite] react-native-fast-tflite not available (Expo Go mode)');
-  console.log('[YOLO-TFLite] Running in DEMO mode with simulated detections');
-  isDemoMode = true;
+} catch (e: any) {
+  tfliteAvailabilityError = e?.message || 'react-native-fast-tflite not available';
+  console.error('[YOLO-TFLite] react-native-fast-tflite unavailable:', tfliteAvailabilityError);
+  console.error('[YOLO-TFLite] Use a development or standalone build with native modules enabled');
 }
 
 /**
@@ -66,8 +63,8 @@ export interface YOLOResult {
 class YOLOModelManager {
   private isLoaded: boolean = false;
   private model: any = null;
-  private demoMode: boolean = isDemoMode;
-  private confidenceThreshold: number = 0.5; // Minimum confidence to report detection
+  private loadError: string | null = tfliteAvailabilityError;
+  private confidenceThreshold: number = 0.35; // Minimum confidence to report detection
 
   /**
    * Load the YOLO TFLite model
@@ -78,63 +75,44 @@ class YOLOModelManager {
       return true;
     }
 
-    // Check if we're in demo mode (Expo Go)
-    if (this.demoMode || !loadTensorflowModel) {
-      console.log('[YOLO-TFLite] ═══════════════════════════════════════════════');
-      console.log('[YOLO-TFLite] ⚠️  Running in DEMO MODE');
-      console.log('[YOLO-TFLite] ───────────────────────────────────────────────');
-      console.log('[YOLO-TFLite] Object detection is SIMULATED');
-      console.log('[YOLO-TFLite] ');
-      console.log('[YOLO-TFLite] To use REAL YOLO inference:');
-      console.log('[YOLO-TFLite]   1. Replace assets/model/yolo-placeholder.txt');
-      console.log('[YOLO-TFLite]   2. With your YOLOv12 .tflite model');
-      console.log('[YOLO-TFLite]   3. npx expo prebuild && npx expo run:android');
-      console.log('[YOLO-TFLite] ═══════════════════════════════════════════════');
-      
+    if (!loadTensorflowModel) {
+      this.loadError = tfliteAvailabilityError || 'TFLite loader is unavailable';
+      this.model = null;
       this.isLoaded = false;
-      this.demoMode = true;
-      return true; // Return true so app continues to function
+      console.error('[YOLO-TFLite] Model loader unavailable:', this.loadError);
+      return false;
     }
 
     try {
       console.log('[YOLO-TFLite] Loading YOLOv12 model from assets...');
       
       // Load model from bundled assets with GPU delegate enabled
-      // PLACEHOLDER: Replace with actual model when available
       const modelOptions = {
         useGpu: true, // Enable GPU acceleration
       };
-      
-      // NOTE: This will fail until real model is added
-      // For now, fall back to demo mode
-      try {
-        this.model = await loadTensorflowModel(
-          require('../../assets/model/yolo.tflite'),
-          modelOptions
-        );
-        
-        this.isLoaded = true;
-        this.demoMode = false;
-        console.log('[YOLO-TFLite] ✅ Model loaded successfully with GPU acceleration!');
-        console.log('[YOLO-TFLite] YOLOv12 ready for real-time object detection');
-        
-        // Warm up with dummy inference
-        console.log('[YOLO-TFLite] Warming up model...');
-        await this.warmUp();
-        console.log('[YOLO-TFLite] Model warm-up complete');
-        
-        return true;
-      } catch (loadError: any) {
-        console.log('[YOLO-TFLite] Model file not found (expected - using placeholder)');
-        console.log('[YOLO-TFLite] Falling back to demo mode');
-        this.demoMode = true;
-        return true;
-      }
+
+      this.model = await loadTensorflowModel(
+        require('../../assets/model/yolo.tflite'),
+        modelOptions
+      );
+
+      this.isLoaded = true;
+      this.loadError = null;
+      console.log('[YOLO-TFLite] ✅ Model loaded successfully with GPU acceleration!');
+      console.log('[YOLO-TFLite] YOLOv12 ready for real-time object detection');
+
+      // Warm up with dummy inference
+      console.log('[YOLO-TFLite] Warming up model...');
+      await this.warmUp();
+      console.log('[YOLO-TFLite] Model warm-up complete');
+
+      return true;
     } catch (error: any) {
-      console.error('[YOLO-TFLite] ❌ Failed to load model:', error?.message || error);
-      console.log('[YOLO-TFLite] Falling back to demo mode');
-      this.demoMode = true;
-      return true; // Still allow app to run in demo mode
+      this.loadError = error?.message || 'Failed to load YOLO model';
+      this.model = null;
+      this.isLoaded = false;
+      console.error('[YOLO-TFLite] ❌ Failed to load model:', this.loadError);
+      return false;
     }
   }
 
@@ -142,14 +120,14 @@ class YOLOModelManager {
    * Check if model is loaded (real inference available)
    */
   isModelLoaded(): boolean {
-    return this.isLoaded && !this.demoMode;
+    return this.isLoaded && !!this.model;
   }
 
   /**
-   * Check if running in demo mode
+   * Get latest model load error
    */
-  isInDemoMode(): boolean {
-    return this.demoMode;
+  getLoadError(): string | null {
+    return this.loadError;
   }
 
   /**
@@ -169,33 +147,29 @@ class YOLOModelManager {
     const startTime = performance.now();
 
     try {
-      let detections: Detection[];
-      
-      if (this.demoMode || !this.isLoaded || !this.model) {
-        // Demo mode: Use simulated detections
-        detections = await this.simulateDetections();
-      } else {
-        // Real inference with TFLite model
-        console.log('[YOLO-TFLite] Running real inference...');
-        
-        // Preprocess frame for YOLO (resize to model input size, normalize)
-        const preprocessed = this.preprocessFrame(frame);
-        console.log('[YOLO-TFLite] Preprocessed data shape:', preprocessed.data.length, 'expected:', 1*3*128*128);
-        
-        // Run model inference
-        const outputTensor = await this.model.run([preprocessed.data]);
-        console.log('[YOLO-TFLite] Model inference complete, output:', typeof outputTensor);
-        
-        // Parse YOLO output (format depends on your specific YOLOv12 model)
-        detections = this.parseYOLOOutput(outputTensor, frame.width, frame.height);
-        
-        console.log('[YOLO-TFLite] Detected', detections.length, 'objects');
+      if (!this.isLoaded || !this.model) {
+        throw new Error(this.loadError || 'YOLO model is not loaded');
       }
+
+      // Real inference with TFLite model
+      console.log('[YOLO-TFLite] Running real inference...');
+
+      // Preprocess frame for YOLO (resize to model input size, normalize)
+      const preprocessed = this.preprocessFrame(frame);
+      console.log('[YOLO-TFLite] Preprocessed data shape:', preprocessed.data.length, 'expected:', 1*3*128*128);
+
+      // Run model inference
+      const outputTensor = await this.model.run([preprocessed.data]);
+      console.log('[YOLO-TFLite] Model inference complete, output:', typeof outputTensor);
+
+      // Parse YOLO output (format depends on your specific YOLOv12 model)
+      const detections = this.parseYOLOOutput(outputTensor, frame.width, frame.height);
+
+      console.log('[YOLO-TFLite] Detected', detections.length, 'objects');
       
       const inferenceTimeMs = performance.now() - startTime;
 
-      const modeLabel = this.demoMode ? '[DEMO]' : '[REAL]';
-      console.log(`[YOLO-TFLite] ${modeLabel} Detections: ${detections.length} objects in ${inferenceTimeMs.toFixed(1)}ms`);
+      console.log(`[YOLO-TFLite] Detections: ${detections.length} objects in ${inferenceTimeMs.toFixed(1)}ms`);
 
       return {
         detections,
@@ -205,14 +179,7 @@ class YOLOModelManager {
       };
     } catch (error: any) {
       console.error('[YOLO-TFLite] Inference failed:', error?.message || error);
-      
-      // Fallback to empty detections on error
-      return {
-        detections: [],
-        inferenceTimeMs: performance.now() - startTime,
-        frameWidth: frame.width,
-        frameHeight: frame.height
-      };
+      throw error;
     }
   }
 
@@ -280,7 +247,8 @@ class YOLOModelManager {
       const bboxCoords = 4;
       
       // Access the output data (format depends on TFLite binding)
-      const outputData = outputTensor[0] || outputTensor;
+      const candidateOutput = Array.isArray(outputTensor) ? (outputTensor[0] ?? outputTensor) : outputTensor;
+      const outputData = this.flattenNumericData(candidateOutput);
       
       // Detect tensor layout: (1, 84, 336) vs (1, 336, 84)
       const totalValues = outputData?.length || 0;
@@ -307,6 +275,37 @@ class YOLOModelManager {
         } else {
           console.log('[YOLO-DEBUG] Using transposed tensor format [84, 336]');
         }
+      }
+
+      if (totalValues < expectedValues) {
+        console.warn('[YOLO-TFLite] Output tensor shorter than expected:', totalValues, 'expected:', expectedValues);
+        return [];
+      }
+
+      const scoreAccessor = (detIndex: number, classIndex: number): number => {
+        if (isTransposed) {
+          return outputData[(bboxCoords + classIndex) * numDetections + detIndex];
+        }
+        return outputData[detIndex * 84 + bboxCoords + classIndex];
+      };
+
+      // Auto-detect whether class scores are logits (need sigmoid) or probabilities.
+      let minSampleScore = Number.POSITIVE_INFINITY;
+      let maxSampleScore = Number.NEGATIVE_INFINITY;
+      const sampleDetections = Math.min(24, numDetections);
+
+      for (let i = 0; i < sampleDetections; i++) {
+        for (let c = 0; c < numClasses; c++) {
+          const score = scoreAccessor(i, c);
+          if (!Number.isFinite(score)) continue;
+          if (score < minSampleScore) minSampleScore = score;
+          if (score > maxSampleScore) maxSampleScore = score;
+        }
+      }
+
+      const scoresLookLikeLogits = minSampleScore < 0 || maxSampleScore > 1;
+      if (scoresLookLikeLogits) {
+        console.log('[YOLO-DEBUG] Class scores look like logits, applying sigmoid');
       }
       
       // DEBUG: Log tensor info on first few calls
@@ -368,20 +367,19 @@ class YOLOModelManager {
           w = outputData[i * 84 + 2];
           h = outputData[i * 84 + 3];
         }
+
+        if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(w) || !Number.isFinite(h)) {
+          continue;
+        }
         
         // Find class with highest confidence
         let maxClassScore = -Infinity;
         let maxClassId = 0;
         
         for (let c = 0; c < numClasses; c++) {
-          let classScore;
-          
-          if (isTransposed) {
-            // Transposed format: [84, 336]
-            classScore = outputData[(bboxCoords + c) * numDetections + i];
-          } else {
-            // Non-transposed format: [336, 84]
-            classScore = outputData[i * 84 + bboxCoords + c];
+          const classScore = scoreAccessor(i, c);
+          if (!Number.isFinite(classScore)) {
+            continue;
           }
           
           if (classScore > maxClassScore) {
@@ -389,10 +387,13 @@ class YOLOModelManager {
             maxClassId = c;
           }
         }
-        
-        // Model outputs probabilities directly (no sigmoid needed)
-        // Float16 model outputs are already floating values.
-        const confidence = Math.max(0, Math.min(1, maxClassScore));
+
+        if (!Number.isFinite(maxClassScore)) {
+          continue;
+        }
+
+        const score = scoresLookLikeLogits ? this.sigmoid(maxClassScore) : maxClassScore;
+        const confidence = Math.max(0, Math.min(1, score));
         
         if (confidence > maxConfidenceFound) {
           maxConfidenceFound = confidence;
@@ -404,11 +405,20 @@ class YOLOModelManager {
         
         // Filter by confidence threshold (use actual threshold, not temp one)
         if (confidence >= this.confidenceThreshold) {
+          const outputScale = Math.max(Math.abs(x), Math.abs(y), Math.abs(w), Math.abs(h)) > 2
+            ? 128
+            : 1;
+
+          const xNorm = x / outputScale;
+          const yNorm = y / outputScale;
+          const wNorm = w / outputScale;
+          const hNorm = h / outputScale;
+
           // Convert from center format (x, y, w, h) to corner format (x, y, width, height)
-          const boxX = Math.max(0, Math.min(1, x - w / 2)); // Top-left X
-          const boxY = Math.max(0, Math.min(1, y - h / 2)); // Top-left Y
-          const boxW = Math.max(0, Math.min(1, w));         // Width
-          const boxH = Math.max(0, Math.min(1, h));         // Height
+          const boxX = Math.max(0, Math.min(1, xNorm - wNorm / 2)); // Top-left X
+          const boxY = Math.max(0, Math.min(1, yNorm - hNorm / 2)); // Top-left Y
+          const boxW = Math.max(0, Math.min(1, wNorm));             // Width
+          const boxH = Math.max(0, Math.min(1, hNorm));             // Height
           
           // Filter out invalid or tiny boxes (likely false positives)
           const MIN_BOX_SIZE = 0.01; // Minimum 1% of image size
@@ -453,6 +463,35 @@ class YOLOModelManager {
       console.error('[YOLO-TFLite] Error parsing output:', error?.message || error);
       return [];
     }
+  }
+
+  private flattenNumericData(value: any): number[] {
+    if (value == null) {
+      return [];
+    }
+
+    if (typeof value === 'number') {
+      return [value];
+    }
+
+    if (ArrayBuffer.isView(value)) {
+      return Array.from(value as unknown as ArrayLike<number>);
+    }
+
+    if (Array.isArray(value)) {
+      const flattened: number[] = [];
+      for (const item of value) {
+        flattened.push(...this.flattenNumericData(item));
+      }
+      return flattened;
+    }
+
+    return [];
+  }
+
+  private sigmoid(value: number): number {
+    const clamped = Math.max(-60, Math.min(60, value));
+    return 1 / (1 + Math.exp(-clamped));
   }
 
   /**
@@ -517,49 +556,10 @@ class YOLOModelManager {
   }
 
   /**
-   * Simulate detections for demo mode
-   * Generates realistic-looking object detections for testing UI
-   */
-  private async simulateDetections(): Promise<Detection[]> {
-    // Simulate processing delay (30-80ms - YOLO is typically faster than ConvLSTM)
-    await new Promise(resolve => setTimeout(resolve, 30 + Math.random() * 50));
-    
-    const detections: Detection[] = [];
-    
-    // Randomly generate 0-3 detections
-    const numDetections = Math.floor(Math.random() * 4);
-    
-    for (let i = 0; i < numDetections; i++) {
-      // Random class (common obstacle types)
-      const commonClasses = ['person', 'car', 'bicycle', 'motorcycle', 'truck'];
-      const className = commonClasses[Math.floor(Math.random() * commonClasses.length)];
-      const classId = commonClasses.indexOf(className);
-      
-      // Random bounding box (normalized coordinates)
-      const x = Math.random() * 0.6; // 0-0.6 (leave room for width)
-      const y = Math.random() * 0.6; // 0-0.6 (leave room for height)
-      const width = 0.1 + Math.random() * 0.3;  // 0.1-0.4
-      const height = 0.1 + Math.random() * 0.3; // 0.1-0.4
-      
-      // Random confidence (higher for demo to show clearly)
-      const confidence = 0.6 + Math.random() * 0.4; // 0.6-1.0
-      
-      detections.push({
-        classId,
-        className,
-        confidence,
-        boundingBox: { x, y, width, height }
-      });
-    }
-    
-    return detections;
-  }
-
-  /**
    * Warm up the model with dummy inference
    */
   private async warmUp(): Promise<void> {
-    if (this.demoMode || !this.model) return;
+    if (!this.model) return;
     
     try {
       const dummyFrame: FrameData = {
@@ -625,10 +625,18 @@ export async function cleanupYOLOModel(): Promise<void> {
 }
 
 /**
- * Check if YOLO is running in demo mode
+ * Backwards-compatible demo mode check.
+ * Returns true when real YOLO inference is unavailable.
  */
 export function isYOLOInDemoMode(): boolean {
-  return getYOLOModelManager().isInDemoMode();
+  return !getYOLOModelManager().isModelLoaded();
+}
+
+/**
+ * Get the latest YOLO model load error, if any.
+ */
+export function getYOLOModelLoadError(): string | null {
+  return getYOLOModelManager().getLoadError();
 }
 
 /**

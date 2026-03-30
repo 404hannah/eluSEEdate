@@ -17,7 +17,7 @@ VOSK INSTALLATION GUIDE
        "react-native-vosk",
        {
          "models": ["assets/model-en-us"],
-         "iOSMicrophonePermission": "Your microphone permission message"
+             "iOSMicrophonePermission": "Microphone permission message"
        }
      ]
    ]
@@ -26,7 +26,7 @@ VOSK INSTALLATION GUIDE
    npx expo prebuild --clean
    eas build --profile development --platform android
 
-6. Install the new dev build on your device
+6. Install the new dev build on the target device
 
 Note: Vosk requires native code - it will NOT work with Expo Go.
-      You must use Expo Development Builds.
+   The project must use Expo Development Builds.

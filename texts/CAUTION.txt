@@ -6,11 +6,11 @@ NATIVE CODE & PREBUILD
 
 ⚠️ This project uses prebuilt native code (android/ folder exists)
 
-When you modify app.json (plugins, permissions, splash, etc.):
+When the team modifies app.json (plugins, permissions, splash, etc.):
 1. Run: npx expo prebuild --clean
 2. Rebuild the app: eas build --profile preview --platform android
 
-If you skip prebuild, your app.json changes will NOT be applied.
+If prebuild is skipped, app.json changes will NOT be applied.
 
 
 VOSK MODEL REQUIREMENTS

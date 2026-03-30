@@ -4,7 +4,7 @@
 ================================================================================
 
 This file explains every dependency in package.json in simple terms:
-what it does, why we need it, and how it's used in the app.
+what it does, why the project needs it, and how it is used in the app.
 
 Updated: March 2026
 Version: 1.0.4
@@ -26,7 +26,7 @@ react (19.1.0)
   Used in: Every component file (screens, navigation, etc.)
 
 react-native (0.81.5)
-  What: Framework that lets you build native mobile apps using React
+  What: Framework that enables native mobile app development with React
   Why: Translates React components into native iOS/Android UI elements
   Used in: Entire app - provides View, Text, TouchableOpacity, etc.
 
@@ -67,8 +67,8 @@ react-native-fast-tflite (^1.6.1)
        Both models use GPU acceleration for faster predictions
   Used in: 
     - src/services/convlstmWithout IntentInference.ts - loads convlstm.tflite
-    - src/services/convlstmWithIntentInference.ts - placeholder for future
-    - src/services/yoloInference.ts - loads yolo.tflite (when provided)
+    - src/services/convlstmWithIntentInference.ts - reserved for intent-aware flow
+    - src/services/yoloInference.ts - loads yolo.tflite
   Note: Requires development build (won't work in Expo Go)
   Performance: 
     - ConvLSTM: ~100-200ms per prediction (GPU)
@@ -201,8 +201,7 @@ WHY THESE SPECIFIC VERSIONS?
 
 4. TFLite Native Module
    react-native-fast-tflite requires development build
-   Won't work in Expo Go - app falls back to demo mode with simulated
-   predictions when TFLite is unavailable
+  In Expo Go, inference modules are unavailable and model status remains offline
 
 5. Vosk Native Module
    react-native-vosk requires development build
@@ -254,7 +253,7 @@ To update a specific package:
   npx expo install <package-name>@latest
 
 IMPORTANT: Always use "npx expo install" for expo-* packages to ensure
-           version compatibility with your Expo SDK version.
+           version compatibility with the active Expo SDK version.
 
 After adding/updating dependencies:
   1. Update this file (PACKAGE_DEPENDENCIES.txt)

@@ -5,7 +5,7 @@ WHAT IS A TUNNEL?
 -----------------
 
 A tunnel creates a public URL that works from anywhere.
-Use this when:
+Tunnel mode is recommended when:
 - Phone and computer are on different networks
 - Local server connection fails
 - Testing from a remote location
@@ -15,7 +15,7 @@ Use this when:
 STARTING A TUNNEL SERVER
 ------------------------
 
-1. Open terminal in your project folder
+1. Open a terminal in the project folder
 
 2. Start server with tunnel flag
    npx expo start --tunnel
@@ -31,7 +31,7 @@ FOR DEVELOPMENT BUILDS
 1. Start with both flags
    npx expo start --dev-client --tunnel
 
-2. Open EluSEEdate app on your phone
+2. Open EluSEEdate app on the mobile device
 
 3. Scan QR code or tap "Fetch development servers"
 
@@ -56,11 +56,11 @@ npx expo start --tunnel --clear            Clear cache + tunnel
 FIRST TIME SETUP
 ----------------
 
-If you get "ngrok not found" error:
+If the "ngrok not found" error appears:
 1. Install ngrok package
    npm install -g @expo/ngrok
 
-2. Try again
+2. Retry command
    npx expo start --tunnel
 
 

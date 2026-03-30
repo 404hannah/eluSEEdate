@@ -279,7 +279,7 @@ print("Predicted class:", np.argmax(output))
 - Ensure intent channels are zeros if not using intent
 - Test model in Python first before deploying
 
-### App shows "Demo Mode"
+### App status shows "ConvLSTM offline"
 - TFLite requires development build (not Expo Go)
 - Run: `npx expo prebuild && npx expo run:android`
 - Check that `convlstm.tflite` exists in `assets/model/`
@@ -289,10 +289,10 @@ print("Predicted class:", np.argmax(output))
 
 ## Need Help?
 
-1. Check the console logs in Metro bundler and device logs
-2. Verify each conversion step produces valid output
-3. Test model in Python/TensorFlow before deploying to mobile
-4. Compare predictions between PyTorch, ONNX, TensorFlow, and TFLite
+1. The team checks Metro and device logs first
+2. The team verifies each conversion step produces valid output
+3. The team tests the model in Python/TensorFlow before mobile deployment
+4. The team compares predictions across PyTorch, ONNX, TensorFlow, and TFLite
 
 ---
 
@@ -300,15 +300,15 @@ print("Predicted class:", np.argmax(output))
 
 ## Overview
 
-The app uses YOLOv12 for real-time obstacle detection. This section explains how to convert your YOLOv12 model to TFLite format for mobile deployment.
+The application uses YOLOv12 for real-time obstacle detection. This section explains how to convert the project YOLOv12 model to TFLite format for mobile deployment.
 
-**Current Status**: The app has a placeholder at `assets/model/yolo-placeholder.txt`. Replace it with your actual `yolo.tflite` model.
+**Current Status**: The runtime expects `assets/model/yolo.tflite`. If the file is missing or invalid, YOLO inference remains offline and the camera status reports "YOLO offline".
 
 ---
 
 ## Conversion Pipeline: YOLO → TFLite
 
-The conversion path depends on your YOLOv12 source format:
+The conversion path depends on the YOLOv12 source format:
 
 ```
 PyTorch YOLO → ONNX → TensorFlow → TFLite
@@ -331,14 +331,14 @@ pip install torch torchvision onnx tensorflow tf2onnx
 
 ```python
 import torch
-from your_yolo_model import YOLOv12  # Replace with your model import
+from project_yolo_model import YOLOv12  # Replace with the project model import
 
 # Load trained model
 model = YOLOv12()
 model.load_state_dict(torch.load('yolov12.pth'))
 model.eval()
 
-# Create dummy input (adjust size based on your model - typically 640x640 or 320x320)
+# Create dummy input (adjust size based on the model - typically 640x640 or 320x320)
 dummy_input = torch.randn(1, 3, 128, 128)  # [batch, channels, height, width]
 
 # Export to ONNX
@@ -392,7 +392,7 @@ print(f"✅ YOLO TFLite model created: {len(tflite_model)/(1024*1024):.2f} MB")
 
 ## Option 2: Use Pre-trained YOLOv12 TFLite
 
-If you have a pre-trained YOLOv12 TFLite model:
+If a pre-trained YOLOv12 TFLite model is available:
 
 1. **Verify the model:**
    ```python
@@ -415,40 +415,39 @@ If you have a pre-trained YOLOv12 TFLite model:
 
 3. **Update configuration** (if needed):
    - Edit `src/config/modelConfig.ts`
-   - Adjust `YOLO_CONFIG.model.inputSize` to match your model
+    - Adjust `YOLO_CONFIG.model.inputSize` to match the model
    - Update `YOLO_CLASS_NAMES` if using custom classes
 
 ---
 
 ## Step 4: Update App Configuration
 
-After adding your YOLO model, you may need to adjust settings in `src/config/modelConfig.ts`:
+After adding the YOLO model, configuration settings in `src/config/modelConfig.ts` may require adjustment:
 
 ```typescript
 export const YOLO_CONFIG = {
   model: {
-    inputSize: 128,           // Change to match your model (e.g., 640, 416, 320)
-    numClasses: 80,           // Number of classes your model detects
+    inputSize: 128,           // Change to match the model (e.g., 640, 416, 320)
+    numClasses: 80,           // Number of classes detected by the model
     confidenceThreshold: 0.5, // Minimum confidence to show detection
     iouThreshold: 0.45,       // IoU threshold for NMS
   },
   // ...
 };
 
-// Update class names to match your model
+// Update class names to match the selected model
 export const YOLO_CLASS_NAMES = [
-  'person', 'bicycle', 'car', // ... your model's classes
+    'person', 'bicycle', 'car', // ... model class labels
 ];
 ```
 
 ### Parsing YOLO Output
 
-You'll need to implement output parsing in `src/services/yoloInference.ts`:
+Output parsing is implemented in `src/services/yoloInference.ts` and may be tuned for model-specific output layouts:
 
 ```typescript
 private parseYOLOOutput(outputTensor: any, frameWidth: number, frameHeight: number): Detection[] {
-  // TODO: Implement based on your YOLOv12 output format
-  // Typical YOLO outputs:
+    // Typical YOLO outputs:
   // - Bounding boxes: [x, y, w, h]
   // - Confidence scores
   // - Class probabilities
@@ -465,7 +464,6 @@ private parseYOLOOutput(outputTensor: any, frameWidth: number, frameHeight: numb
 1. **Copy YOLO model:**
    ```bash
    cp yolo.tflite assets/model/yolo.tflite
-   rm assets/model/yolo-placeholder.txt  # Remove placeholder
    ```
 
 2. **Rebuild app:**
@@ -478,7 +476,7 @@ private parseYOLOOutput(outputTensor: any, frameWidth: number, frameHeight: numb
    - Launch app and tap "Start"
    - Point camera at objects
    - Verify bounding boxes appear with correct labels
-   - Check console for "[YOLO-TFLite] [REAL]" (not [DEMO])
+    - Check console for successful YOLO load/inference logs
 
 ---
 
@@ -497,10 +495,10 @@ private parseYOLOOutput(outputTensor: any, frameWidth: number, frameHeight: numb
 
 ## Troubleshooting YOLO
 
-### App still shows demo detections
+### YOLO status shows offline
 - Verify `yolo.tflite` exists in `assets/model/`
 - Check console logs for model loading errors
-- Ensure you rebuilt the app with `npx expo prebuild`
+- Ensure the app was rebuilt with `npx expo prebuild`
 
 ### Bounding boxes are in wrong positions
 - Check if coordinates are normalized (0-1) or absolute pixels
@@ -514,7 +512,7 @@ private parseYOLOOutput(outputTensor: any, frameWidth: number, frameHeight: numb
 
 ### Model loads but crashes during inference
 - Check input tensor shape and data type
-- Verify output parsing matches your specific YOLOv12 variant
+- Verify output parsing matches the specific YOLOv12 variant
 - Test model in Python/TensorFlow first
 
 ---
@@ -529,12 +527,6 @@ private parseYOLOOutput(outputTensor: any, frameWidth: number, frameHeight: numb
 
 ---
 
-## Demo Mode
+## Model Availability Behavior
 
-Until you add a real YOLO model, the app runs in demo mode:
-- Simulates 0-3 random detections per frame
-- Shows realistic bounding boxes with labels
-- Useful for UI/UX testing
-- ConvLSTM continues to work independently
-
-This allows you to develop and test the UI before obtaining the actual YOLOv12 model.
+If the YOLO model cannot be loaded, the application continues running ConvLSTM prediction while reporting YOLO as offline. The camera status and logs identify the load failure so the deployment can be corrected.

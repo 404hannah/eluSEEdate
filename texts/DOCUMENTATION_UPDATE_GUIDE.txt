@@ -7,11 +7,17 @@ This document lists all documentation files that need to be updated whenever
 changes are made to the codebase. Use this as a checklist to ensure all docs
 stay in sync with code changes.
 
+All documentation should be written in third-person perspective.
+Preferred wording examples:
+- "the team updates..."
+- "the application requires..."
+- "the developer verifies..."
+
 ================================================================================
-WHEN YOU CHANGE: MODEL CONFIGURATION
+WHEN THE TEAM CHANGES: MODEL CONFIGURATION
 ================================================================================
 
-If you modify src/config/modelConfig.ts:
+If the team modifies src/config/modelConfig.ts:
 
 1. texts/DATA_DICTIONARY.txt
    - Update MODEL CONFIGURATION section
@@ -30,10 +36,10 @@ If you modify src/config/modelConfig.ts:
    - Update if input/output shapes change
 
 ================================================================================
-WHEN YOU CHANGE: PREPROCESSING LOGIC
+WHEN THE TEAM CHANGES: PREPROCESSING LOGIC
 ================================================================================
 
-If you modify src/services/preprocessor.ts:
+If the team modifies src/services/preprocessor.ts:
 
 1. texts/DATA_DICTIONARY.txt
    - Update PREPROCESSOR section
@@ -48,10 +54,10 @@ If you modify src/services/preprocessor.ts:
    - Update preprocessing requirements if changed
 
 ================================================================================
-WHEN YOU CHANGE: INFERENCE SERVICES
+WHEN THE TEAM CHANGES: INFERENCE SERVICES
 ================================================================================
 
-If you modify src/services/convlstmWithoutIntentInference.ts,
+If the team modifies src/services/convlstmWithoutIntentInference.ts,
 convlstmWithIntentInference.ts, or yoloInference.ts:
 
 1. texts/DATA_DICTIONARY.txt
@@ -69,10 +75,10 @@ convlstmWithIntentInference.ts, or yoloInference.ts:
    - Update conversion steps if needed
 
 ================================================================================
-WHEN YOU CHANGE: YOLO OBJECT DETECTION
+WHEN THE TEAM CHANGES: YOLO OBJECT DETECTION
 ================================================================================
 
-If you add the real YOLO model or modify yoloInference.ts:
+If the team updates the YOLO model or modifies yoloInference.ts:
 
 1. texts/DATA_DICTIONARY.txt
    - Update YOLO INFERENCE section
@@ -81,7 +87,7 @@ If you add the real YOLO model or modify yoloInference.ts:
 
 2. README.md
    - Update "YOLOv12 Obstacle Detection" table
-   - Update model status from "Placeholder" to actual details
+   - Update model status details when runtime behavior changes
    - Update features if detection capabilities change
 
 3. MODEL_CONVERSION_GUIDE.md
@@ -90,7 +96,7 @@ If you add the real YOLO model or modify yoloInference.ts:
 
 4. texts/TROUBLESHOOTING.txt
    - Update "YOLO not working" section with real troubleshooting
-   - Add issues specific to your YOLO model implementation
+   - Add issues specific to the active YOLO model implementation
 
 5. src/config/modelConfig.ts
    - Update YOLO_CONFIG with actual model parameters
@@ -98,10 +104,10 @@ If you add the real YOLO model or modify yoloInference.ts:
    - Adjust confidence/IoU thresholds as needed
 
 ================================================================================
-WHEN YOU CHANGE: UI COMPONENTS
+WHEN THE TEAM CHANGES: UI COMPONENTS
 ================================================================================
 
-If you modify BoundingBoxOverlay.tsx or add new visual components:
+If the team modifies BoundingBoxOverlay.tsx or adds new visual components:
 
 1. texts/DATA_DICTIONARY.txt
    - Update relevant component section
@@ -112,10 +118,10 @@ If you modify BoundingBoxOverlay.tsx or add new visual components:
    - Update screenshots if provided
 
 ================================================================================
-WHEN YOU CHANGE: CAMERA SCREEN
+WHEN THE TEAM CHANGES: CAMERA SCREEN
 ================================================================================
 
-If you modify src/screens/CameraScreen.tsx:
+If the team modifies src/screens/CameraScreen.tsx:
 
 1. texts/DATA_DICTIONARY.txt
    - Update CAMERA SCREEN section
@@ -127,10 +133,10 @@ If you modify src/screens/CameraScreen.tsx:
    - Update "Frame Capture & Preprocessing" if capture logic changes
 
 ================================================================================
-WHEN YOU CHANGE: UI/UX OR FEATURES
+WHEN THE TEAM CHANGES: UI/UX OR FEATURES
 ================================================================================
 
-If you add/remove/modify features:
+If the team adds/removes/modifies features:
 
 1. README.md
    - Update "Features" section
@@ -142,10 +148,10 @@ If you add/remove/modify features:
    - Remove obsolete variables
 
 ================================================================================
-WHEN YOU CHANGE: DEPENDENCIES
+WHEN THE TEAM CHANGES: DEPENDENCIES
 ================================================================================
 
-If you modify package.json dependencies:
+If the team modifies package.json dependencies:
 
 1. texts/PACKAGE_DEPENDENCIES.txt
    - Add new dependency with simple explanation
@@ -164,10 +170,10 @@ If you modify package.json dependencies:
    - Update installation steps
 
 ================================================================================
-WHEN YOU CHANGE: BUILD CONFIGURATION
+WHEN THE TEAM CHANGES: BUILD CONFIGURATION
 ================================================================================
 
-If you modify eas.json, app.json, or build configs:
+If the team modifies eas.json, app.json, or build configs:
 
 1. README.md
    - Update "Building for Production" section
@@ -183,10 +189,10 @@ If you modify eas.json, app.json, or build configs:
    - Update if APK build process changes
 
 ================================================================================
-WHEN YOU CHANGE: NAVIGATION
+WHEN THE TEAM CHANGES: NAVIGATION
 ================================================================================
 
-If you modify src/navigation/types.ts or add/remove screens:
+If the team modifies src/navigation/types.ts or adds/removes screens:
 
 1. texts/DATA_DICTIONARY.txt
    - Update NAVIGATION section
@@ -197,10 +203,10 @@ If you modify src/navigation/types.ts or add/remove screens:
    - Update flow descriptions
 
 ================================================================================
-WHEN YOU CHANGE: UTILITIES
+WHEN THE TEAM CHANGES: UTILITIES
 ================================================================================
 
-If you modify src/utils/ files:
+If the team modifies src/utils/ files:
 
 1. texts/DATA_DICTIONARY.txt
    - Update relevant utility sections
@@ -210,10 +216,10 @@ If you modify src/utils/ files:
    - Update if utilities affect user-facing features
 
 ================================================================================
-WHEN YOU ADD: NEW VARIABLES
+WHEN THE TEAM ADDS: NEW VARIABLES
 ================================================================================
 
-If you introduce new variables anywhere:
+If the team introduces new variables anywhere:
 
 1. texts/DATA_DICTIONARY.txt
    - Add variable to appropriate section
@@ -223,10 +229,10 @@ If you introduce new variables anywhere:
    - Update if variable affects user-facing features or configuration
 
 ================================================================================
-WHEN YOU ADD: NEW FILES OR FOLDERS
+WHEN THE TEAM ADDS: NEW FILES OR FOLDERS
 ================================================================================
 
-If you create new source files:
+If the team creates new source files:
 
 1. README.md
    - Update "Project Structure" section
@@ -240,11 +246,15 @@ If you create new source files:
    - Add relevant debugging commands if applicable
    - Add common errors and solutions for the new feature
 
+4. texts/TEXT_FILES_REFERENCE.txt
+   - Add or update the file purpose entry
+   - Keep the index aligned with actual files in texts/
+
 ================================================================================
-WHEN YOU CHANGE: CLASS LABELS OR PREDICTIONS
+WHEN THE TEAM CHANGES: CLASS LABELS OR PREDICTIONS
 ================================================================================
 
-If you modify the output classes (Front/Left/Right):
+If the team modifies the output classes (Front/Left/Right):
 
 1. texts/DATA_DICTIONARY.txt
    - Update CLASS LABELS section
@@ -260,10 +270,10 @@ If you modify the output classes (Front/Left/Right):
    - Update type definitions
 
 ================================================================================
-WHEN YOU CHANGE: TTS / SPEECH
+WHEN THE TEAM CHANGES: TTS / SPEECH
 ================================================================================
 
-If you modify TTS functionality (expo-speech usage):
+If the team modifies TTS functionality (expo-speech usage):
 
 1. src/screens/MainMenuScreen.tsx
    - TTS greeting is triggered here on initial mount
@@ -284,7 +294,7 @@ If you modify TTS functionality (expo-speech usage):
    - Update testing steps if TTS behavior changes
 
 ================================================================================
-WHEN YOU FIX: BUGS OR ISSUES
+WHEN THE TEAM FIXES: BUGS OR ISSUES
 ================================================================================
 
 Document significant bug fixes:
@@ -312,13 +322,13 @@ Every major release:
 QUICK CHECKLIST FOR ANY CHANGE
 ================================================================================
 
-Before committing code changes, ask yourself:
+Before committing code changes, the team verifies:
 
-[ ] Did I update DATA_DICTIONARY.txt if variables changed?
-[ ] Did I update README.md if user-facing features changed?
-[ ] Did I update relevant .txt guides if processes changed?
-[ ] Did I update MODEL_CONVERSION_GUIDE.md if model changed?
-[ ] Did I update INSTALLATION_GUIDE.md if setup changed?
+[ ] DATA_DICTIONARY.txt is updated if variables changed
+[ ] README.md is updated if user-facing features changed
+[ ] Relevant .txt guides are updated if processes changed
+[ ] MODEL_CONVERSION_GUIDE.md is updated if model behavior changed
+[ ] INSTALLATION_GUIDE.md is updated if setup changed
 [ ] Are all code examples still accurate?
 [ ] Are all file paths still correct?
 
@@ -334,6 +344,7 @@ Main Documentation:
 Reference Documents (texts/ folder):
 - texts/DATA_DICTIONARY.txt           (THIS IS THE DATA DICTIONARY)
 - texts/DOCUMENTATION_UPDATE_GUIDE.txt (This file)
+- texts/TEXT_FILES_REFERENCE.txt      (texts folder index)
 - texts/CAUTION.txt
 - texts/EXPO_DEV_BUILD_GUIDE.txt
 - texts/LOCAL_SERVER.txt
@@ -357,7 +368,7 @@ TIPS FOR MAINTAINING DOCUMENTATION
 5. Note any limitations or known issues
 6. Keep the DATA_DICTIONARY organized by file/section
 7. Use consistent terminology across all docs
-8. Date your updates for tracking
+8. Date updates for tracking
 
 ================================================================================
 LAST UPDATED: March 4, 2026

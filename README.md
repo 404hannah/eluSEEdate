@@ -9,7 +9,7 @@ React Native/Expo mobile application for real-time turn direction prediction usi
 
 ## Overview
 
-This app uses two AI models working in parallel:
+The application uses two AI models working in parallel:
 
 1. **ConvLSTM** (Convolutional Long Short-Term Memory) for turn direction prediction - analyzes sequences of video frames to predict if the user should go **Front**, **Left**, or **Right**
 2. **YOLOv12** for real-time obstacle detection - identifies nearby objects (people, cars, bicycles, etc.) and displays bounding boxes on the camera view
@@ -18,19 +18,12 @@ This app uses two AI models working in parallel:
 **Obstacle Detection**: YOLOv12 with TFLite optimization
 **Inference Engine**: TensorFlow Lite via `react-native-fast-tflite`
 
-## Two Operating Modes
+## Runtime Requirements
 
-### 1. Demo Mode (Expo Go)
-- **For quick UI/UX testing** without building native code
-- Camera and all UI features work normally
-- Predictions are **simulated** (random with realistic timing)
-- Run with: `npx expo start`
-
-### 2. Production Mode (Development Build)
-- **Real TFLite inference** on device
-- Actual model predictions from camera frames
-- Requires native build
-- Run with: `npx expo prebuild && npx expo run:android`
+- Real TFLite inference requires a native build (development client, preview APK, or production build).
+- Expo Go does not provide the native modules required by `react-native-fast-tflite` and `react-native-vosk`.
+- Recommended Android development command: `npx expo prebuild && npx expo run:android`.
+- Recommended standalone build command: `npx eas build --profile preview --platform android`.
 
 ## Target Device
 
@@ -61,7 +54,15 @@ Minimalistic black & white palette for a clean, distraction-free interface.
 ├── App.tsx                          # Main entry point
 ├── package.json                     # Dependencies
 ├── app.json                         # Expo configuration
-├── VERSIONS.txt                     # Dependency versions & rationale
+├── texts/
+│   ├── VERSIONS.txt                 # Dependency versions & rationale
+│   ├── TEXT_FILES_REFERENCE.txt     # Purpose of each texts/*.txt file
+│   ├── PACKAGE_DEPENDENCIES.txt     # All dependencies explained
+│   ├── TROUBLESHOOTING.txt          # Debugging and diagnostics guide
+│   ├── GIT_MERGE_GUIDE.txt          # How to merge branches
+│   ├── DATA_DICTIONARY.txt          # Variable documentation
+│   ├── DOCUMENTATION_UPDATE_GUIDE.txt # Maintenance guide
+│   └── *.txt                        # Other reference docs
 ├── tsconfig.json                    # TypeScript config
 ├── babel.config.js                  # Babel config
 ├── eas.json                         # EAS Build configuration
@@ -69,14 +70,7 @@ Minimalistic black & white palette for a clean, distraction-free interface.
 │   └── model/
 │       ├── convlstm.tflite          # ConvLSTM TFLite model file
 │       ├── convlstm.onnx            # ONNX model (backup)
-│       └── yolo-placeholder.txt     # Placeholder for YOLOv12 model
-├── texts/
-│   ├── PACKAGE_DEPENDENCIES.txt     # All dependencies explained
-│   ├── TROUBLESHOOTING.txt          # Debugging and diagnostics guide
-│   ├── GIT_MERGE_GUIDE.txt          # How to merge branches
-│   ├── DATA_DICTIONARY.txt          # Variable documentation
-│   ├── DOCUMENTATION_UPDATE_GUIDE.txt # Maintenance guide
-│   └── *.txt                        # Other reference docs
+│       └── yolo.tflite              # YOLOv12 TFLite model file
 └── src/
     ├── components/
     │   ├── ErrorBoundary.tsx        # Error boundary component
@@ -123,13 +117,11 @@ Minimalistic black & white palette for a clean, distraction-free interface.
 | Input Size | 128 x 128 (matches ConvLSTM, adjustable) |
 | Model Type | TFLite (Float16 quantized expected) |
 | Output | Bounding boxes with class probabilities |
-| Classes | 80 (COCO dataset - adjust based on your model) |
-| Confidence Threshold | 0.5 (50% minimum confidence) |
+| Classes | 80 (COCO dataset - adjust based on the selected model) |
+| Confidence Threshold | 0.35 (35% minimum confidence) |
 | GPU Acceleration | Enabled (via GPU delegate) |
 | Expected Inference | ~30-100ms (faster than ConvLSTM) |
-| Status | **Placeholder - awaiting real model** |
-
-**Note**: Currently using a placeholder for YOLO. The app will simulate detections in demo mode until you add your actual YOLOv12 .tflite model to `assets/model/yolo.tflite`.
+| Status | Active (real inference path) |
 
 ## Intent Channels
 
@@ -137,7 +129,7 @@ The model expects 6 channels per frame:
 - Channels 0-2: RGB color channels [0, 1]
 - Channels 3-5: Intent channels (all zeros for 'no intent' mode)
 
-In this app, we always use "no intent" (all zeros for intent channels).
+The application currently uses "no intent" (all zeros for intent channels).
 
 ## Getting Started
 
@@ -153,8 +145,8 @@ In this app, we always use "no intent" (all zeros for intent channels).
 # Install dependencies
 npm install
 
-# Start Expo development server
-npx expo start
+# Start Metro for development build
+npx expo start --dev-client
 
 # Run on Android device/emulator
 npx expo run:android
@@ -172,18 +164,18 @@ npx eas build --platform android --profile production
 
 ## Usage
 
-1. Launch the app — you will hear "Starting EluSEEdate" spoken aloud
-2. Tap the **Start** button on the main menu (or say "Start")
-3. Grant camera permission when prompted
-4. Point the camera in the direction you're moving
-5. The app will automatically:
+1. The user launches the app and hears "Starting EluSEEdate".
+2. The user taps the **Start** button on the main menu (or says "Start").
+3. The user grants camera permission when prompted.
+4. The user points the camera in the walking direction.
+5. The application automatically:
    - Capture frames from the camera
-   - Buffer frames until ready for prediction (min 10 frames)
+  - Buffer frames until a full sequence is available (20 frames)
    - Run predictions using the ConvLSTM model
    - Display the predicted direction at the bottom
    - Show performance metrics at the top-left
 
-**Status Indicator**: A green dot means the app is actively capturing; "Demo Mode" label appears when using simulated predictions.
+**Status Indicator**: A green dot indicates active capture. The labels "ConvLSTM offline" or "YOLO offline" indicate a model load issue.
 
 ## Performance Metrics
 
@@ -204,27 +196,33 @@ The app uses `react-native-fast-tflite` for on-device TensorFlow Lite inference.
 - Supports Float32 input tensors (required for ConvLSTM)
 - Is registered as an Expo plugin in `app.json`
 
-**Key Implementation Details** (see `src/services/inference.ts`):
+**Key Implementation Details** (see `src/services/convlstmWithoutIntentInference.ts` and `src/services/yoloInference.ts`):
 
 ```typescript
-// Model loading (runs on app startup)
+// ConvLSTM model loading (src/services/convlstmWithoutIntentInference.ts)
 const model = await loadTensorflowModel(
-  require('../../assets/model/convlstm.tflite')
+  require('../../assets/model/convlstm.tflite'),
+  { useGpu: true }
 );
 
-// Inference (runs for each prediction)
-const output = await model.run([tensorData]); // Float32Array [1, 20, 6, 128, 128]
-// output[0] contains class probabilities [front, left, right]
+// ConvLSTM inference
+const outputTensor = await model.run([tensorData]);
+
+// YOLO model loading (src/services/yoloInference.ts)
+const yoloModel = await loadTensorflowModel(
+  require('../../assets/model/yolo.tflite'),
+  { useGpu: true }
+);
 ```
 
-**Demo Mode Fallback**: If TFLite isn't available (Expo Go), the app automatically switches to demo mode with simulated predictions. Check the status indicator on the camera screen.
+**Native Build Requirement**: If TFLite is unavailable, model loading fails explicitly and the camera status indicates which model is offline.
 
 ### Frame Capture & Preprocessing
 
 The CameraScreen captures frames using `expo-camera`:
 - **Capture method**: `takePictureAsync` with base64 output (~200-500ms per frame)
 - **Frame processing**: Decodes JPEG to pixel data, resizes to 128x128
-- **Buffer management**: Rolling buffer of frames with padding for early predictions
+- **Buffer management**: Rolling buffer of frames; ConvLSTM inference runs on full sequence length (20)
 - **Preprocessing**: Normalizes to [0,1], adds intent channels (zeros), transposes to NCHW format
 
 **Preprocessing Pipeline** (see `src/services/preprocessor.ts`):
@@ -235,7 +233,7 @@ The CameraScreen captures frames using `expo-camera`:
 5. Intent channels added (all zeros)
 6. Transposed to channels-first: [batch, seq, channels, height, width]
 
-For production optimization, consider:
+For production optimization, the team may consider:
 - Using `react-native-vision-camera` with frame processors for real-time 30 FPS capture
 - Implementing native modules for direct YUV frame access
 - Using GPU-accelerated preprocessing with `expo-gl` shaders

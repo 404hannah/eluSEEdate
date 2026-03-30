@@ -111,13 +111,12 @@ CONVLSTM INFERENCE (src/services/convlstmWithoutIntentInference.ts)
 ================================================================================
 
 NOTE: This file handles ConvLSTM turn prediction WITHOUT intent channels.
-      There's also convlstmWithIntentInference.ts (placeholder for future).
+  The repo also includes convlstmWithIntentInference.ts for future intent-aware flow.
 
 MODEL STATE:
 - isLoaded: Whether TFLite model is loaded (boolean)
 - model: TFLite model instance (null if not loaded)
-- demoMode: Whether app is in demo mode (true for Expo Go)
-- isDemoMode: Global flag for demo mode detection
+- loadError: Latest ConvLSTM model load error message (string or null)
 
 PREDICTION RESULT:
 - classId: Predicted class ID (0, 1, or 2)
@@ -137,13 +136,13 @@ YOLO INFERENCE (src/services/yoloInference.ts)
 ================================================================================
 
 NOTE: Handles YOLOv12 object detection for obstacle identification.
-      Currently uses placeholder - runs in demo mode until real model added.
+  Uses real YOLO TFLite inference when model loading succeeds.
 
 MODEL STATE:
 - isLoaded: Whether YOLO TFLite model is loaded (boolean)
 - model: TFLite model instance (null if not loaded)
-- demoMode: Whether in demo mode (true until real model added)
-- confidenceThreshold: Minimum confidence for detections (0-1, default 0.5)
+- loadError: Latest YOLO model load error message (string or null)
+- confidenceThreshold: Minimum confidence for detections (0-1, default 0.35)
 
 BOUNDING BOX:
 - x: Top-left x coordinate (normalized 0-1)
@@ -167,7 +166,7 @@ FUNCTIONS:
 - runYOLODetection: High-level detection function (takes FrameData, returns YOLOResult)
 - initializeYOLOModel: Initialize model on app startup
 - cleanupYOLOModel: Cleanup resources on app close
-- isYOLOInDemoMode: Check if running in demo mode
+- isYOLOInDemoMode: Backwards-compatible availability check (true when YOLO is unavailable)
 - setYOLOConfidenceThreshold: Adjust confidence threshold
 
 ================================================================================
@@ -319,7 +318,7 @@ NOTES
 3. Frame dimensions are always in pixels
 4. Confidence scores range from 0 to 1 (0-100%)
 5. Intent channels are currently unused (all zeros for 'no intent' mode)
-6. Demo mode simulates predictions when TFLite is unavailable (Expo Go)
+6. Real inference requires a native build; model load failures are reported as offline status
 7. Capture FPS is limited by takePictureAsync performance (~200-500ms/frame)
 
 ================================================================================

@@ -5,7 +5,7 @@
 ================================================================================
 
 This guide explains how to merge branches in Git, whether merging to main or
-between feature branches. Follow these steps to safely merge your code.
+between feature branches. Follow these steps to safely merge project code.
 
 Updated: March 2026
 Version: 1.0.4
@@ -15,24 +15,24 @@ Version: 1.0.4
 ================================================================================
 
 SCENARIO 1: Merge a feature branch into main
-SCENARIO 2: Merge main into your feature branch (to get latest changes)
+SCENARIO 2: Merge main into the feature branch (to get latest changes)
 SCENARIO 3: Merge one feature branch into another
 
 ================================================================================
 SCENARIO 1: MERGE FEATURE BRANCH INTO MAIN
 ================================================================================
 
-Use this when your feature is complete and ready to be added to the main codebase.
+Use this when a feature is complete and ready to be added to the main codebase.
 
 STEP-BY-STEP:
 
-1. Make sure all your changes are committed
+1. Make sure all pending changes are committed
    git status
    # Should show "nothing to commit, working tree clean"
    
-   If you have uncommitted changes:
+   If uncommitted changes exist:
    git add .
-   git commit -m "Your commit message"
+   git commit -m "Commit message"
 
 2. Switch to the main branch
    git checkout main
@@ -40,8 +40,8 @@ STEP-BY-STEP:
 3. Pull the latest changes from main (in case others have pushed)
    git pull origin main
    
-4. Merge your feature branch into main
-   git merge feature/your-branch-name
+4. Merge the feature branch into main
+   git merge feature/branch-name
    
    Example:
    git merge feature/tts-greeting
@@ -51,14 +51,14 @@ STEP-BY-STEP:
    ✓ Skip to step 7
    
 6. If there ARE conflicts:
-   # Git will tell you which files have conflicts
+  # Git lists which files have conflicts
    # Open each file and look for conflict markers:
    
    <<<<<<< HEAD
    (code from main branch)
    =======
-   (code from your feature branch)
-   >>>>>>> feature/your-branch-name
+   (code from the feature branch)
+   >>>>>>> feature/branch-name
    
    # Edit the file to keep the correct code
    # Remove the conflict markers (<<<, ===, >>>)
@@ -68,17 +68,17 @@ STEP-BY-STEP:
    git add <conflicted-file>
    
    # After resolving all conflicts:
-   git commit -m "Merge feature/your-branch-name into main"
+   git commit -m "Merge feature/branch-name into main"
 
 7. Push the merged main branch
    git push origin main
    
 8. Delete the feature branch (optional but recommended)
    # Delete local branch
-   git branch -d feature/your-branch-name
+   git branch -d feature/branch-name
    
    # Delete remote branch
-   git push origin --delete feature/your-branch-name
+   git push origin --delete feature/branch-name
 
 COMPLETE EXAMPLE:
   git status
@@ -89,16 +89,16 @@ COMPLETE EXAMPLE:
   git branch -d feature/tts-greeting
 
 ================================================================================
-SCENARIO 2: MERGE MAIN INTO YOUR FEATURE BRANCH
+SCENARIO 2: MERGE MAIN INTO THE FEATURE BRANCH
 ================================================================================
 
-Use this to update your feature branch with the latest changes from main.
-Do this BEFORE merging your feature into main to avoid conflicts.
+Use this to update the feature branch with the latest changes from main.
+Do this BEFORE merging the feature into main to avoid conflicts.
 
 STEP-BY-STEP:
 
-1. Make sure you're on your feature branch
-   git checkout feature/your-branch-name
+1. Make sure the current checkout is on the feature branch
+   git checkout feature/branch-name
    
 2. Commit any uncommitted changes
    git status
@@ -108,13 +108,13 @@ STEP-BY-STEP:
 3. Fetch the latest changes from remote
    git fetch origin
    
-4. Merge main into your feature branch
+4. Merge main into the feature branch
    git merge origin/main
    
 5. Resolve any conflicts (see conflict resolution in Scenario 1, step 6)
    
-6. Push your updated feature branch
-   git push origin feature/your-branch-name
+6. Push the updated feature branch
+   git push origin feature/branch-name
 
 COMPLETE EXAMPLE:
   git checkout feature/camera-improvements
@@ -124,19 +124,19 @@ COMPLETE EXAMPLE:
   git push origin feature/camera-improvements
 
 WHY DO THIS?
-  - Keeps your feature branch up to date
-  - Catches conflicts BEFORE you try to merge into main
+  - Keeps the feature branch up to date
+  - Catches conflicts BEFORE merge into main
   - Makes the final merge to main cleaner and easier
 
 ================================================================================
 SCENARIO 3: MERGE ONE FEATURE BRANCH INTO ANOTHER
 ================================================================================
 
-Use this when you want to combine work from two feature branches.
+Use this when the team wants to combine work from two feature branches.
 
 STEP-BY-STEP:
 
-1. Switch to the branch you want to merge INTO (the destination)
+1. Switch to the destination branch (the branch that will receive changes)
    git checkout feature/branch-to-keep
    
 2. Merge the other branch into it
@@ -160,24 +160,24 @@ COMPLETE EXAMPLE:
 WHAT ARE MERGE CONFLICTS?
 
 Conflicts happen when the same lines of code were changed in both branches.
-Git doesn't know which version to keep, so it asks you to decide.
+Git does not know which version to keep, so manual resolution is required.
 
 HOW TO RESOLVE CONFLICTS:
 
 1. Git will mark conflicted files with special markers:
    
    <<<<<<< HEAD
-   const greeting = "Hello World";  // Your current branch
+  const greeting = "Hello World";  // Current branch
    =======
-   const greeting = "Starting EluSEEdate";  // The branch you're merging
+  const greeting = "Starting EluSEEdate";  // Incoming branch
    >>>>>>> feature/tts-greeting
 
 2. Edit the file to keep the correct code:
    
-   # Option A: Keep your version
+   # Option A: Keep current branch version
    const greeting = "Hello World";
    
-   # Option B: Keep their version
+   # Option B: Keep incoming branch version
    const greeting = "Starting EluSEEdate";
    
    # Option C: Combine both (if it makes sense)
@@ -199,7 +199,7 @@ FINDING CONFLICTED FILES:
   # Look for "both modified:" entries
 
 ABORTING A MERGE:
-  If you want to cancel the merge and start over:
+  If merge cancellation is required:
   git merge --abort
 
 ================================================================================
@@ -221,7 +221,7 @@ FAST-FORWARD MERGE (default when possible)
 
 NO-FAST-FORWARD MERGE (explicit merge commit)
   What: Always creates a merge commit, even when fast-forward is possible
-  When: You want to preserve the history of a feature branch
+  When: Preserving the history of a feature branch is required
   Command: git merge --no-ff <branch>
   History: Shows the branch existed
   
@@ -241,8 +241,8 @@ SQUASH MERGE (combine all commits into one)
     feature:      \-D-E-F (not preserved in history)
 
 REBASE (alternative to merge)
-  What: Replays your commits on top of another branch
-  When: You want a completely linear history
+  What: Replays branch commits on top of another branch
+  When: A completely linear history is required
   Command: git rebase main
   Note: Changes commit hashes, don't use on shared branches
   
@@ -260,10 +260,10 @@ REBASE (alternative to merge)
 ================================================================================
 
 BEFORE MERGING:
-✓ Commit all your changes
+✓ Commit all pending changes
 ✓ Run tests to make sure everything works
-✓ Update your branch with latest main (git merge origin/main)
-✓ Resolve conflicts locally on your branch first
+✓ Update the branch with latest main (git merge origin/main)
+✓ Resolve conflicts locally on the branch first
 ✓ Run npx tsc --noEmit to check for TypeScript errors
 ✓ Run npx expo-doctor to check for config issues
 
@@ -304,7 +304,7 @@ git checkout -b feature/new-feature
 # Switch to existing branch
 git checkout branch-name
 
-# Update your current branch with main
+# Update the current branch with main
 git merge origin/main
 
 # Merge feature into main
@@ -339,16 +339,16 @@ git branch -D branch-name
                     TROUBLESHOOTING MERGES
 ================================================================================
 
-ISSUE: "Please commit your changes or stash them before you merge"
+ISSUE: "Please commit changes or stash them before merge"
 SOLUTION:
-  Option 1: Commit your changes
+  Option 1: Commit pending changes
     git add .
     git commit -m "Work in progress"
   
-  Option 2: Stash (temporarily save) your changes
+  Option 2: Stash (temporarily save) pending changes
     git stash
-    # Do your merge
-    git stash pop  # Restore your changes after merge
+    # Perform merge
+    git stash pop  # Restore stashed changes after merge
 
 --------------------------------------------------------------------------------
 
@@ -357,7 +357,7 @@ SOLUTION:
   1. Abort the merge
      git merge --abort
   
-  2. Update your branch with main FIRST
+  2. Update the branch with main FIRST
      git merge origin/main
      # Resolve conflicts in smaller chunks
   
@@ -367,11 +367,11 @@ SOLUTION:
 
 ISSUE: Accidentally merged wrong branch
 SOLUTION:
-  If you haven't pushed yet:
+  If the merge has not been pushed yet:
     git reset --hard HEAD~1  # Undo the merge commit
     git merge <correct-branch>
   
-  If you already pushed:
+  If the merge was already pushed:
     git revert -m 1 HEAD  # Creates a new commit that undoes the merge
     git push origin main
 
@@ -379,7 +379,7 @@ SOLUTION:
 
 ISSUE: Merge created but want to undo it
 SOLUTION:
-  git reset --hard HEAD~1  # ONLY if you haven't pushed
+  git reset --hard HEAD~1  # ONLY if the merge has not been pushed
   
   Or create a revert commit:
   git revert -m 1 <merge-commit-hash>
@@ -425,18 +425,18 @@ EXAMPLE 2: Feature with conflicts
                         GITHUB/GITLAB MERGES
 ================================================================================
 
-If using GitHub or GitLab, you can also merge via Pull Requests (GitHub) or
+If GitHub or GitLab is used, merges can also run through Pull Requests (GitHub) or
 Merge Requests (GitLab):
 
 PULL REQUEST WORKFLOW (GitHub):
-  1. Push your feature branch:
-     git push origin feature/your-branch
+  1. Push the feature branch:
+    git push origin feature/branch-name
   
   2. Go to GitHub repository
   
   3. Click "New Pull Request"
   
-  4. Select: base: main, compare: feature/your-branch
+  4. Select: base: main, compare: feature/branch-name
   
   5. Review changes, add description
   
@@ -451,7 +451,7 @@ PULL REQUEST WORKFLOW (GitHub):
   10. Locally:
       git checkout main
       git pull origin main
-      git branch -d feature/your-branch
+      git branch -d feature/branch-name
 
 BENEFITS OF PULL REQUESTS:
   ✓ Code review before merging

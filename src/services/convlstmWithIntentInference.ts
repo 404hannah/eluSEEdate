@@ -16,20 +16,17 @@ import { ProcessedTensor } from './preprocessor';
 
 // TFLite import - requires development build
 let loadTensorflowModel: any = null;
-
-// Track if we're in demo mode (Expo Go) or real mode (dev build)
-let isDemoMode = true;
+let tfliteAvailabilityError: string | null = null;
 
 // Try to load TFLite (will fail in Expo Go, work in dev build)
 try {
   const tfliteModule = require('react-native-fast-tflite');
   loadTensorflowModel = tfliteModule.loadTensorflowModel;
-  isDemoMode = false;
   console.log('[ConvLSTM-Intent-TFLite] react-native-fast-tflite loaded successfully');
-} catch (e) {
-  console.log('[ConvLSTM-Intent-TFLite] react-native-fast-tflite not available (Expo Go mode)');
-  console.log('[ConvLSTM-Intent-TFLite] Running in DEMO mode with simulated predictions');
-  isDemoMode = true;
+} catch (e: any) {
+  tfliteAvailabilityError = e?.message || 'react-native-fast-tflite not available';
+  console.error('[ConvLSTM-Intent-TFLite] react-native-fast-tflite unavailable:', tfliteAvailabilityError);
+  console.error('[ConvLSTM-Intent-TFLite] Use a development or standalone build with native modules enabled');
 }
 
 /**
@@ -60,7 +57,7 @@ export interface PerformanceMetrics {
 class TFLiteModelManager {
   private isLoaded: boolean = false;
   private model: any = null;
-  private demoMode: boolean = isDemoMode;
+  private loadError: string | null = tfliteAvailabilityError;
 
   /**
    * Load the TFLite model
@@ -71,21 +68,12 @@ class TFLiteModelManager {
       return true;
     }
 
-    // Check if we're in demo mode (Expo Go)
-    if (this.demoMode || !loadTensorflowModel) {
-      console.log('[ConvLSTM-Intent-TFLite] ═══════════════════════════════════════════════');
-      console.log('[ConvLSTM-Intent-TFLite] ⚠️  Running in DEMO MODE');
-      console.log('[ConvLSTM-Intent-TFLite] ───────────────────────────────────────────────');
-      console.log('[ConvLSTM-Intent-TFLite] Camera and UI work, but predictions are SIMULATED');
-      console.log('[ConvLSTM-Intent-TFLite] ');
-      console.log('[ConvLSTM-Intent-TFLite] To use REAL TFLite inference, create a dev build:');
-      console.log('[ConvLSTM-Intent-TFLite]   1. npx expo prebuild');
-      console.log('[ConvLSTM-Intent-TFLite]   2. npx expo run:android');
-      console.log('[ConvLSTM-Intent-TFLite] ═══════════════════════════════════════════════');
-      
+    if (!loadTensorflowModel) {
+      this.loadError = tfliteAvailabilityError || 'TFLite loader is unavailable';
+      this.model = null;
       this.isLoaded = false;
-      this.demoMode = true;
-      return true; // Return true so app continues to function
+      console.error('[ConvLSTM-Intent-TFLite] Model loader unavailable:', this.loadError);
+      return false;
     }
 
     try {
@@ -105,7 +93,7 @@ class TFLiteModelManager {
       );
       
       this.isLoaded = true;
-      this.demoMode = false;
+      this.loadError = null;
       console.log('[ConvLSTM-Intent-TFLite] ✅ Model loaded successfully with GPU acceleration!');
       console.log('[ConvLSTM-Intent-TFLite] Model: float16 with Global Average Pooling');
       console.log('[ConvLSTM-Intent-TFLite] Model ready for real-time inference');
@@ -117,10 +105,11 @@ class TFLiteModelManager {
       
       return true;
     } catch (error: any) {
-      console.error('[ConvLSTM-Intent-TFLite] ❌ Failed to load model:', error?.message || error);
-      console.log('[ConvLSTM-Intent-TFLite] Falling back to demo mode');
-      this.demoMode = true;
-      return true; // Still allow app to run in demo mode
+      this.loadError = error?.message || 'Failed to load ConvLSTM intent model';
+      this.model = null;
+      this.isLoaded = false;
+      console.error('[ConvLSTM-Intent-TFLite] ❌ Failed to load model:', this.loadError);
+      return false;
     }
   }
 
@@ -128,14 +117,14 @@ class TFLiteModelManager {
    * Check if model is loaded (real inference available)
    */
   isModelLoaded(): boolean {
-    return this.isLoaded && !this.demoMode;
+    return this.isLoaded && !!this.model;
   }
 
   /**
-   * Check if running in demo mode
+   * Get latest model load error
    */
-  isInDemoMode(): boolean {
-    return this.demoMode;
+  getLoadError(): string | null {
+    return this.loadError;
   }
 
   /**
@@ -148,24 +137,17 @@ class TFLiteModelManager {
     const startTime = performance.now();
 
     try {
-      let output: number[];
-      
-      if (this.demoMode || !this.isLoaded || !this.model) {
-        // Demo mode: Use simulated predictions
-        output = await this.simulateInference();
-      } else {
-        // Real inference with TFLite model
-        console.log('[ConvLSTM-Intent-TFLite] Running real inference...');
-        console.log('[ConvLSTM-Intent-TFLite] Input shape:', tensor.shape);
-        
-        // Run model inference
-        // Input: Float32Array with shape [1, 20, 6, 128, 128]
-        const outputTensor = await this.model.run([tensor.data]);
-        
-        // Get output (should be [1, 3] for 3 classes)
-        output = Array.from(outputTensor[0]);
-        console.log('[ConvLSTM-Intent-TFLite] Raw output:', output);
+      if (!this.isLoaded || !this.model) {
+        throw new Error(this.loadError || 'ConvLSTM intent model is not loaded');
       }
+
+      console.log('[ConvLSTM-Intent-TFLite] Running real inference...');
+      console.log('[ConvLSTM-Intent-TFLite] Input shape:', tensor.shape);
+
+      // Input: Float32Array with shape [1, 20, 6, 128, 128]
+      const outputTensor = await this.model.run([tensor.data]);
+      const output = this.extractOutputVector(outputTensor);
+      console.log('[ConvLSTM-Intent-TFLite] Raw output:', output);
       
       const inferenceTimeMs = performance.now() - startTime;
 
@@ -176,9 +158,8 @@ class TFLiteModelManager {
       const classId = this.argmax(probabilities) as ClassId;
       const className = CLASS_NAMES[classId] as PredictionClass;
       const confidence = probabilities[classId];
-      
-      const modeLabel = this.demoMode ? '[DEMO]' : '[REAL]';
-      console.log(`[ConvLSTM-Intent-TFLite] ${modeLabel} Prediction: ${className} (${(confidence * 100).toFixed(1)}%) in ${inferenceTimeMs.toFixed(1)}ms`);
+
+      console.log(`[ConvLSTM-Intent-TFLite] Prediction: ${className} (${(confidence * 100).toFixed(1)}%) in ${inferenceTimeMs.toFixed(1)}ms`);
 
       return {
         classId,
@@ -189,46 +170,38 @@ class TFLiteModelManager {
       };
     } catch (error: any) {
       console.error('[ConvLSTM-Intent-TFLite] Inference failed:', error?.message || error);
-      
-      // Fallback to simulated output on error
-      const output = await this.simulateInference();
-      const probabilities = this.softmax(output);
-      const classId = this.argmax(probabilities) as ClassId;
-      
-      return {
-        classId,
-        className: CLASS_NAMES[classId] as PredictionClass,
-        confidence: probabilities[classId],
-        probabilities,
-        inferenceTimeMs: performance.now() - startTime
-      };
+      throw error;
     }
   }
 
   /**
-   * Simulate inference for demo mode
-   * Generates realistic-looking predictions for testing UI
+   * Extract class logits from variable TFLite output layouts.
    */
-  private async simulateInference(): Promise<number[]> {
-    // Simulate processing delay (50-100ms)
-    await new Promise(resolve => setTimeout(resolve, 50 + Math.random() * 50));
-    
-    // Generate realistic logits
-    // Slightly favor "Front" direction for demo
-    const logits: number[] = [
-      Math.random() * 2 + 0.3,  // Front (slightly higher base)
-      Math.random() * 2 - 0.3,  // Left
-      Math.random() * 2 - 0.3,  // Right
-    ];
-    
-    return logits;
+  private extractOutputVector(outputTensor: any): number[] {
+    const candidate = Array.isArray(outputTensor) ? outputTensor[0] : outputTensor;
+    const raw = candidate != null && typeof candidate[Symbol.iterator] === 'function'
+      ? Array.from(candidate as Iterable<number>)
+      : [];
+
+    const normalized = raw
+      .slice(0, NUM_CLASSES)
+      .map((value) => (Number.isFinite(value) ? Number(value) : 0));
+
+    if (normalized.length < NUM_CLASSES) {
+      while (normalized.length < NUM_CLASSES) {
+        normalized.push(0);
+      }
+      console.warn('[ConvLSTM-Intent-TFLite] Output vector shorter than expected, padding with zeros');
+    }
+
+    return normalized;
   }
 
   /**
    * Warm up the model with dummy inference
    */
   private async warmUp(): Promise<void> {
-    if (this.demoMode || !this.model) return;
+    if (!this.model) return;
     
     try {
       const dummyData = new Float32Array(1 * 20 * 6 * 128 * 128);
@@ -243,9 +216,17 @@ class TFLiteModelManager {
    * Softmax activation function
    */
   private softmax(logits: number[]): number[] {
-    const maxLogit = Math.max(...logits);
-    const expValues = logits.map(x => Math.exp(x - maxLogit));
+    const safeLogits = logits.map((x) => (Number.isFinite(x) ? x : 0));
+    const maxLogit = Math.max(...safeLogits);
+    const expValues = safeLogits.map(x => Math.exp(x - maxLogit));
     const sumExp = expValues.reduce((a, b) => a + b, 0);
+
+    if (!Number.isFinite(sumExp) || sumExp <= 0) {
+      const uniform = 1 / NUM_CLASSES;
+      console.warn('[ConvLSTM-Intent-TFLite] Softmax encountered invalid sum; returning uniform probabilities');
+      return new Array(NUM_CLASSES).fill(uniform);
+    }
+
     return expValues.map(x => x / sumExp);
   }
 
@@ -319,8 +300,16 @@ export async function cleanupModel(): Promise<void> {
 }
 
 /**
- * Check if running in demo mode
+ * Backwards-compatible demo mode check.
+ * Returns true when real model inference is unavailable.
  */
 export function isRunningInDemoMode(): boolean {
-  return getModelManager().isInDemoMode();
+  return !getModelManager().isModelLoaded();
+}
+
+/**
+ * Get the latest ConvLSTM intent model load error, if any.
+ */
+export function getModelLoadError(): string | null {
+  return getModelManager().getLoadError();
 }

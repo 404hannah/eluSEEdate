@@ -3,8 +3,8 @@
                          EluSEEdate Mobile App
 ================================================================================
 
-This guide walks you through diagnosing and fixing common issues in the
-project. Use these commands to verify everything is working correctly.
+This guide documents common diagnostics and fixes for the project.
+These commands help verify that the application is operating correctly.
 
 Updated: March 2026
 Version: 1.0.4
@@ -13,7 +13,7 @@ Version: 1.0.4
                         QUICK HEALTH CHECK
 ================================================================================
 
-Run these commands to verify your project is healthy:
+Run these commands to verify project health:
 
 1. Check Project Configuration
    npx expo-doctor
@@ -40,7 +40,7 @@ Run these commands to verify your project is healthy:
 3. Check Dependency Versions
    npx expo install --check
 
-   What it does: Verifies all packages match your Expo SDK version
+   What it does: Verifies all packages match the active Expo SDK version
    Expected: "All dependencies appear to be up to date"
    
    If mismatches found:
@@ -67,18 +67,18 @@ LOCATION: node_modules/expo-speech/tsconfig.json
 SEVERITY: ⚠️ HARMLESS - This is a VS Code display issue, not a real error
 
 EXPLANATION:
-  VS Code tries to parse ALL tsconfig.json files in your workspace, including
+   VS Code tries to parse ALL tsconfig.json files in the workspace, including
   ones in node_modules/. The expo-speech module has a tsconfig.json that
   extends "expo-module-scripts/tsconfig.base", but that base file is only
   needed when BUILDING the expo-speech module itself (which Expo does), not
-  when USING it (which we do).
+   when USING it (which the project does).
   
-  Your app doesn't compile node_modules/ - it only reads the pre-built .d.ts
-  type definition files. This error does NOT affect your app's functionality.
+   The app doesn't compile node_modules/ - it only reads the pre-built .d.ts
+   type definition files. This error does NOT affect app functionality.
 
 VERIFICATION:
   Run: npx tsc --noEmit
-  If it completes silently (no output), your code has NO actual TypeScript
+   If it completes silently (no output), the source has NO actual TypeScript
   errors. The VS Code red squiggle is a false alarm.
 
 FIX OPTIONS:
@@ -86,7 +86,7 @@ FIX OPTIONS:
     - The error doesn't affect builds or runtime
     - Just a cosmetic VS Code issue
   
-  Option 2: Hide it in VS Code (if it bothers you)
+   Option 2: Hide it in VS Code (if the warning is distracting)
     - Open VS Code settings (Ctrl+,)
     - Search for "typescript.tsconfig"
     - Add "node_modules" to exclude patterns
@@ -138,7 +138,7 @@ ISSUE: "Expo Go app shows 'Something went wrong'"
 SEVERITY: 🟡 MODERATE - Check the error details
 
 SOLUTION:
-  1. Read the full error in the terminal where you ran 'npx expo start'
+   1. Read the full error in the terminal where 'npx expo start' was executed
   
   2. Common causes:
      - Syntax error: Fix the code error shown
@@ -150,16 +150,16 @@ SOLUTION:
 
 --------------------------------------------------------------------------------
 
-ISSUE: "TFLite not working" - Predictions show "Demo Mode"
-SEVERITY: 🔵 EXPECTED - Expo Go doesn't support native modules
+ISSUE: "TFLite not working" - Camera status shows "ConvLSTM offline"
+SEVERITY: 🔴 CRITICAL for inference - native build required
 
 EXPLANATION:
-  react-native-fast-tflite requires native code. It will NOT work in Expo Go.
-  The app automatically detects this and switches to demo mode with simulated
-  predictions.
+   react-native-fast-tflite requires native code and is unavailable in Expo Go.
+   The current implementation does not simulate predictions. If loading fails,
+   ConvLSTM remains offline and inference does not run.
 
 SOLUTION:
-  Build a development build to enable TFLite:
+   Build a native client to enable TFLite:
   
   1. Prebuild native code:
      npx expo prebuild
@@ -206,38 +206,34 @@ SOLUTIONS:
 
 --------------------------------------------------------------------------------
 
-ISSUE: "YOLO not working" - No bounding boxes shown or demo detections only
+ISSUE: "YOLO not working" - No bounding boxes shown / status shows "YOLO offline"
 LOCATION: CameraScreen.tsx, yoloInference.ts
-SEVERITY: ⚠️ Expected until real model is added
+SEVERITY: 🟡 MODERATE - model file or configuration issue
 
 EXPLANATION:
-  The app uses a placeholder for the YOLOv12 model until you provide the actual
-  .tflite file. In demo mode, YOLO generates simulated detections (0-3 random
-  objects per frame) to allow UI testing before the real model arrives.
+  The current runtime attempts real YOLO inference only. If model loading fails,
+  YOLO remains offline and bounding boxes are not rendered.
 
 VERIFICATION:
   1. Check console logs for:
-     "[YOLO-TFLite] ⚠️  Running in DEMO MODE"
-     "[YOLO-TFLite] [DEMO] Detections: X objects in Yms"
+     "[YOLO-TFLite] ❌ Failed to load model: ..."
+     "[YOLO-TFLite] Detections: X objects in Yms"
   
-  2. If you see "[DEMO]", the model file is missing (expected)
-  3. If you see "[REAL]", the model is loaded successfully
+  2. If load-failure logs appear, the model is offline
+  3. If detection logs appear, the model is loaded successfully
 
-FIX - To use real YOLO model:
-  1. Obtain your YOLOv12 model in TFLite format
+FIX - To restore YOLO inference:
+  1. Obtain a YOLOv12 model in TFLite format
   2. Name it: yolo.tflite
   3. Place in: assets/model/yolo.tflite
-  4. Delete placeholder: assets/model/yolo-placeholder.txt
-  5. Update config if needed:src/config/modelConfig.ts (YOLO_CONFIG section)
-     - Adjust inputSize if your model uses different dimensions
+  4. Update config if needed: src/config/modelConfig.ts (YOLO_CONFIG section)
+     - Adjust inputSize if the model uses different dimensions
      - Update YOLO_CLASS_NAMES if using custom classes
-  6. Implement output parsing in src/services/yoloInference.ts:
-     - parseYOLOOutput() method needs your specific model format
-     - preprocessFrame() may need adjustment for normalization
-  7. Rebuild app:
+  5. Adjust parsing in src/services/yoloInference.ts when model output differs
+  6. Rebuild app:
      npx expo prebuild --clean
      npx expo run:android
-  8. Check console for "[YOLO-TFLite] [REAL]" instead of "[DEMO]"
+  7. Confirm detection logs and on-screen bounding boxes
 
 COMMON YOLO ISSUES:
   - "No bounding boxes appear":
@@ -252,11 +248,11 @@ COMMON YOLO ISSUES:
   
   - "Model loads but crashes during inference":
     * Check input tensor shape and data type
-    * Verify output parsing matches your YOLOv12 variant
+   * Verify output parsing matches the selected YOLOv12 variant
     * Test model in Python/TensorFlow first
   
   - "Too many false detections":
-    * Increase confidenceThreshold (currently 0.5)
+      * Increase confidenceThreshold (currently 0.35)
     * Adjust iouThreshold for NMS
     * Filter by specific object classes
 
@@ -290,7 +286,7 @@ CHECK: Outdated packages
 COMMAND: npm outdated
 
 Shows: Packages with newer versions available
-Action: Read texts/VERSIONS.txt before updating (we use specific versions)
+Action: Read texts/VERSIONS.txt before updating (the project uses specific versions)
 
 --------------------------------------------------------------------------------
 
@@ -502,7 +498,7 @@ After making changes, verify all docs are consistent:
                             GETTING HELP
 ================================================================================
 
-If you're still stuck after trying these steps:
+If the team remains blocked after trying these steps:
 
 1. Check the specific documentation:
    - texts/VERSIONS.txt for dependency info

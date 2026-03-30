@@ -43,7 +43,7 @@ react-native-fast-tflite: ^1.6.1
     1. Run: npx expo prebuild
     2. Run: npx expo run:android
   
-  In Expo Go, the app runs in DEMO MODE with simulated predictions.
+  In Expo Go, inference modules are unavailable and model status shows offline.
 
 MODEL OPTIMIZATION:
   - Using Float16 quantized model (3.62 MB, down from 7.14 MB Float32)
@@ -158,11 +158,11 @@ Model Architecture: ConvLSTM Prototype 10
                            BUILD MODES
 ================================================================================
 
-1. EXPO GO (Demo Mode)
+1. EXPO GO (UI Validation Only)
    Command: npx expo start
    - Quick testing on device using Expo Go app
    - TFLite inference NOT available (native module)
-   - Runs with SIMULATED predictions
+  - ConvLSTM/YOLO inference remains offline
    - All UI and camera features work normally
 
 2. DEVELOPMENT BUILD (Full Features)
