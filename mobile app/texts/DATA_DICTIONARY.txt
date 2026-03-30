@@ -1,0 +1,326 @@
+================================================================================
+                        DATA DICTIONARY
+                     EluSEEDate Mobile App
+================================================================================
+
+This document provides a brief explanation of all key variables used in the 
+codebase. Variables are organized by configuration area and file.
+
+================================================================================
+MODEL CONFIGURATION (src/config/modelConfig.ts)
+================================================================================
+
+MODEL ARCHITECTURE:
+- inputDim: Number of input channels (6 = 3 RGB + 3 Intent)
+- hiddenDim: Hidden layer dimensions [64, 32] for ConvLSTM layers
+- kernelSize: Convolutional filter size [3, 3]
+- numLayers: Number of stacked ConvLSTM layers (2)
+- height: Frame height in pixels (128)
+- width: Frame width in pixels (128)
+- numClasses: Number of output classes (3: Front, Left, Right)
+- dropoutRate: Dropout probability for regularization (0.5)
+- hasGlobalAvgPool: Whether model has Global Average Pooling layer (true)
+
+PREPROCESSING:
+- seqLen: Number of frames per sequence (20)
+- fps: Target frames per second for processing (20)
+- duration: Video duration in seconds (1)
+- channels: Total channels per frame (6)
+- normalize: Whether to normalize pixel values to [0,1] (true)
+- colorFormat: Expected color format ('RGB')
+
+INTENT CONFIGURATION:
+- numIntentChannels: Number of intent channels (3)
+- intentDuration: Intent signal duration in seconds (1)
+- intentFrames: Number of frames with intent signal (10)
+- intentProbability: Probability of intent being present (0.6)
+  NOTE: Current implementation uses "no intent" mode (all zeros)
+
+CLASS LABELS:
+- classes: Array of output classes
+  - id 0: Front (User continues straight)
+  - id 1: Left (User turns left)
+  - id 2: Right (User turns right)
+
+PERFORMANCE METRICS:
+- modelSizeMb: Model file size in megabytes (1.5)
+- parameters: Total model parameters (272,000)
+- expectedAccuracy: Expected prediction accuracy (0.95)
+- inferenceTimeMs: Expected inference time per device type
+  - highEndDevice: 50ms
+  - midRangeDevice: 100ms
+  - lowEndDevice: 200ms
+
+DEVICE CONFIGURATION:
+- name: Target device name (Redmi Note 13 Pro 5G)
+- cameraFps: Target camera capture rate (20)
+- screenWidth: Device screen width in pixels (1080)
+- screenHeight: Device screen height in pixels (2400)
+- expectedInferenceMs: Expected inference time (100)
+- frameInterval: Frame sampling interval (1 = every frame)
+- bufferDurationMs: Buffer duration in milliseconds (1000)
+- predictionInterval: Run prediction every Nth frame (2)
+
+EXPORTED CONSTANTS:
+- SEQ_LEN: Sequence length (20)
+- FPS: Frames per second (20)
+- FRAME_HEIGHT: Frame height (128)
+- FRAME_WIDTH: Frame width (128)
+- CHANNELS: Total channels (6)
+- NUM_CLASSES: Number of classes (3)
+- CLASS_NAMES: Array of class names ['Front', 'Left', 'Right']
+- INTENT_FRAMES: Number of intent frames (10)
+
+- YOLO_IOU_THRESHOLD: IoU threshold for NMS (0.45)
+
+YOLO CONFIGURATION:
+- inputSize: Model input dimensions (128x128, adjustable)
+- channels: RGB channels (3)
+- numClasses: Number of object classes (80 for COCO)
+- confidenceThreshold: Minimum confidence for detection (0.5)
+- iouThreshold: IoU threshold for NMS (0.45)
+- commonObstacles: Array of common obstacle class names
+
+YOLO CLASS NAMES:
+- YOLO_CLASS_NAMES: Array of all COCO class names (80 classes)
+  First 10: person, bicycle, car, motorcycle, airplane, bus, train, truck, boat, traffic light
+  NOTE: Update this array if using custom-trained YOLO model with different classes
+
+YOLO EXPORTS:
+export const YOLO_NUM_CLASSES = YOLO_CLASS_NAMES.length;
+
+// Convenience YOLO exports
+export const YOLO_INPUT_SIZE = YOLO_CONFIG.model.inputSize;
+export const YOLO_CONFIDENCE_THRESHOLD = YOLO_CONFIG.model.confidenceThreshold;
+export const YOLO_IOU_THRESHOLD = YOLO_CONFIG.model.iouThreshold;
+
+================================================================================
+PREPROCESSOR (src/services/preprocessor.ts)
+================================================================================
+
+FRAME DATA:
+- data: Raw pixel data in Uint8Array format (RGBA from camera)
+- width: Original frame width in pixels
+- height: Original frame height in pixels
+- timestamp: Frame capture time in milliseconds
+
+PROCESSED TENSOR:
+- data: Preprocessed tensor as Float32Array
+- shape: Tensor dimensions [batch, seq_len, channels, height, width]
+CONVLSTM INFERENCE (src/services/convlstmWithoutIntentInference.ts)
+================================================================================
+
+NOTE: This file handles ConvLSTM turn prediction WITHOUT intent channels.
+  The repo also includes convlstmWithIntentInference.ts for future intent-aware flow.
+
+MODEL STATE:
+- isLoaded: Whether TFLite model is loaded (boolean)
+- model: TFLite model instance (null if not loaded)
+- loadError: Latest ConvLSTM model load error message (string or null)
+
+PREDICTION RESULT:
+- classId: Predicted class ID (0, 1, or 2)
+- className: Human-readable class name ('Front', 'Left', 'Right')
+- confidence: Prediction confidence score (0-1)
+- probabilities: Array of all class probabilities [front, left, right]
+- inferenceTimeMs: Time taken for inference in milliseconds
+
+PERFORMANCE METRICS:
+- preprocessingTimeMs: Time for preprocessing in milliseconds
+- inferenceTimeMs: Time for model inference in milliseconds
+- totalLatencyMs: Total end-to-end latency in milliseconds
+- fps: Frames processed per second
+
+================================================================================
+YOLO INFERENCE (src/services/yoloInference.ts)
+================================================================================
+
+NOTE: Handles YOLOv12 object detection for obstacle identification.
+  Uses real YOLO TFLite inference when model loading succeeds.
+
+MODEL STATE:
+- isLoaded: Whether YOLO TFLite model is loaded (boolean)
+- model: TFLite model instance (null if not loaded)
+- loadError: Latest YOLO model load error message (string or null)
+- confidenceThreshold: Minimum confidence for detections (0-1, default 0.35)
+
+BOUNDING BOX:
+- x: Top-left x coordinate (normalized 0-1)
+- y: Top-left y coordinate (normalized 0-1)
+- width: Box width (normalized 0-1)
+- height: Box height (normalized 0-1)
+
+DETECTION:
+- classId: YOLO class ID (integer 0-79 for COCO)
+- className: Human-readable class name (e.g., 'person', 'car', 'bicycle')
+- confidence: Detection confidence score (0-1)
+- boundingBox: BoundingBox object with normalized coordinates
+
+YOLO RESULT:
+- detections: Array of Detection objects
+- inferenceTimeMs: Time taken for YOLO inference in milliseconds
+- frameWidth: Input frame width
+- frameHeight: Input frame height
+
+FUNCTIONS:
+- runYOLODetection: High-level detection function (takes FrameData, returns YOLOResult)
+- initializeYOLOModel: Initialize model on app startup
+- cleanupYOLOModel: Cleanup resources on app close
+- isYOLOInDemoMode: Backwards-compatible availability check (true when YOLO is unavailable)
+- setYOLOConfidenceThreshold: Adjust confidence threshold
+
+================================================================================
+BOUNDING BOX OVERLAY (src/components/BoundingBoxOverlay.tsx)
+================================================================================
+Component that renders YOLO detections as bounding boxes on camera view
+
+PROPS:
+- detections: Array of Detection objects to render
+- containerWidth: Camera view width in pixels
+- containerHeight: Camera view height in pixels
+
+YOLO STATE:
+- isYOLOModelLoaded: Whether YOLO model loaded successfully (boolean)
+- yoloDetections: Array of current Detection objects
+- yoloInferenceTime: YOLO inference time in milliseconds
+
+PERFORMANCE STATE:
+- metrics: ConvLSTM peight: Camera view height in pixels
+
+RENDERING:
+- Converts normalized coordinates (0-1) to pixel coordinates
+- Renders green bounding boxes with class labels and confidence
+- Overlay is non-interactive (pointerEvents="none")
+- Label positioned above each bounding boxConvLSTM inference (boolean)
+- isCapturingRef: Lock to prevent concurrent captures (boolean)
+- isYOLOInferencingRef: Lock to prevent concurrent YOLO inference (boolean)
+- captureIntervalRef: Reference to capture timeout/interval
+
+BUFFER AND PROCESSOR (REFS):
+- frameBufferRef: FrameBuffer instance for storing frames (for ConvLSTM)
+- preprocessorRef: VideoPreprocessor instance for frame processing (for ConvLSTM)
+
+NOTE: YOLO runs on individual frames, ConvLSTM runs on frame sequences.
+      Both models run in parallel on each captured frame.
+
+CAPTURE SETTINGS:
+- REALISTIC_CAPTURE_FPS: Actual capture rate for takePictureAsync (2)
+  NOTE: Slower than desired due to takePictureAsync limitations
+  
+PRIORITY:
+- ConvLSTM has priority over YOLO if device struggles with both
+- YOLO frames can be skipped to maintain turn prediction performance
+PREDICTION RESULT:
+- classId: Predicted class ID (0, 1, or 2)
+- className: Human-readable class name ('Front', 'Left', 'Right')
+- confidence: Prediction confidence score (0-1)
+- probabilities: Array of all class probabilities [front, left, right]
+- inferenceTimeMs: Time taken for inference in milliseconds
+
+PERFORMANCE METRICS:
+- preprocessingTimeMs: Time for preprocessing in milliseconds
+- inferenceTimeMs: Time for model inference in milliseconds
+- totalLatencyMs: Total end-to-end latency in milliseconds
+- fps: Frames processed per second
+
+================================================================================
+MAIN MENU SCREEN (src/screens/MainMenuScreen.tsx)
+================================================================================
+
+TTS STATE:
+- hasSpokenGreeting: Module-level flag to ensure TTS greeting plays only once
+  per app session (boolean, default: false)
+  Set to true after first Speech.speak() call, prevents re-speaking when
+  navigating back from CameraScreen
+
+VOICE RECOGNITION STATE:
+- isListening: Whether Vosk is actively listening for commands (boolean)
+- voiceStatus: Current voice recognition status message (string)
+- modelLoaded: Whether the Vosk model has been loaded (boolean)
+- resultListenerRef: Reference to the Vosk result event listener
+- hasNavigatedRef: Ref to prevent duplicate navigation from voice command
+
+================================================================================
+CAMERA SCREEN (src/screens/CameraScreen.tsx)
+================================================================================
+
+CAMERA STATE:
+- permission: Camera permission status object
+- cameraRef: Reference to CameraView component
+- isCameraReady: Whether camera is mounted and ready (boolean)
+
+PREDICTION STATE:
+- currentPrediction: Latest prediction result object
+- directionLabel: Current direction label text ('Front', 'Left', 'Right')
+- confidence: Current prediction confidence (0-1)
+
+PERFORMANCE STATE:
+- metrics: Performance metrics object (preprocessing, inference, latency, fps)
+
+PROCESSING STATE:
+- isModelLoaded: Whether TFLite model loaded successfully (boolean)
+- isCapturing: Whether actively capturing frames (boolean)
+- frameCount: Total frames captured (counter)
+- predictionCount: Total predictions made (counter)
+- debugStatus: Current debug/status message (string)
+- lastCaptureTime: Timestamp of last capture in milliseconds
+
+PROCESSING FLAGS (REFS):
+- isInferencingRef: Lock to prevent concurrent inference (boolean)
+- isCapturingRef: Lock to prevent concurrent captures (boolean)
+- captureIntervalRef: Reference to capture timeout/interval
+
+BUFFER AND PROCESSOR (REFS):
+- frameBufferRef: FrameBuffer instance for storing frames
+- preprocessorRef: VideoPreprocessor instance for frame processing
+
+CAPTURE SETTINGS:
+- REALISTIC_CAPTURE_FPS: Actual capture rate for takePictureAsync (2)
+  NOTE: Slower than desired due to takePictureAsync limitations
+
+================================================================================
+IMAGE UTILITIES (src/utils/imageUtils.ts)
+================================================================================
+
+DECODE FUNCTIONS:
+- base64ToUint8Array: Converts base64 string to Uint8Array
+- decodeBase64ToPixels: Decodes base64 JPEG to RGBA pixel data
+  - Returns: { data: Uint8Array, width: number, height: number }
+
+RESIZE FUNCTIONS:
+- bilinearResize: Resizes image using bilinear interpolation
+  - Input: source data, dimensions, target dimensions
+  - Output: resized Uint8Array in RGBA format
+
+================================================================================
+NAVIGATION (src/navigation/types.ts)
+================================================================================
+
+ROUTE PARAMS:
+- RootStackParamList: Navigation route parameter types
+  - MainMenu: undefined (no params)
+  - Camera: undefined (no params)
+
+================================================================================
+TYPE DEFINITIONS
+================================================================================
+
+PREDICTION TYPES:
+- PredictionClass: 'Front' | 'Left' | 'Right'
+- ClassId: 0 | 1 | 2
+
+================================================================================
+NOTES
+================================================================================
+
+1. All time measurements are in milliseconds (ms)
+2. All pixel values are normalized to [0, 1] for model input
+3. Frame dimensions are always in pixels
+4. Confidence scores range from 0 to 1 (0-100%)
+5. Intent channels are currently unused (all zeros for 'no intent' mode)
+6. Real inference requires a native build; model load failures are reported as offline status
+7. Capture FPS is limited by takePictureAsync performance (~200-500ms/frame)
+
+================================================================================
+LAST UPDATED: March 4, 2026
+================================================================================

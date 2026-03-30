@@ -1,0 +1,56 @@
+USEFUL EXPO/EAS COMMANDS
+========================
+
+DEVELOPMENT SERVER
+------------------
+npx expo start                    Start development server (Expo Go)
+npx expo start --dev-client       Start server for dev builds
+npx expo start --tunnel           Start with tunnel (for remote devices)
+npx expo start --clear            Start and clear Metro cache
+npx expo start -c                 Same as --clear
+
+BUILDING
+--------
+eas build --profile development --platform android    Build Android dev client
+eas build --profile development --platform ios        Build iOS dev client
+eas build --profile preview --platform android        Build preview APK
+eas build --profile production --platform android     Build production AAB
+eas build --profile production --platform all         Build for both platforms
+
+PUBLISHING / UPDATES
+--------------------
+eas update --branch preview       Publish OTA update to preview branch
+eas update --branch production    Publish OTA update to production
+eas update --auto                 Auto-detect branch from current git branch
+
+NATIVE CODE
+-----------
+npx expo prebuild                 Generate native android/ and ios/ folders
+npx expo prebuild --clean         Clean and regenerate native folders
+npx expo run:android              Build and run on Android locally
+npx expo run:ios                  Build and run on iOS locally
+
+DIAGNOSTICS
+-----------
+npx expo-doctor                   Check project for common issues
+npx expo config --type public     Show resolved app config
+npx expo install --check          Check for dependency version mismatches
+npx expo install --fix            Auto-fix dependency versions
+
+CACHE CLEARING
+--------------
+npx expo start --clear            Clear Metro bundler cache
+rm -rf node_modules && npm i      Reset node_modules
+watchman watch-del-all            Clear Watchman cache (if installed)
+
+EAS ACCOUNT
+-----------
+eas login                         Login to Expo account
+eas logout                        Logout from Expo account
+eas whoami                        Show current logged in user
+
+PROJECT INFO
+------------
+eas project:info                  Show EAS project details
+eas build:list                    List recent builds
+eas credentials                   Manage signing credentials

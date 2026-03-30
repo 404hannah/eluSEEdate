@@ -1,0 +1,89 @@
+================================================================================
+                      TEXT FILES REFERENCE INDEX
+                     EluSEEdate Mobile App Docs
+================================================================================
+
+Updated: March 30, 2026
+Purpose: This document explains the role of each text file in the texts folder.
+
+================================================================================
+FILE PURPOSES
+================================================================================
+
+1. APPLICATION_OVERVIEW.txt
+   Provides a full-system overview of the application, including architecture,
+   AI model responsibilities, and end-to-end workflow.
+
+2. CAUTION.txt
+   Lists critical reminders for native prebuild steps, Vosk model handling, and
+   common setup mistakes that can break runtime behavior.
+
+3. DATA_DICTIONARY.txt
+   Defines key variables, constants, and data structures used throughout the
+   codebase for quick technical reference.
+
+4. DOCUMENTATION_UPDATE_GUIDE.txt
+   Serves as the documentation maintenance checklist that identifies which docs
+   must be updated after specific code or configuration changes.
+
+5. EXPO_DEV_BUILD_GUIDE.txt
+   Documents the workflow for creating and maintaining Expo development builds,
+   including rebuild steps after native changes.
+
+6. GIT_BRANCHES_GUIDE.txt
+   Describes branch naming conventions and branch workflow standards used by the
+   project team.
+
+7. GIT_MERGE_GUIDE.txt
+   Explains merge procedures, conflict handling, and safe branch integration
+   practices for project development.
+
+8. LOCAL_SERVER.txt
+   Provides instructions for starting and using a local Expo development server
+   when phone and computer share the same network.
+
+9. PACKAGE_DEPENDENCIES.txt
+   Explains runtime and development dependencies in plain language, including
+   why each package exists and where it is used.
+
+10. STANDALONE_APK_BUILD.txt
+    Documents standalone Android build procedures (preview APK and production
+    AAB), including expected outputs and command references.
+
+11. TROUBLESHOOTING.txt
+    Contains diagnostic commands, known issues, and practical fixes for build,
+    dependency, runtime, and inference problems.
+
+12. TUNNEL_SERVER.txt
+    Explains when and how to use Expo tunnel mode for remote device testing when
+    local network access is unavailable.
+
+13. USEFUL_COMMANDS.txt
+    Provides a compact command cheat sheet for Expo, EAS, and routine project
+    development tasks.
+
+14. VERSIONS.txt
+    Records pinned dependency versions and rationale for version choices to keep
+    compatibility and reproducibility clear.
+
+15. VOSK_INSTALLATION.txt
+    Documents react-native-vosk installation and language-model setup steps for
+    offline speech recognition.
+
+16. test.txt
+    Acts as a scratch/testing text file. It is not part of production
+    documentation and may be repurposed or removed by the team.
+
+17. TEXT_FILES_REFERENCE.txt
+    Acts as the index document for the texts folder.
+
+18. NEW_DEVELOPER_SETUP_GUIDE.txt
+   Provides a zero-knowledge, step-by-step setup path for first-time
+   contributors, including required software, download sites, and commands.
+
+================================================================================
+USAGE NOTE
+================================================================================
+
+When documentation updates are made, this file should be updated if a text file
+is added, removed, renamed, or repurposed.

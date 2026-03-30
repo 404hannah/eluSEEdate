@@ -1,0 +1,197 @@
+NEW DEVELOPER SETUP GUIDE (ZERO KNOWLEDGE START)
+=================================================
+
+Audience: New contributors who have not installed anything yet.
+Goal: Get from zero setup to testing the EluSEEdate app through Expo cloud APK builds.
+Platform: Windows (recommended for this guide).
+Estimated setup time: 60 to 120 minutes (first-time setup).
+
+
+WHAT THIS PROJECT USES
+----------------------
+This project is a React Native + Expo mobile app with native modules for:
+- TensorFlow Lite inference (react-native-fast-tflite)
+- Offline speech recognition (react-native-vosk)
+
+Because of native modules, Expo Go alone is not enough for full runtime behavior.
+The team uses Expo EAS cloud builds for testing APKs.
+
+
+SOFTWARE TO INSTALL FIRST (IN ORDER)
+------------------------------------
+Install each item before moving to the next one.
+
+1. Visual Studio Code
+   Site: https://code.visualstudio.com/
+   Why: Main code editor used by the project.
+
+2. Git for Windows
+   Site: https://git-scm.com/download/win
+   Why: Required to clone the repository and manage branches/commits.
+
+3. Node.js LTS (20.x)
+   Site: https://nodejs.org/en/download
+   Why: Required to install dependencies and run Expo/EAS commands.
+   Note: Use LTS version 20.x. Avoid Node 24+ for this project.
+
+4. Expo account
+   Site: https://expo.dev/signup
+   Why: Needed for EAS cloud builds (preview APK and production AAB).
+
+5. Android phone for testing APKs
+   Site: Any Android device is fine.
+   Why: Cloud preview builds are tested by installing APK files directly on device.
+
+
+AFTER INSTALLING SOFTWARE: QUICK VERIFICATION
+----------------------------------------------
+Open PowerShell and run:
+
+1. git --version
+2. node --version
+3. npm --version
+4. npx expo --version
+5. npx eas --version
+
+Expected result: Each command should return a version number.
+
+
+CLONE AND OPEN THE PROJECT
+--------------------------
+1. Choose a workspace folder.
+2. Clone repository:
+   git clone <REPO_URL>
+3. Enter project folder:
+   cd EluSEEDate-Mobile-App
+4. Open in VS Code:
+   code .
+
+If command "code" is not recognized:
+- In VS Code, open Command Palette
+- Run: Shell Command: Install 'code' command in PATH
+
+
+INSTALL PROJECT DEPENDENCIES
+----------------------------
+Inside project root, run:
+
+1. npm install
+
+Why: Installs everything from package.json.
+
+
+LOG IN TO EXPO (FOR BUILDS)
+---------------------------
+1. npx eas login
+2. npx eas whoami
+
+Why: Confirms the developer account used for cloud builds.
+
+
+RUN THE PROJECT (CLOUD WORKFLOW)
+--------------------------------
+Use this workflow for real inference features without local Android tooling.
+
+1. Configure EAS once per repository:
+   npx eas build:configure
+
+2. Build cloud preview APK:
+   npx eas build --profile preview --platform android
+
+3. Open the Expo build page link shown in terminal.
+
+4. Download APK and install on Android device.
+
+Why this flow:
+- The cloud build compiles native dependencies on Expo servers.
+- The contributor can test full native inference without local Android setup.
+
+
+CREATE A STANDALONE APK (NO METRO REQUIRED)
+-------------------------------------------
+For test distribution to other users:
+
+1. npx eas build --profile preview --platform android
+2. Wait for cloud build to finish
+3. Download generated APK link from EAS build page
+4. Share APK link with testers
+
+Why: Preview APK can run without local development server.
+
+
+DAILY COMMAND CHEAT SHEET
+-------------------------
+Use these most often:
+
+1. npm install
+   Installs dependencies after pull/clone.
+
+2. npx tsc --noEmit
+   TypeScript check before commit.
+
+3. npx expo-doctor
+   Project health/config diagnostics.
+
+4. npx eas build --profile preview --platform android
+   Creates standalone preview APK.
+
+5. npx eas build:list
+   Shows current and previous cloud build jobs.
+
+6. npx eas build:view <BUILD_ID>
+   Shows details and artifact URL for one build.
+
+
+COMMON BEGINNER ISSUES AND FIXES
+--------------------------------
+1. "node is not recognized"
+   Cause: Node.js not installed or PATH not updated.
+   Fix: Reinstall Node.js LTS, restart terminal.
+
+2. "eas command not found"
+   Cause: EAS CLI is not available yet in the project context.
+   Fix: Run npx eas --version, then rerun the target npx eas command.
+
+3. "react-native-fast-tflite unavailable" or offline model status
+   Cause: Running in Expo Go instead of a native APK.
+   Fix: Install and test using cloud preview APK from EAS.
+
+4. Build fails after app.json/plugin changes
+   Cause: Configuration issue or outdated dependency constraints.
+   Fix: Run npx expo-doctor, fix reported issues, then rerun EAS build.
+
+5. EAS command asks for login repeatedly
+   Cause: Not authenticated in current terminal session.
+   Fix: Run npx eas login, then npx eas whoami.
+
+
+RECOMMENDED LEARNING ORDER FOR NEW CONTRIBUTORS
+------------------------------------------------
+1. Read README.md first (project overview and architecture)
+2. Read texts/NEW_DEVELOPER_SETUP_GUIDE.txt (this file)
+3. Read texts/USEFUL_COMMANDS.txt (quick command reference)
+4. Read texts/TROUBLESHOOTING.txt (known issues and fixes)
+5. Start coding after a preview APK is built and tested on Android
+
+
+DEFINITION QUICK GLOSSARY
+-------------------------
+1. Expo: Toolchain for building React Native apps.
+2. Metro: JavaScript bundler used during development.
+3. EAS Build: Expo cloud service that compiles app binaries.
+4. Preview APK: Standalone installable Android package from EAS.
+5. TFLite: TensorFlow Lite runtime used by project AI models.
+6. Build Artifact: Output file generated by cloud build (APK or AAB).
+
+
+SUCCESS CHECKLIST
+-----------------
+A new developer is fully set up when all are true:
+
+[ ] git --version works
+[ ] node --version works (20.x)
+[ ] npm install completes successfully
+[ ] npx eas login works
+[ ] npx tsc --noEmit returns no project TypeScript errors
+[ ] npx eas build --profile preview --platform android completes
+[ ] preview APK installs and runs on Android device

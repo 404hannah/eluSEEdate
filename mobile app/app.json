@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "EluSEEdate",
+    "slug": "eluseedate",
+    "owner": "eluseedate-thesis",
+    "version": "1.0.4",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#000000"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.thesis.eluseedate",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app uses the camera to predict turn directions.",
+        "NSMicrophoneUsageDescription": "Allow EluSEEdate to access your microphone for voice commands."
+      }
+    },
+    "android": {
+      "package": "com.thesis.eluseedate",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow EluSEEdate to access your camera for turn prediction."
+        }
+      ],
+      "react-native-fast-tflite",
+      [
+        "react-native-vosk",
+        {
+          "models": ["assets/model-en-us"],
+          "iOSMicrophonePermission": "Allow EluSEEdate to access your microphone for voice commands."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "96f2420f-d15c-476e-9d4b-a4322ed7aa29"
+      }
+    }
+  }
+}
