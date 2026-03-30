@@ -201,7 +201,7 @@ def process_video(data_dir, video_file):
     vo.cap.release()
 
     # Saving Results to CSV
-    csv_path = os.path.join(labels_dir, f"{video_name}_labels.csv")
+    csv_path = os.path.join(labels_dir, f"{video_name}.csv")
     with open(csv_path, 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(["frame_id", "yaw_degrees", "distance", "label_id", "label_name"])
