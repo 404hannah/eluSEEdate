@@ -77,6 +77,10 @@ FILE PURPOSES
 17. TEXT_FILES_REFERENCE.txt
     Acts as the index document for the texts folder.
 
+18. NEW_DEVELOPER_SETUP_GUIDE.txt
+   Provides a zero-knowledge, step-by-step setup path for first-time
+   contributors, including required software, download sites, and commands.
+
 ================================================================================
 USAGE NOTE
 ================================================================================

@@ -20,10 +20,18 @@ The application uses two AI models working in parallel:
 
 ## Runtime Requirements
 
-- Real TFLite inference requires a native build (development client, preview APK, or production build).
+- Real TFLite inference requires a native APK/AAB build (preview or production).
 - Expo Go does not provide the native modules required by `react-native-fast-tflite` and `react-native-vosk`.
-- Recommended Android development command: `npx expo prebuild && npx expo run:android`.
-- Recommended standalone build command: `npx eas build --profile preview --platform android`.
+- Current recommended workflow: Expo cloud builds via `npx eas build --profile preview --platform android`.
+- For release distribution, use `npx eas build --profile production --platform android`.
+
+## New Contributor Onboarding
+
+For first-time contributors with zero setup, start with:
+
+- `texts/NEW_DEVELOPER_SETUP_GUIDE.txt` (full zero-to-working setup)
+- `texts/USEFUL_COMMANDS.txt` (daily command reference)
+- `texts/TROUBLESHOOTING.txt` (common errors and fixes)
 
 ## Target Device
 
@@ -57,6 +65,7 @@ Minimalistic black & white palette for a clean, distraction-free interface.
 ├── texts/
 │   ├── VERSIONS.txt                 # Dependency versions & rationale
 │   ├── TEXT_FILES_REFERENCE.txt     # Purpose of each texts/*.txt file
+│   ├── NEW_DEVELOPER_SETUP_GUIDE.txt # Zero-knowledge onboarding setup guide
 │   ├── PACKAGE_DEPENDENCIES.txt     # All dependencies explained
 │   ├── TROUBLESHOOTING.txt          # Debugging and diagnostics guide
 │   ├── GIT_MERGE_GUIDE.txt          # How to merge branches
@@ -135,9 +144,10 @@ The application currently uses "no intent" (all zeros for intent channels).
 
 ### Prerequisites
 
-- Node.js (v18 or v20 LTS recommended - v20.18.2 tested; **NOT v24+** due to compatibility issues with Expo SDK 50)
-- Expo CLI
-- Android Studio (for Android development)
+- Visual Studio Code
+- Git for Windows
+- Node.js LTS (20.x recommended)
+- Expo account (for EAS preview/production builds)
 
 ### Installation
 
@@ -145,11 +155,14 @@ The application currently uses "no intent" (all zeros for intent channels).
 # Install dependencies
 npm install
 
-# Start Metro for development build
-npx expo start --dev-client
+# Log in to Expo account
+npx eas login
 
-# Run on Android device/emulator
-npx expo run:android
+# Confirm active Expo account
+npx eas whoami
+
+# Build preview APK on Expo cloud
+npx eas build --platform android --profile preview
 ```
 
 ### Building for Production
