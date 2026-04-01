@@ -251,15 +251,13 @@ export class VideoPreprocessor {
 
   /**
    * Resize, normalize, and write directly to final NCHW RGB tensor slots.
-   * Bilinear interpolation math matches the previous implementation.
+   * Uses nearest-neighbor interpolation for lower JS compute cost.
    */
   private resizeNormalizeAndWriteFrame(
     frame: FrameData,
     frameOffset: number,
     tensorData: Float32Array
   ): void {
-    const scaleX = frame.width / this.width;
-    const scaleY = frame.height / this.height;
     const frameWidth = frame.width;
     const frameHeight = frame.height;
     const source = frame.data;
@@ -267,72 +265,43 @@ export class VideoPreprocessor {
     const channel0Offset = frameOffset;
     const channel1Offset = frameOffset + this.framePlaneSize;
     const channel2Offset = frameOffset + this.framePlaneSize * 2;
+    const maxSrcX = frameWidth - 1;
+    const maxSrcY = frameHeight - 1;
 
     for (let y = 0; y < this.height; y++) {
       const rowOffset = y * this.width;
-      const srcY = y * scaleY;
-      const y0 = Math.floor(srcY);
-      const y1 = Math.min(y0 + 1, frameHeight - 1);
-      const yFrac = srcY - y0;
-      const oneMinusYFrac = 1 - yFrac;
-      const rowBase0 = y0 * frameWidth;
-      const rowBase1 = y1 * frameWidth;
+      // Nearest-neighbor row lookup: target y -> source y.
+      let srcY = Math.floor((y * frameHeight) / this.height);
+      if (srcY > maxSrcY) {
+        srcY = maxSrcY;
+      }
+      const srcRowBase = srcY * frameWidth;
 
       for (let x = 0; x < this.width; x++) {
-        // Calculate source coordinates (bilinear interpolation)
-        const srcX = x * scaleX;
+        // Nearest-neighbor column lookup: target x -> source x.
+        let srcX = Math.floor((x * frameWidth) / this.width);
+        if (srcX > maxSrcX) {
+          srcX = maxSrcX;
+        }
 
-        // Get integer and fractional parts
-        const x0 = Math.floor(srcX);
-        const x1 = Math.min(x0 + 1, frameWidth - 1);
-        const xFrac = srcX - x0;
-        const oneMinusXFrac = 1 - xFrac;
-
-        const idx00Base = (rowBase0 + x0) * 4;
-        const idx01Base = (rowBase0 + x1) * 4;
-        const idx10Base = (rowBase1 + x0) * 4;
-        const idx11Base = (rowBase1 + x1) * 4;
+        const srcBase = (srcRowBase + srcX) * 4;
 
         const pixelOffset = rowOffset + x;
 
-        // R channel
-        const p00R = source[idx00Base];
-        const p01R = source[idx01Base];
-        const p10R = source[idx10Base];
-        const p11R = source[idx11Base];
-        const topR = p00R * oneMinusXFrac + p01R * xFrac;
-        const bottomR = p10R * oneMinusXFrac + p11R * xFrac;
-        let valueR = topR * oneMinusYFrac + bottomR * yFrac;
-        if (this.normalize) {
-          valueR = valueR / 255.0;
-        }
-        tensorData[channel0Offset + pixelOffset] = valueR;
+        // Extract RGB from RGBA source.
+        const valueR = source[srcBase];
+        const valueG = source[srcBase + 1];
+        const valueB = source[srcBase + 2];
 
-        // G channel
-        const p00G = source[idx00Base + 1];
-        const p01G = source[idx01Base + 1];
-        const p10G = source[idx10Base + 1];
-        const p11G = source[idx11Base + 1];
-        const topG = p00G * oneMinusXFrac + p01G * xFrac;
-        const bottomG = p10G * oneMinusXFrac + p11G * xFrac;
-        let valueG = topG * oneMinusYFrac + bottomG * yFrac;
         if (this.normalize) {
-          valueG = valueG / 255.0;
+          tensorData[channel0Offset + pixelOffset] = valueR / 255.0;
+          tensorData[channel1Offset + pixelOffset] = valueG / 255.0;
+          tensorData[channel2Offset + pixelOffset] = valueB / 255.0;
+        } else {
+          tensorData[channel0Offset + pixelOffset] = valueR;
+          tensorData[channel1Offset + pixelOffset] = valueG;
+          tensorData[channel2Offset + pixelOffset] = valueB;
         }
-        tensorData[channel1Offset + pixelOffset] = valueG;
-
-        // B channel
-        const p00B = source[idx00Base + 2];
-        const p01B = source[idx01Base + 2];
-        const p10B = source[idx10Base + 2];
-        const p11B = source[idx11Base + 2];
-        const topB = p00B * oneMinusXFrac + p01B * xFrac;
-        const bottomB = p10B * oneMinusXFrac + p11B * xFrac;
-        let valueB = topB * oneMinusYFrac + bottomB * yFrac;
-        if (this.normalize) {
-          valueB = valueB / 255.0;
-        }
-        tensorData[channel2Offset + pixelOffset] = valueB;
       }
     }
   }
