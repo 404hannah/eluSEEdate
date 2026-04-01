@@ -15,7 +15,9 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import MainMenuScreen from './src/screens/MainMenuScreen';
-import CameraScreen from './src/screens/CameraScreen';
+import ChoiceScreen from './src/screens/ChoiceScreen';
+import NoIntentScreen from './src/screens/NoIntentScreen';
+import IntentScreen from './src/screens/IntentScreen';
 import LogsScreen from './src/screens/LogsScreen';
 import { RootStackParamList } from './src/navigation/types';
 
@@ -44,8 +46,20 @@ export default function App() {
             component={MainMenuScreen}
           />
           <Stack.Screen 
+            name="Choice" 
+            component={ChoiceScreen}
+          />
+          <Stack.Screen 
+            name="Wandering" 
+            component={NoIntentScreen}
+          />
+          <Stack.Screen 
+            name="Destination" 
+            component={IntentScreen}
+          />
+          <Stack.Screen 
             name="Camera" 
-            component={CameraScreen}
+            component={NoIntentScreen}
           />
           <Stack.Screen 
             name="Logs" 

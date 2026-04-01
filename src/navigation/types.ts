@@ -6,6 +6,9 @@
 
 export type RootStackParamList = {
   MainMenu: undefined;
+  Choice: undefined;
+  Wandering: undefined;
+  Destination: undefined;
   Camera: undefined;
   Logs: undefined;
 };

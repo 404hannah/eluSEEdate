@@ -1,12 +1,12 @@
-/**
- * Camera Screen - EluSEEdate
- * 
+/*
+ * Intent Screen - EluSEEdate
+ *
  * Live camera view with real-time turn prediction
  * - Captures frames silently from rear camera (no sound/flash)
  * - Uses simplified capture approach compatible with Expo Go
  * - Shows predicted direction at bottom
  * - Shows inference/latency metrics at top-left
- * 
+ *
  * NOTE: takePictureAsync is slow (~200-500ms), so we capture at 2-3 FPS
  * and duplicate frames to fill the 20-frame buffer for inference.
  */
@@ -46,14 +46,14 @@ import BoundingBoxOverlay from '../components/BoundingBoxOverlay';
 import { SEQ_LEN, DEVICE_CONFIG, FRAME_WIDTH, FRAME_HEIGHT } from '../config/modelConfig';
 import { decodeBase64ToPixels } from '../utils/imageUtils';
 
-type CameraScreenProps = {
+type IntentScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Camera'>;
 };
 
 // Realistic capture FPS for takePictureAsync (slow but works in Expo Go)
 const REALISTIC_CAPTURE_FPS = 2;
 
-export default function CameraScreen({ navigation }: CameraScreenProps) {
+export default function IntentScreen({ navigation }: IntentScreenProps) {
   // Camera permission state
   const [permission, requestPermission] = useCameraPermissions();
   
@@ -112,11 +112,11 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
    * Initialize model on screen mount
    */
   useEffect(() => {
-    console.log('[Camera] Screen mounted');
-    console.log('[Camera] Permission status:', permission?.granted ? 'granted' : 'not granted');
+    console.log('[Intent] Screen mounted');
+    console.log('[Intent] Permission status:', permission?.granted ? 'granted' : 'not granted');
     
     const initModels = async () => {
-      console.log('[Camera] Initializing models...');
+      console.log('[Intent] Initializing models...');
       setDebugStatus('Loading models...');
       
       // Initialize ConvLSTM model
@@ -124,9 +124,9 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
       setIsModelLoaded(convlstmLoaded);
       isModelLoadedRef.current = convlstmLoaded;
       if (convlstmLoaded) {
-        console.log('[Camera] ConvLSTM model initialized successfully');
+        console.log('[Intent] ConvLSTM model initialized successfully');
       } else {
-        console.log('[Camera] ConvLSTM model failed to load');
+        console.log('[Intent] ConvLSTM model failed to load');
       }
       
       // Initialize YOLO model
@@ -134,9 +134,9 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
       setIsYOLOModelLoaded(yoloLoaded);
       isYOLOModelLoadedRef.current = yoloLoaded;
       if (yoloLoaded) {
-        console.log('[Camera] YOLO model initialized successfully');
+        console.log('[Intent] YOLO model initialized successfully');
       } else {
-        console.log('[Camera] YOLO model failed to load');
+        console.log('[Intent] YOLO model failed to load');
       }
 
       if (convlstmLoaded && yoloLoaded) {
@@ -152,9 +152,13 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
     
     initModels();
     
-    // Cleanup on unmount
+    // Cleanup on unmount — use refs only, no state updates
     return () => {
-      stopCapture();
+      isCapturingRef.current = false;
+      if (captureIntervalRef.current) {
+        clearTimeout(captureIntervalRef.current);
+        captureIntervalRef.current = null;
+      }
     };
   }, []);
 
@@ -170,10 +174,6 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
       }, 500);
       return () => clearTimeout(timer);
     }
-    
-    return () => {
-      stopCapture();
-    };
   }, [permission?.granted]);
 
   useEffect(() => {
@@ -196,7 +196,7 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
     setPredictionCount(0);
     setIsCapturing(true);
     setDebugStatus('Starting capture...');
-    console.log(`[Camera] Starting continuous capture at ${REALISTIC_CAPTURE_FPS} FPS...`);
+    console.log(`[Intent] Starting continuous capture at ${REALISTIC_CAPTURE_FPS} FPS...`);
     
     // Use recursive timeout instead of setInterval for proper async handling
     const captureLoop = async () => {
@@ -221,6 +221,7 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
    * Stop frame capture
    */
   const stopCapture = useCallback(() => {
+    if (!isCapturingRef.current && !captureIntervalRef.current) return; // already stopped
     isCapturingRef.current = false;
     hasFirstPredictionRef.current = false;
     if (captureIntervalRef.current) {
@@ -229,7 +230,7 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
     }
     setIsCapturing(false);
     setDebugStatus('Capture stopped');
-    console.log('[Camera] Capture stopped');
+    console.log('[Intent] Capture stopped');
   }, []);
 
   /**
@@ -255,14 +256,14 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
       });
       
       if (!photo) {
-        console.log('[Camera] No photo returned');
+        console.log('[Intent] No photo returned');
         setDebugStatus('Capture failed - no photo');
         return;
       }
       
       const captureTime = Date.now() - startTime;
       setLastCaptureTime(captureTime);
-      console.log(`[Camera] Frame captured in ${captureTime}ms`);
+      console.log(`[Intent] Frame captured in ${captureTime}ms`);
       
       // Decode base64 image to pixel data
       let frameData: FrameData;
@@ -281,15 +282,15 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
             sequenceId,
           };
           
-          console.log(`[Camera] Frame decoded #${sequenceId}: ${decoded.width}x${decoded.height}, ${decoded.data.length} bytes`);
+          console.log(`[Intent] Frame decoded #${sequenceId}: ${decoded.width}x${decoded.height}, ${decoded.data.length} bytes`);
         } catch (decodeError: any) {
-          console.warn('[Camera] Failed to decode image:', decodeError?.message);
+          console.warn('[Intent] Failed to decode image:', decodeError?.message);
           setDebugStatus(`Decode error: ${decodeError?.message || 'invalid frame'}`);
           return;
         }
       } else {
         // No base64 data available.
-        console.warn('[Camera] No base64 data in photo');
+        console.warn('[Intent] No base64 data in photo');
         setDebugStatus('Capture error: no base64 frame data');
         return;
       }
@@ -304,7 +305,7 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
           const buffer = frameBufferRef.current;
           const bufferCount = buffer.getFrameCount();
           setDebugStatus(`Captured: ${newCount} | Buffer: ${bufferCount}/${SEQ_LEN}`);
-          console.log(`[Camera] Frame ${newCount} added to buffer (${bufferCount}/${SEQ_LEN}) seq=${frameData.sequenceId ?? -1}`);
+          console.log(`[Intent] Frame ${newCount} added to buffer (${bufferCount}/${SEQ_LEN}) seq=${frameData.sequenceId ?? -1}`);
           return newCount;
         });
         
@@ -320,7 +321,7 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
         }
       }
     } catch (error: any) {
-      console.error('[Camera] Frame capture error:', error?.message || error);
+      console.error('[Intent] Frame capture error:', error?.message || error);
       setDebugStatus(`Error: ${error?.message || 'capture failed'}`);
     }
   };
@@ -386,9 +387,9 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
       const uniqueIds = Array.from(new Set(sequenceIds));
       const runTag = predictionCountRef.current + 1;
       console.log(
-        `[TRACK][ConvLSTM][Run ${runTag}] strategy=${strategy} buffer=${buffer.getFrameCount()}/${SEQ_LEN} unique=${uniqueIds.length}/${frames.length}`
+        `[TRACK][Intent][Run ${runTag}] strategy=${strategy} buffer=${buffer.getFrameCount()}/${SEQ_LEN} unique=${uniqueIds.length}/${frames.length}`
       );
-      console.log(`[TRACK][ConvLSTM][Run ${runTag}] sequence=${sequenceIds.join(',')}`);
+      console.log(`[TRACK][Intent][Run ${runTag}] sequence=${sequenceIds.join(',')}`);
       
       // Preprocess frames
       const preprocessor = preprocessorRef.current;
@@ -409,13 +410,13 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
         const newPredCount = prev + 1;
         predictionCountRef.current = newPredCount;
         setDebugStatus(`Prediction #${newPredCount}: ${prediction.className}`);
-        console.log(`[Camera] Prediction #${newPredCount}: ${prediction.className} (${(prediction.confidence * 100).toFixed(1)}%)`);
-        console.log(`[Camera] Latency: ${newMetrics.totalLatencyMs.toFixed(1)}ms`);
+        console.log(`[Intent] Prediction #${newPredCount}: ${prediction.className} (${(prediction.confidence * 100).toFixed(1)}%)`);
+        console.log(`[Intent] Latency: ${newMetrics.totalLatencyMs.toFixed(1)}ms`);
         return newPredCount;
       });
       
     } catch (error: any) {
-      console.error('[Camera] Inference error:', error?.message || error);
+      console.error('[Intent] Inference error:', error?.message || error);
       setDebugStatus(`Inference error: ${error?.message || 'unknown'}`);
     } finally {
       isInferencingRef.current = false;
@@ -427,12 +428,16 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
    */
   const handleBack = () => {
     stopCapture();
-    navigation.goBack();
+    if (navigation.canGoBack && navigation.canGoBack()) {
+      navigation.goBack();
+    } else if (navigation.navigate) {
+      navigation.navigate('MainMenu');
+    }
   };
 
   // Permission not determined yet
   if (!permission) {
-    console.log('[Camera] Permission not determined yet');
+    console.log('[Intent] Permission not determined yet');
     return (
       <SafeAreaView style={styles.container}>
         <Text style={styles.permissionText}>Requesting camera permission...</Text>
@@ -442,7 +447,7 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
 
   // Permission denied
   if (!permission.granted) {
-    console.log('[Camera] Permission denied');
+    console.log('[Intent] Permission denied');
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.permissionContainer}>
@@ -455,7 +460,7 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
     );
   }
   
-  console.log('[Camera] Rendering camera view - permission granted');
+  console.log('[Intent] Rendering camera view - permission granted');
 
   return (
     <View style={styles.container}>
@@ -470,12 +475,12 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
         animateShutter={false}
         enableTorch={false}
         onCameraReady={() => {
-          console.log('[Camera] Camera is ready!');
+          console.log('[Intent] Camera is ready!');
           setIsCameraReady(true);
           setDebugStatus('Camera ready');
         }}
         onMountError={(error) => {
-          console.error('[Camera] Mount error:', error);
+          console.error('[Intent] Mount error:', error);
           setDebugStatus(`Camera error: ${error.message}`);
         }}
       />

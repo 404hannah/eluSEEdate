@@ -16,6 +16,8 @@ import {
   TouchableOpacity,
   StatusBar,
   Dimensions,
+  Platform,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -37,18 +39,42 @@ export default function MainMenuScreen({ navigation }: MainMenuScreenProps) {
   const [isListening, setIsListening] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState('Initializing...');
   const [modelLoaded, setModelLoaded] = useState(false);
+  const [readyToListen, setReadyToListen] = useState(false); // New state
   const resultListenerRef = useRef<any>(null);
   const hasNavigatedRef = useRef(false);
 
+
   const handleStartPress = () => {
-    navigation.navigate('Camera');
+    Speech.speak('Starting', { language: 'en-US' });
+    navigation.navigate('Choice');
   };
 
-  // Speak startup greeting once per app session
+  const handleExitPress = () => {
+    Speech.speak('Exiting', { language: 'en-US' });
+    // For mobile apps, exiting is not always supported, but we can try:
+    if (Platform.OS === 'android') {
+      // eslint-disable-next-line no-undef
+      BackHandler.exitApp();
+    }
+  };
+
+  // Speak startup greeting once per app session, then start listening after a delay
   useEffect(() => {
     if (!hasSpokenGreeting) {
       hasSpokenGreeting = true;
-      Speech.speak('Starting EluSEEdate', { language: 'en-US' });
+      Speech.speak(
+        'Starting EluSEEdate. You can say Start to begin the app or Exit to exit the app.',
+        {
+          language: 'en-US',
+          onDone: () => {
+            setTimeout(() => {
+              setReadyToListen(true);
+            }, 1000); // 1 second delay after TTS
+          },
+        }
+      );
+    } else {
+      setReadyToListen(true);
     }
   }, []);
 
@@ -82,37 +108,40 @@ export default function MainMenuScreen({ navigation }: MainMenuScreenProps) {
   // Start/stop voice recognition when screen is focused/unfocused
   useFocusEffect(
     useCallback(() => {
-      // Reset navigation flag when screen comes into focus
       hasNavigatedRef.current = false;
+      let listeningTimeout: NodeJS.Timeout | null = null;
 
       const startListening = async () => {
-        if (!modelLoaded) return;
-
+        if (!modelLoaded || !readyToListen) return;
         try {
-          // Start recognition with grammar for "start" command
-          await Vosk.start({
-            grammar: ['start', '[unk]'],
-          });
-          
+          await Vosk.start({ grammar: ['start', 'exit', '[unk]'] });
           setIsListening(true);
           setVoiceStatus('Say "Start" to begin');
-
-          // Set up result listener
           resultListenerRef.current = Vosk.onResult((result: string) => {
             console.log('Voice result:', result);
-            
-            // Check if user said "start" and we haven't navigated yet
-            if (result.toLowerCase().includes('start') && !hasNavigatedRef.current) {
-              hasNavigatedRef.current = true;
-              setVoiceStatus('Starting...');
-              Vosk.stop();
-              setIsListening(false);
-              navigation.navigate('Camera');
+            const lowerResult = result.toLowerCase();
+            if (!hasNavigatedRef.current) {
+              if (lowerResult.includes('start')) {
+                hasNavigatedRef.current = true;
+                setVoiceStatus('Starting...');
+                Speech.speak('Starting', { language: 'en-US' });
+                Vosk.stop();
+                setIsListening(false);
+                navigation.navigate('Choice');
+              } else if (lowerResult.includes('exit')) {
+                hasNavigatedRef.current = true;
+                setVoiceStatus('Exiting...');
+                Speech.speak('Exiting', { language: 'en-US' });
+                Vosk.stop();
+                setIsListening(false);
+                if (Platform.OS === 'android') {
+                  BackHandler.exitApp();
+                }
+              }
             }
           });
         } catch (error: any) {
           console.error('Failed to start voice recognition:', error);
-          // Check if it's a permission error
           if (error?.message?.includes('permission') || error?.message?.includes('Permission')) {
             setVoiceStatus('Microphone permission denied');
           } else {
@@ -122,7 +151,10 @@ export default function MainMenuScreen({ navigation }: MainMenuScreenProps) {
         }
       };
 
-      startListening();
+      // Only start listening if readyToListen is true
+      if (readyToListen) {
+        listeningTimeout = setTimeout(startListening, 0);
+      }
 
       // Cleanup when screen loses focus
       return () => {
@@ -132,8 +164,9 @@ export default function MainMenuScreen({ navigation }: MainMenuScreenProps) {
         }
         Vosk.stop();
         setIsListening(false);
+        if (listeningTimeout) clearTimeout(listeningTimeout);
       };
-    }, [modelLoaded, navigation])
+    }, [modelLoaded, navigation, readyToListen])
   );
 
   return (
@@ -147,7 +180,7 @@ export default function MainMenuScreen({ navigation }: MainMenuScreenProps) {
         <Text style={styles.version}>v1.0.4</Text>
       </View>
 
-      {/* Center Section with Start Button */}
+      {/* Center Section with Start and Exit Buttons */}
       <View style={styles.centerSection}>
         <TouchableOpacity
           style={styles.startButton}
@@ -156,7 +189,13 @@ export default function MainMenuScreen({ navigation }: MainMenuScreenProps) {
         >
           <Text style={styles.startButtonText}>Start</Text>
         </TouchableOpacity>
-        
+        <TouchableOpacity
+          style={[styles.startButton, { marginTop: 20, backgroundColor: '#222' }]}
+          onPress={handleExitPress}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.startButtonText, { color: '#fff' }]}>Exit</Text>
+        </TouchableOpacity>
         {/* Voice Status Indicator */}
         <View style={styles.voiceStatusContainer}>
           <View style={[styles.voiceIndicator, isListening && styles.voiceIndicatorActive]} />
