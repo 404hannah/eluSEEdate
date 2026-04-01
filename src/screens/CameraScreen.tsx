@@ -43,6 +43,7 @@ import {
   YOLOResult,
   Detection,
 } from '../services/yoloInference';
+import { ObjectSpeechService } from '../services/ObjectSpeechService';
 import BoundingBoxOverlay from '../components/BoundingBoxOverlay';
 import { SEQ_LEN, FRAME_WIDTH, FRAME_HEIGHT } from '../config/modelConfig';
 import { decodeBase64ToPixels } from '../utils/imageUtils';
@@ -98,6 +99,12 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
   const [isYOLOModelLoaded, setIsYOLOModelLoaded] = useState<boolean>(false);
   const [yoloDetections, setYoloDetections] = useState<Detection[]>([]);
   const [yoloInferenceTime, setYoloInferenceTime] = useState<number>(0);
+  const objectSpeechServiceRef = useRef<ObjectSpeechService>(
+    new ObjectSpeechService({
+      confidenceThreshold: 0.45,
+      sameClassCooldownMs: 4000,
+    })
+  );
   
   // Inference lock to prevent concurrent inferences
   const isInferencingRef = useRef<boolean>(false);
@@ -210,8 +217,20 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
     // Cleanup on unmount
     return () => {
       stopCapture();
+      void objectSpeechServiceRef.current.dispose();
     };
   }, []);
+
+  /**
+   * Announce detected objects through text-to-speech.
+   */
+  useEffect(() => {
+    if (!isYOLOModelLoaded || yoloDetections.length === 0) {
+      return;
+    }
+
+    void objectSpeechServiceRef.current.announceDetections(yoloDetections);
+  }, [isYOLOModelLoaded, yoloDetections]);
 
   /**
    * Start continuous frame capture when permission is granted
@@ -466,6 +485,7 @@ export default function CameraScreen({ navigation }: CameraScreenProps) {
    */
   const handleBack = () => {
     stopCapture();
+    void objectSpeechServiceRef.current.stop();
     navigation.goBack();
   };
 
