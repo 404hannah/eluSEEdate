@@ -283,7 +283,7 @@ class YOLOModelManager {
         // If values at stride=84 are more similar than values at stride=336,
         // it's likely [336, 84] format
         if (Math.abs(val0 - val84) < Math.abs(val0 - val336)) {
-          isTransposed = false;
+          // isTransposed = false;
           console.log('[YOLO-DEBUG] Detected non-transposed tensor format [336, 84]');
         } else {
           console.log('[YOLO-DEBUG] Using transposed tensor format [84, 336]');

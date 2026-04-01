@@ -1,6 +1,6 @@
 ================================================================================
-                            TROUBLESHOOTING GUIDE
-                         EluSEEdate Mobile App
+                        TROUBLESHOOTING GUIDE
+                        EluSEEdate Mobile App
 ================================================================================
 
 This guide walks you through diagnosing and fixing common issues in the
