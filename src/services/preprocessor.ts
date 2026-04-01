@@ -18,7 +18,6 @@ import {
   FRAME_HEIGHT,
   FRAME_WIDTH,
   CHANNELS,
-  INTENT_FRAMES,
   DEVICE_CONFIG
 } from '../config/modelConfig';
 
@@ -195,6 +194,10 @@ export class VideoPreprocessor {
   private width: number;
   private seqLen: number;
   private normalize: boolean;
+  private framePlaneSize: number;
+  private frameStride: number;
+  private tensorBuffer: Float32Array;
+  private outputShape: number[];
 
   constructor(
     height: number = FRAME_HEIGHT,
@@ -206,6 +209,13 @@ export class VideoPreprocessor {
     this.width = width;
     this.seqLen = seqLen;
     this.normalize = normalize;
+
+    this.framePlaneSize = this.height * this.width;
+    this.frameStride = CHANNELS * this.framePlaneSize;
+
+    // Reused backing buffer: [1, seqLen, channels, height, width]
+    this.tensorBuffer = new Float32Array(this.seqLen * this.frameStride);
+    this.outputShape = [1, this.seqLen, CHANNELS, this.height, this.width];
   }
 
   /**
@@ -226,25 +236,19 @@ export class VideoPreprocessor {
     const startTime = performance.now();
 
     if (frames.length !== this.seqLen) {
-      throw new Error(`Expected ${this.seqLen} frames, got ${frames.length}`);
+      throw new Error('Expected ' + this.seqLen + ' frames, got ' + frames.length);
     }
-
-    // Output tensor shape: [1, seq_len, channels, height, width]
-    // = [1, 20, 6, 128, 128]
-    const batchSize = 1;
-    const tensorSize = batchSize * this.seqLen * CHANNELS * this.height * this.width;
-    const tensorData = new Float32Array(tensorSize);
 
     // Process each frame
     for (let frameIdx = 0; frameIdx < this.seqLen; frameIdx++) {
-      this.processFrame(frames[frameIdx], frameIdx, tensorData);
+      this.processFrame(frames[frameIdx], frameIdx, this.tensorBuffer);
     }
 
     const processingTimeMs = performance.now() - startTime;
 
     return {
-      data: tensorData,
-      shape: [batchSize, this.seqLen, CHANNELS, this.height, this.width],
+      data: this.tensorBuffer,
+      shape: this.outputShape,
       processingTimeMs
     };
   }
@@ -264,103 +268,79 @@ export class VideoPreprocessor {
     frameIdx: number,
     tensorData: Float32Array
   ): void {
-    // Get resized RGB data
-    const resizedRgb = this.resizeAndConvertFrame(frame);
-
     // Calculate offset in tensor for this frame
     // Tensor layout: [batch, seq, channels, height, width]
     // We're filling batch 0, so offset = frameIdx * channels * height * width
-    const frameOffset = frameIdx * CHANNELS * this.height * this.width;
+    const frameOffset = frameIdx * this.frameStride;
 
-    // Fill RGB channels (channels 0, 1, 2)
-    for (let c = 0; c < 3; c++) {
-      const channelOffset = frameOffset + c * this.height * this.width;
-      for (let h = 0; h < this.height; h++) {
-        for (let w = 0; w < this.width; w++) {
-          const pixelIdx = (h * this.width + w) * 3 + c;
-          const tensorIdx = channelOffset + h * this.width + w;
-          tensorData[tensorIdx] = resizedRgb[pixelIdx];
-        }
-      }
-    }
+    this.resizeNormalizeAndWriteFrame(frame, frameOffset, tensorData);
 
-    // Fill intent channels (channels 3, 4, 5) with zeros (no intent)
-    for (let c = 3; c < 6; c++) {
-      const channelOffset = frameOffset + c * this.height * this.width;
-      for (let h = 0; h < this.height; h++) {
-        for (let w = 0; w < this.width; w++) {
-          const tensorIdx = channelOffset + h * this.width + w;
-          tensorData[tensorIdx] = 0.0; // No intent
-        }
-      }
-    }
+    // Intent channels (3, 4, 5) are intentionally left untouched.
+    // The persistent Float32Array starts as zeros and RGB writes only touch channels 0-2.
   }
 
   /**
-   * Resize frame to target dimensions and convert RGBA to normalized RGB
-   * Uses bilinear interpolation for smooth resizing
+   * Resize, normalize, and write directly to final NCHW RGB tensor slots.
+   * Uses nearest-neighbor interpolation for lower JS compute cost.
    */
-  private resizeAndConvertFrame(frame: FrameData): Float32Array {
-    const outputSize = this.height * this.width * 3;
-    const output = new Float32Array(outputSize);
+  private resizeNormalizeAndWriteFrame(
+    frame: FrameData,
+    frameOffset: number,
+    tensorData: Float32Array
+  ): void {
+    const frameWidth = frame.width;
+    const frameHeight = frame.height;
+    const source = frame.data;
 
-    const scaleX = frame.width / this.width;
-    const scaleY = frame.height / this.height;
+    const channel0Offset = frameOffset;
+    const channel1Offset = frameOffset + this.framePlaneSize;
+    const channel2Offset = frameOffset + this.framePlaneSize * 2;
+    const maxSrcX = frameWidth - 1;
+    const maxSrcY = frameHeight - 1;
 
     for (let y = 0; y < this.height; y++) {
+      const rowOffset = y * this.width;
+      // Nearest-neighbor row lookup: target y -> source y.
+      let srcY = Math.floor((y * frameHeight) / this.height);
+      if (srcY > maxSrcY) {
+        srcY = maxSrcY;
+      }
+      const srcRowBase = srcY * frameWidth;
+
       for (let x = 0; x < this.width; x++) {
-        // Calculate source coordinates (bilinear interpolation)
-        const srcX = x * scaleX;
-        const srcY = y * scaleY;
+        // Nearest-neighbor column lookup: target x -> source x.
+        let srcX = Math.floor((x * frameWidth) / this.width);
+        if (srcX > maxSrcX) {
+          srcX = maxSrcX;
+        }
 
-        // Get integer and fractional parts
-        const x0 = Math.floor(srcX);
-        const y0 = Math.floor(srcY);
-        const x1 = Math.min(x0 + 1, frame.width - 1);
-        const y1 = Math.min(y0 + 1, frame.height - 1);
-        
-        const xFrac = srcX - x0;
-        const yFrac = srcY - y0;
+        const srcBase = (srcRowBase + srcX) * 4;
 
-        // Bilinear interpolation for each RGB channel
-        for (let c = 0; c < 3; c++) {
-          // Source pixels (RGBA format, 4 bytes per pixel)
-          const idx00 = (y0 * frame.width + x0) * 4 + c;
-          const idx01 = (y0 * frame.width + x1) * 4 + c;
-          const idx10 = (y1 * frame.width + x0) * 4 + c;
-          const idx11 = (y1 * frame.width + x1) * 4 + c;
+        const pixelOffset = rowOffset + x;
 
-          // Get pixel values
-          const p00 = frame.data[idx00];
-          const p01 = frame.data[idx01];
-          const p10 = frame.data[idx10];
-          const p11 = frame.data[idx11];
+        // Extract RGB from RGBA source.
+        const valueR = source[srcBase];
+        const valueG = source[srcBase + 1];
+        const valueB = source[srcBase + 2];
 
-          // Interpolate
-          const top = p00 * (1 - xFrac) + p01 * xFrac;
-          const bottom = p10 * (1 - xFrac) + p11 * xFrac;
-          let value = top * (1 - yFrac) + bottom * yFrac;
-
-          // Normalize to [0, 1] if enabled
-          if (this.normalize) {
-            value = value / 255.0;
-          }
-
-          // Store in output (RGB format, 3 values per pixel)
-          const outIdx = (y * this.width + x) * 3 + c;
-          output[outIdx] = value;
+        if (this.normalize) {
+          tensorData[channel0Offset + pixelOffset] = valueR / 255.0;
+          tensorData[channel1Offset + pixelOffset] = valueG / 255.0;
+          tensorData[channel2Offset + pixelOffset] = valueB / 255.0;
+        } else {
+          tensorData[channel0Offset + pixelOffset] = valueR;
+          tensorData[channel1Offset + pixelOffset] = valueG;
+          tensorData[channel2Offset + pixelOffset] = valueB;
         }
       }
     }
-
-    return output;
   }
 
   /**
    * Get expected output shape
    */
   getOutputShape(): number[] {
-    return [1, this.seqLen, CHANNELS, this.height, this.width];
+    return this.outputShape;
   }
 }
 
