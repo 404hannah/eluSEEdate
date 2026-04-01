@@ -220,11 +220,6 @@ class YOLOModelManager {
         const b = frame.data[srcIdx + 2] / 255.0;
         
         // Store in BCHW format: [all R values, all G values, all B values]
-        data[0 * inputSize * inputSize + dstIdx] = r; // R channel
-        data[1 * inputSize * inputSize + dstIdx] = g; // G channel
-        data[2 * inputSize * inputSize + dstIdx] = b; // B channel
-        
-        // Store in BCHW format: [all R values, all G values, all B values]
         // data[0 * inputSize * inputSize + dstIdx] = r; // R channel
         // data[1 * inputSize * inputSize + dstIdx] = g; // G channel
         // data[2 * inputSize * inputSize + dstIdx] = b; // B channel
