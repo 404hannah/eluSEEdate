@@ -4,20 +4,24 @@
 This appendix is a code-grounded technical reference for the current mobile implementation. The analysis covers all requested files under src and cross-audits them against texts/VERSIONS.txt and texts/DATA_DICTIONARY.txt.
 
 Scanned source files:
-1. src/components/BoundingBoxOverlay.tsx
-2. src/components/ErrorBoundary.tsx
+1. src/components/boundingBoxOverlay.tsx
+2. src/components/errorBoundary.tsx
 3. src/config/index.ts
 4. src/config/modelConfig.ts
 5. src/navigation/index.ts
 6. src/navigation/types.ts
-7. src/screens/CameraScreen.tsx
-8. src/screens/LogsScreen.tsx
-9. src/screens/MainMenuScreen.tsx
-10. src/services/convlstmWithIntentInference.ts
-11. src/services/convlstmWithoutIntentInference.ts
-12. src/services/preprocessor.ts
-13. src/services/yoloInference.ts
-14. src/utils/imageUtils.ts
+7. src/screens/cameraScreen.tsx
+8. src/screens/index.ts
+9. src/screens/logsScreen.tsx
+10. src/screens/mainMenuScreen.tsx
+11. src/services/convlstmWithIntentInference.ts
+12. src/services/convlstmWithoutIntentInference.ts
+13. src/services/index.ts
+14. src/services/objectSpeechService.ts
+15. src/services/preprocessor.ts
+16. src/services/yoloInference.ts
+17. src/utils/imageUtils.ts
+18. src/utils/index.ts
 
 Audit references:
 1. texts/VERSIONS.txt
@@ -28,9 +32,10 @@ This document prioritizes implementation truth over comments and historical note
 ---
 
 ## 2. System Architecture and Runtime Intent
-EluSEEDate executes two on-device inference streams from camera data:
+EluSEEDate executes two on-device inference streams from camera data, plus one speech-alert stream:
 1. ConvLSTM stream for turn-direction classification across temporal frame sequences.
 2. YOLO stream for per-frame obstacle detection.
+3. Object speech stream for spoken obstacle alerts based on YOLO detections.
 
 The operational pipeline is:
 1. CameraScreen captures JPEG frames via expo-camera takePictureAsync.
@@ -39,7 +44,8 @@ The operational pipeline is:
 4. preprocessor VideoPreprocessor writes a Float32 sequence tensor in channels-first layout.
 5. ConvLSTM TFLite service performs classification and computes probabilities.
 6. YOLO TFLite service performs object detection, score filtering, and class-wise NMS.
-7. CameraScreen updates UI overlays for direction, confidence, performance, and detection boxes.
+7. objectSpeechService selects the highest-priority detection and produces text-to-speech output.
+8. CameraScreen updates UI overlays for direction, confidence, performance, and detection boxes.
 
 ---
 
@@ -144,7 +150,18 @@ $$
 7. Clamps boxes to [0,1], removes tiny boxes, applies class-wise NMS with IoU threshold 0.45.
 8. Returns normalized detections to CameraScreen.
 
-### 3.8 Rendering and Feedback
+### 3.8 Object Speech Path
+CameraScreen forwards YOLO detections to objectSpeechService when the YOLO model is loaded.
+
+Service behavior:
+1. Filters detections below configured speech confidence threshold.
+2. Computes candidate priority from normalized box area, confidence, and danger weight.
+3. Selects the nearest or largest candidate first, then resolves ties by confidence and danger.
+4. Applies same-class and global cooldown windows.
+5. Interrupts active speech only when the new candidate exceeds interrupt-priority delta.
+6. Speaks direction-aware phrases such as "Person ahead" or "Car on the left".
+
+### 3.9 Rendering and Feedback
 CameraScreen pushes two independent visual outputs:
 1. Direction card with class label and confidence from ConvLSTM.
 2. BoundingBoxOverlay with YOLO normalized boxes projected to screen pixels.
@@ -155,7 +172,7 @@ Performance panel reports capture time, preprocessing time, model inference time
 
 ## 4. File-by-File Technical Deep Dive
 
-## 4.1 src/components/BoundingBoxOverlay.tsx
+## 4.1 src/components/boundingBoxOverlay.tsx
 ### File Purpose
 This component translates YOLO detections from normalized model space into screen coordinates and draws visual overlays on top of CameraView. It is the last mile between object detection outputs and user-visible hazard context.
 
@@ -175,7 +192,7 @@ This component translates YOLO detections from normalized model space into scree
 
 ---
 
-## 4.2 src/components/ErrorBoundary.tsx
+## 4.2 src/components/errorBoundary.tsx
 ### File Purpose
 This class component is a crash containment layer intended to prevent full-app blank screens from React tree errors by rendering a diagnostic fallback view.
 
@@ -248,7 +265,7 @@ Defines stack route contract for React Navigation with TypeScript safety.
 
 ---
 
-## 4.7 src/screens/CameraScreen.tsx
+## 4.7 src/screens/cameraScreen.tsx
 ### File Purpose
 Primary experimental runtime surface for thesis measurements. It orchestrates camera acquisition, dual-model inference, latency tracking, and user feedback.
 
@@ -297,7 +314,7 @@ Primary experimental runtime surface for thesis measurements. It orchestrates ca
 
 ---
 
-## 4.8 src/screens/LogsScreen.tsx
+## 4.8 src/screens/logsScreen.tsx
 ### File Purpose
 In-app observability surface that captures console output into a searchable UI, useful for field testing where native logs are difficult to access.
 
@@ -320,7 +337,7 @@ In-app observability surface that captures console output into a searchable UI, 
 
 ---
 
-## 4.9 src/screens/MainMenuScreen.tsx
+## 4.9 src/screens/mainMenuScreen.tsx
 ### File Purpose
 Application entry UX and multimodal launch gate using touch and voice command for accessibility and hands-free workflow.
 
@@ -465,7 +482,27 @@ Object detection service managing YOLO model lifecycle, frame preprocessing, raw
 
 ---
 
-## 4.14 src/utils/imageUtils.ts
+## 4.14 src/services/objectSpeechService.ts
+### File Purpose
+Speech orchestration service that converts YOLO detections into concise obstacle announcements for accessibility and situational awareness.
+
+### Logic Deep-Dive
+1. Accepts detection arrays from cameraScreen and exits early when disabled or empty.
+2. Filters invalid boxes and low-confidence detections.
+3. Computes candidate area and direction labels from normalized box bounds.
+4. Prioritizes nearest or largest objects by area-first ranking with confidence and danger tie-breakers.
+5. Applies class-level and global cooldown windows to prevent repeated speech spam.
+6. Uses interruption policy to stop active speech only for meaningfully higher-priority targets.
+7. Sends final phrase to expo-speech and clears active token state on completion or error.
+
+### Architectural Notes
+1. Service state is encapsulated in one ref-managed singleton per camera screen instance.
+2. Cooldown and interruption parameters are configurable via constructor options.
+3. Direction labels are inferred from normalized horizontal box center with left, ahead, and right buckets.
+
+---
+
+## 4.15 src/utils/imageUtils.ts
 ### File Purpose
 Decodes JPEG camera payloads into raw pixel tensors with deterministic resizing for downstream model services.
 
