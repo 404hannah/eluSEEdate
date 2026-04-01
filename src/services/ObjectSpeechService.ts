@@ -1,18 +1,34 @@
 import * as Speech from 'expo-speech';
 import { Detection } from './yoloInference';
 
+/**
+ * Configuration options for object-to-speech announcements.
+ *
+ * The service applies these values to candidate filtering,
+ * announcement pacing, and speech playback settings.
+ */
 export interface ObjectSpeechServiceOptions {
+  /** Minimum confidence required for a detection to be considered. */
   confidenceThreshold?: number;
+  /** Cooldown for repeating announcements of the same class. */
   sameClassCooldownMs?: number;
+  /** Cooldown applied between all announcements. */
   globalCooldownMs?: number;
+  /** Minimum priority increase required to interrupt active speech. */
   interruptPriorityDelta?: number;
+  /** Text-to-speech playback rate. */
   rate?: number;
+  /** Text-to-speech playback pitch. */
   pitch?: number;
+  /** BCP-47 language code passed to the speech engine. */
   language?: string;
 }
 
 type DirectionLabel = 'left' | 'ahead' | 'right';
 
+/**
+ * Internal representation of a detection candidate that can be spoken.
+ */
 interface AnnouncementCandidate {
   className: string;
   confidence: number;
@@ -27,6 +43,9 @@ interface ActiveSpeechState {
   className: string;
   priority: number;
 }
+
+const AREA_EPSILON = 0.0001;
+const CONFIDENCE_EPSILON = 0.0001;
 
 const DEFAULT_OPTIONS: Required<ObjectSpeechServiceOptions> = {
   confidenceThreshold: 0.45,
@@ -49,6 +68,14 @@ const DANGER_WEIGHTS: Record<string, number> = {
   dog: 0.65,
 };
 
+/**
+ * Announces object detections using speech output.
+ *
+ * The service speaks a single, highest-priority object per call.
+ * For multi-object frames, it prioritizes the nearest object by
+ * using the largest normalized bounding-box area, with confidence
+ * and danger as tie-breakers for stable and consistent output.
+ */
 export class ObjectSpeechService {
   private readonly options: Required<ObjectSpeechServiceOptions>;
   private readonly lastClassAnnouncementMs = new Map<string, number>();
@@ -64,6 +91,7 @@ export class ObjectSpeechService {
     };
   }
 
+  /** Enables or disables speech announcements globally. */
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
 
@@ -74,6 +102,12 @@ export class ObjectSpeechService {
     }
   }
 
+  /**
+   * Announces one object candidate from the current detection list.
+   *
+   * The method returns early when no valid candidate is available,
+   * when cooldowns block output, or when active speech should not be interrupted.
+   */
   async announceDetections(detections: Detection[]): Promise<void> {
     if (!this.enabled || detections.length === 0) {
       return;
@@ -122,12 +156,14 @@ export class ObjectSpeechService {
     });
   }
 
+  /** Stops current speech playback and clears active speech state. */
   async stop(): Promise<void> {
     await Speech.stop().catch(() => undefined);
     this.activeSpeechToken += 1;
     this.activeSpeech = null;
   }
 
+  /** Disposes service state and resets announcement history. */
   async dispose(): Promise<void> {
     await this.stop();
     this.lastClassAnnouncementMs.clear();
@@ -146,7 +182,7 @@ export class ObjectSpeechService {
     for (const detection of detections) {
       const confidence = detection.confidence;
 
-      // Confidence must be strictly greater than 0.45.
+      // Confidence must be strictly greater than the configured threshold.
       if (!Number.isFinite(confidence) || confidence <= this.options.confidenceThreshold) {
         continue;
       }
@@ -168,27 +204,50 @@ export class ObjectSpeechService {
       const danger = this.getDangerWeight(detection.className);
       const direction = this.getDirectionFromBounds(xMin, xMax);
 
-      // Priority emphasizes danger first, then proximity (box area), then confidence.
-      const priority = (danger * 0.55) + (Math.min(1, area) * 0.3) + (confidence * 0.15);
+      // Priority emphasizes proximity first so the nearest/largest object is preferred.
+      const priority = (Math.min(1, area) * 0.75) + (confidence * 0.2) + (danger * 0.05);
       const spokenClass = this.toSpokenClassName(detection.className);
       const message = direction === 'ahead'
         ? `${spokenClass} ahead`
         : `${spokenClass} on the ${direction}`;
 
-      if (!bestCandidate || priority > bestCandidate.priority) {
-        bestCandidate = {
-          className: detection.className,
-          confidence,
-          area,
-          danger,
-          direction,
-          priority,
-          message,
-        };
+      const candidate: AnnouncementCandidate = {
+        className: detection.className,
+        confidence,
+        area,
+        danger,
+        direction,
+        priority,
+        message,
+      };
+
+      if (!bestCandidate || this.isBetterCandidate(candidate, bestCandidate)) {
+        bestCandidate = candidate;
       }
     }
 
     return bestCandidate;
+  }
+
+  private isBetterCandidate(
+    candidate: AnnouncementCandidate,
+    currentBest: AnnouncementCandidate,
+  ): boolean {
+    if (candidate.area > currentBest.area + AREA_EPSILON) {
+      return true;
+    }
+
+    if (Math.abs(candidate.area - currentBest.area) <= AREA_EPSILON) {
+      if (candidate.confidence > currentBest.confidence + CONFIDENCE_EPSILON) {
+        return true;
+      }
+
+      if (Math.abs(candidate.confidence - currentBest.confidence) <= CONFIDENCE_EPSILON) {
+        return candidate.danger > currentBest.danger;
+      }
+    }
+
+    return false;
   }
 
   private passesCooldowns(candidate: AnnouncementCandidate, now: number): boolean {
