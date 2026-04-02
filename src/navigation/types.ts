@@ -4,11 +4,21 @@
  * Type-safe navigation with React Navigation
  */
 
+import { RouteStep } from '../services/directionsService';
+
 export type RootStackParamList = {
   MainMenu: undefined;
   Choice: undefined;
+  Wayfinding: undefined;
   Wandering: undefined;
-  Destination: undefined;
+  Destination: {
+    origin?: { latitude: number; longitude: number };
+    destination?: { latitude: number; longitude: number };
+    destinationLabel?: string;
+    routeSteps?: RouteStep[];
+    totalDistanceMeters?: number;
+    totalDurationSeconds?: number;
+  } | undefined;
   Camera: undefined;
   Logs: undefined;
 };

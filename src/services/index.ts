@@ -13,3 +13,9 @@ export * from './convlstmWithoutIntentInference';
 
 // Export YOLO inference
 export * from './yoloInference';
+
+// Export Directions service (OSRM walking directions)
+export * from './directionsService';
+
+// Export Geocoding service (Nominatim / OpenStreetMap)
+export * from './geocodingService';

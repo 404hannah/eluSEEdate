@@ -3,9 +3,6 @@
  * 
  * Entry point of the app with a Start button
  * Navigates to CameraScreen when pressed or by saying "Start"
- * 
- * Design: Minimalistic black & white
- * App Name: EluSEEdate
  */
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
@@ -109,7 +106,7 @@ export default function MainMenuScreen({ navigation }: MainMenuScreenProps) {
   useFocusEffect(
     useCallback(() => {
       hasNavigatedRef.current = false;
-      let listeningTimeout: NodeJS.Timeout | null = null;
+      let listeningTimeout: ReturnType<typeof setTimeout> | null = null;
 
       const startListening = async () => {
         if (!modelLoaded || !readyToListen) return;

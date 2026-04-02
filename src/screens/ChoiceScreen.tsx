@@ -45,9 +45,9 @@ export default function ChoiceScreen({ navigation }: ChoiceScreenProps) {
   };
 
   const handleDestinationPress = () => {
-    Speech.speak('Starting destination mode', {
+    Speech.speak('Opening wayfinding', {
       language: 'en-US',
-      onDone: () => navigation.navigate('Destination'),
+      onDone: () => navigation.navigate('Wayfinding'),
     });
   };
 
@@ -83,7 +83,7 @@ export default function ChoiceScreen({ navigation }: ChoiceScreenProps) {
   useFocusEffect(
     useCallback(() => {
       hasNavigatedRef.current = false;
-      let listeningTimeout: NodeJS.Timeout | null = null;
+      let listeningTimeout: ReturnType<typeof setTimeout> | null = null;
 
       const startListening = async () => {
         if (!readyToListen) return;
@@ -106,12 +106,12 @@ export default function ChoiceScreen({ navigation }: ChoiceScreenProps) {
                 });
               } else if (lowerResult.includes('destination')) {
                 hasNavigatedRef.current = true;
-                setVoiceStatus('Starting destination mode...');
+                setVoiceStatus('Opening wayfinding...');
                 Vosk.stop();
                 setIsListening(false);
-                Speech.speak('Starting destination mode', {
+                Speech.speak('Opening wayfinding', {
                   language: 'en-US',
-                  onDone: () => navigation.navigate('Destination'),
+                  onDone: () => navigation.navigate('Wayfinding'),
                 });
               } else if (lowerResult.includes('back')) {
                 hasNavigatedRef.current = true;

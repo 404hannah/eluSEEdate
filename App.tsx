@@ -16,6 +16,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import MainMenuScreen from './src/screens/MainMenuScreen';
 import ChoiceScreen from './src/screens/ChoiceScreen';
+import WayfindingScreen from './src/screens/WayfindingScreen';
 import NoIntentScreen from './src/screens/NoIntentScreen';
 import IntentScreen from './src/screens/IntentScreen';
 import LogsScreen from './src/screens/LogsScreen';
@@ -48,6 +49,10 @@ export default function App() {
           <Stack.Screen 
             name="Choice" 
             component={ChoiceScreen}
+          />
+          <Stack.Screen 
+            name="Wayfinding" 
+            component={WayfindingScreen}
           />
           <Stack.Screen 
             name="Wandering" 

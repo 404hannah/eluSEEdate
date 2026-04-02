@@ -5,6 +5,7 @@
 
 export { default as MainMenuScreen } from './MainMenuScreen';
 export { default as ChoiceScreen } from './ChoiceScreen';
+export { default as WayfindingScreen } from './WayfindingScreen';
 export { default as NoIntentScreen } from './NoIntentScreen';
 export { default as IntentScreen } from './IntentScreen';
 export { default as LogsScreen } from './LogsScreen';
