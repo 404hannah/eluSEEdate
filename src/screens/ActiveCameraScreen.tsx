@@ -118,6 +118,10 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
   const isYOLOInferencingRef = useRef<boolean>(false);
   const isModelLoadedRef = useRef<boolean>(false);
   const isYOLOModelLoadedRef = useRef<boolean>(false);
+  const isCameraReadyRef = useRef<boolean>(false);
+  const isPictureSizeConfiguredRef = useRef<boolean>(false);
+  const hasConfiguredPictureSizeRef = useRef<boolean>(false);
+  const isConfiguringPictureSizeRef = useRef<boolean>(false);
   const hasFirstPredictionRef = useRef<boolean>(false);
   const captureSequenceRef = useRef<number>(0);
   const predictionCountRef = useRef<number>(0);
@@ -126,7 +130,18 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
   const captureIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const configurePictureSize = useCallback(async () => {
+    if (hasConfiguredPictureSizeRef.current || isConfiguringPictureSizeRef.current) {
+      return;
+    }
+
+    isConfiguringPictureSizeRef.current = true;
+    isPictureSizeConfiguredRef.current = false;
+    setIsPictureSizeConfigured(false);
+
     if (!cameraRef.current) {
+      isPictureSizeConfiguredRef.current = true;
+      hasConfiguredPictureSizeRef.current = true;
+      isConfiguringPictureSizeRef.current = false;
       setIsPictureSizeConfigured(true);
       return;
     }
@@ -163,49 +178,56 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
         return currentDelta < bestDelta ? current : best;
       });
 
-      setCameraPictureSize(preferred.raw);
-      console.log(`[ActiveCamera] Selected picture size: ${preferred.raw}`);
+      setCameraPictureSize((previous) => (previous === preferred.raw ? previous : preferred.raw));
     } catch (error: any) {
       console.warn('[ActiveCamera] Failed to query picture sizes:', error?.message || error);
     } finally {
+      isConfiguringPictureSizeRef.current = false;
+      isPictureSizeConfiguredRef.current = true;
+      hasConfiguredPictureSizeRef.current = true;
       setIsPictureSizeConfigured(true);
     }
   }, []);
 
   /**
+   * Camera readiness callback from expo-camera.
+   * Guarded so one-time camera setup does not repeat on prop-driven remount events.
+   */
+  const handleCameraReady = useCallback(() => {
+    if (!isCameraReadyRef.current) {
+      isCameraReadyRef.current = true;
+      setIsCameraReady(true);
+    }
+
+    if (hasConfiguredPictureSizeRef.current || isConfiguringPictureSizeRef.current) {
+      return;
+    }
+
+    setDebugStatus('Camera ready | configuring picture size');
+    void configurePictureSize();
+  }, [configurePictureSize]);
+
+  /**
    * Initialize model on screen mount
    */
   useEffect(() => {
-    console.log('[ActiveCamera] Screen mounted (mode=' + mode + ')');
-    console.log('[ActiveCamera] Permission status:', permission?.granted ? 'granted' : 'not granted');
+    isCameraReadyRef.current = false;
+    isPictureSizeConfiguredRef.current = false;
+    hasConfiguredPictureSizeRef.current = false;
+    isConfiguringPictureSizeRef.current = false;
     
     const initModels = async () => {
-      console.log('[ActiveCamera] Initializing models for', modeLabel, 'mode...');
       setDebugStatus('Loading models...');
       
       // Initialize ConvLSTM model
       const convlstmLoaded = await convlstmService.initializeModel();
       setIsModelLoaded(convlstmLoaded);
       isModelLoadedRef.current = convlstmLoaded;
-      if (convlstmLoaded) {
-        console.log(
-          '[ActiveCamera] ConvLSTM initialized successfully (' +
-            (useIntentPipeline ? 'intent pipeline' : 'wandering pipeline') +
-            ')'
-        );
-      } else {
-        console.log('[ActiveCamera] ConvLSTM model failed to load');
-      }
       
       // Initialize YOLO model
       const yoloLoaded = await initializeYOLOModel();
       setIsYOLOModelLoaded(yoloLoaded);
       isYOLOModelLoadedRef.current = yoloLoaded;
-      if (yoloLoaded) {
-        console.log('[ActiveCamera] YOLO model initialized successfully');
-      } else {
-        console.log('[ActiveCamera] YOLO model failed to load');
-      }
 
       if (convlstmLoaded && yoloLoaded) {
         setDebugStatus('Models ready');
@@ -223,26 +245,16 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
     // Cleanup on unmount — use refs only, no state updates
     return () => {
       isCapturingRef.current = false;
+      isCameraReadyRef.current = false;
+      isPictureSizeConfiguredRef.current = false;
+      hasConfiguredPictureSizeRef.current = false;
+      isConfiguringPictureSizeRef.current = false;
       if (captureIntervalRef.current) {
         clearTimeout(captureIntervalRef.current);
         captureIntervalRef.current = null;
       }
     };
   }, []);
-
-  /**
-   * Start continuous frame capture when permission is granted
-   * Start regardless of model status (demo mode works too)
-   */
-  useEffect(() => {
-    if (permission?.granted && isCameraReady && isPictureSizeConfigured) {
-      // Small delay to ensure camera is ready
-      const timer = setTimeout(() => {
-        startCapture();
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [permission?.granted, isCameraReady, isPictureSizeConfigured]);
 
   useEffect(() => {
     isModelLoadedRef.current = isModelLoaded;
@@ -264,7 +276,6 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
     setPredictionCount(0);
     setIsCapturing(true);
     setDebugStatus('Starting capture...');
-    console.log(`[ActiveCamera] Starting continuous capture at ${REALISTIC_CAPTURE_FPS} FPS...`);
     
     // Use recursive timeout instead of setInterval for proper async handling
     const captureLoop = async (): Promise<void> => {
@@ -301,6 +312,19 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
   }, []);
 
   /**
+   * Start continuous frame capture when permission is granted
+   * Start regardless of model status (demo mode works too)
+   */
+  useEffect(() => {
+    if (permission?.granted && isCameraReady && isPictureSizeConfigured) {
+      const timer = setTimeout(() => {
+        startCapture();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [permission?.granted, isCameraReady, isPictureSizeConfigured, startCapture]);
+
+  /**
    * Stop frame capture
    */
   const stopCapture = useCallback(() => {
@@ -313,7 +337,6 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
     }
     setIsCapturing(false);
     setDebugStatus('Capture stopped');
-    console.log('[ActiveCamera] Capture stopped');
   }, []);
 
   /**
@@ -321,15 +344,13 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
    * Uses takePictureAsync which is slow but works in Expo Go
    */
   const captureFrame = async () => {
-    if (!cameraRef.current || !isCameraReady || !isPictureSizeConfigured) {
+    if (!cameraRef.current || !isCameraReadyRef.current || !isPictureSizeConfiguredRef.current) {
       return;
     }
     
     const startTime = Date.now();
     
     try {
-      setDebugStatus('Capturing frame...');
-      
       // Capture frame silently (no sound, no animation)
       const photo = await cameraRef.current.takePictureAsync({
         quality: 0.2,           // Low quality for faster capture
@@ -339,14 +360,12 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
       });
       
       if (!photo) {
-        console.log('[ActiveCamera] No photo returned');
         setDebugStatus('Capture failed - no photo');
         return;
       }
       
       const captureTime = Date.now() - startTime;
       setLastCaptureTime(captureTime);
-      console.log(`[ActiveCamera] Frame captured in ${captureTime}ms`);
       
       // Decode image to pixel data
       let frameData: FrameData;
@@ -364,8 +383,6 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
             timestamp: Date.now(),
             sequenceId,
           };
-          
-          console.log(`[ActiveCamera] Frame decoded #${sequenceId}: ${decoded.width}x${decoded.height}, ${decoded.data.length} bytes`);
         } catch (decodeError: any) {
           console.warn('[ActiveCamera] Failed to decode image:', decodeError?.message);
           setDebugStatus(`Decode error: ${decodeError?.message || 'invalid frame'}`);
@@ -393,15 +410,7 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
       const wasAdded = frameBufferRef.current.addFrame(frameData);
       
       if (wasAdded) {
-        // Use functional update to avoid stale closure
-        setFrameCount(prev => {
-          const newCount = prev + 1;
-          const buffer = frameBufferRef.current;
-          const bufferCount = buffer.getFrameCount();
-          setDebugStatus(`Captured: ${newCount} | Buffer: ${bufferCount}/${SEQ_LEN}`);
-          console.log(`[ActiveCamera] Frame ${newCount} added to buffer (${bufferCount}/${SEQ_LEN}) seq=${frameData.sequenceId ?? -1}`);
-          return newCount;
-        });
+        setFrameCount(prev => prev + 1);
         
         // Run inference when buffer is ready (or can predict early with padding)
         const buffer = frameBufferRef.current;
@@ -468,7 +477,6 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
       // Before first prediction, duplicate each buffered frame in order
       // (1,1,2,2,...) to bootstrap sequence length faster.
       const isFirstPrediction = !hasFirstPredictionRef.current;
-      const strategy = isFirstPrediction ? 'bootstrap-doubled' : 'tail-padded';
       const frames = isFirstPrediction
         ? buffer.getFramesBootstrapDoubled()
         : buffer.getFramesPadded();
@@ -476,14 +484,6 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
       if (frames.length !== SEQ_LEN) {
         throw new Error(`Invalid frame sequence length: ${frames.length}`);
       }
-
-      const sequenceIds = frames.map((f, idx) => f.sequenceId ?? -(idx + 1));
-      const uniqueIds = Array.from(new Set(sequenceIds));
-      const runTag = predictionCountRef.current + 1;
-      console.log(
-        `[TRACK][ActiveCamera][${mode}][Run ${runTag}] strategy=${strategy} buffer=${buffer.getFrameCount()}/${SEQ_LEN} unique=${uniqueIds.length}/${frames.length}`
-      );
-      console.log(`[TRACK][ActiveCamera][${mode}][Run ${runTag}] sequence=${sequenceIds.join(',')}`);
       
       // Preprocess frames
       const preprocessor = preprocessorRef.current;
@@ -504,8 +504,6 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
         const newPredCount = prev + 1;
         predictionCountRef.current = newPredCount;
         setDebugStatus(`Prediction #${newPredCount}: ${prediction.className}`);
-        console.log(`[ActiveCamera] Prediction #${newPredCount}: ${prediction.className} (${(prediction.confidence * 100).toFixed(1)}%)`);
-        console.log(`[ActiveCamera] Latency: ${newMetrics.totalLatencyMs.toFixed(1)}ms`);
         return newPredCount;
       });
       
@@ -529,9 +527,7 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
     }
   };
 
-  // Permission not determined yet
   if (!permission) {
-    console.log('[ActiveCamera] Permission not determined yet');
     return (
       <SafeAreaView style={styles.container}>
         <Text style={styles.permissionText}>Requesting camera permission...</Text>
@@ -539,9 +535,7 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
     );
   }
 
-  // Permission denied
   if (!permission.granted) {
-    console.log('[ActiveCamera] Permission denied');
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.permissionContainer}>
@@ -553,8 +547,6 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
       </SafeAreaView>
     );
   }
-  
-  console.log('[ActiveCamera] Rendering camera view - permission granted');
 
   return (
     <View style={styles.container}>
@@ -569,13 +561,7 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
         pictureSize={cameraPictureSize}
         animateShutter={false}
         enableTorch={false}
-        onCameraReady={() => {
-          console.log('[ActiveCamera] Camera is ready!');
-          setIsCameraReady(true);
-          setDebugStatus('Camera ready | configuring picture size');
-          setIsPictureSizeConfigured(false);
-          void configurePictureSize();
-        }}
+        onCameraReady={handleCameraReady}
         onMountError={(error) => {
           console.error('[ActiveCamera] Mount error:', error);
           setDebugStatus(`Camera error: ${error.message}`);

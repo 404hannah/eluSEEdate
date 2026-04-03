@@ -173,6 +173,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
     useCallback(() => {
       hasNavigatedRef.current = false;
       let timeout: ReturnType<typeof setTimeout> | null = null;
+      let restartTimeout: ReturnType<typeof setTimeout> | null = null;
 
       const startListening = async () => {
         if (!readyToListen) return;
@@ -214,7 +215,6 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
           if (!event.isFinal) return;
           const transcript = event.results[0]?.transcript ?? '';
           const lower = transcript.toLowerCase().trim();
-          console.log(`Wayfinding voice [${phase}]:`, lower);
           if (hasNavigatedRef.current) return;
 
           // ---- "back" is always honoured ----
@@ -251,7 +251,9 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
       const endListener = ExpoSpeechRecognitionModule.addListener('end', () => {
         setIsListening(false);
         if (!hasNavigatedRef.current && readyToListen) {
-          setTimeout(() => startListening(), 500);
+          restartTimeout = setTimeout(() => {
+            void startListening();
+          }, 500);
         }
       });
 
@@ -277,6 +279,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
         ExpoSpeechRecognitionModule.abort();
         setIsListening(false);
         if (timeout) clearTimeout(timeout);
+        if (restartTimeout) clearTimeout(restartTimeout);
       };
     }, [navigation, readyToListen, phase]),
   );

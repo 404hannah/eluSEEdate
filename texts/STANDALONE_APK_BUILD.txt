@@ -9,7 +9,7 @@ PREVIEW BUILD (for testing, no server needed)
 ---------------------------------------------
 
 1. Build preview APK for Android
-   eas build --profile preview --platform android
+   npx eas build --profile preview --platform android
 
 2. Wait for build to complete (~10-15 minutes)
 
@@ -22,7 +22,7 @@ PRODUCTION BUILD (for final release)
 ------------------------------------
 
 1. Build production AAB for Android
-   eas build --profile production --platform android
+   npx eas build --profile production --platform android
 
 2. Wait for build to complete
 
@@ -51,6 +51,6 @@ Preview/Production Build:
 QUICK COMMANDS
 --------------
 
-Preview APK:  eas build --profile preview --platform android
-Production:   eas build --profile production --platform android
-Check builds: eas build:list
+Preview APK:  npx eas build --profile preview --platform android
+Production:   npx eas build --profile production --platform android
+Check builds: npx eas build:list

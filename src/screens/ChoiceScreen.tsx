@@ -7,7 +7,7 @@
  * Design: Minimalistic black & white (matches MainMenu)
  */
 
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -91,8 +91,11 @@ export default function ChoiceScreen({ navigation }: ChoiceScreenProps) {
           await Vosk.start({ grammar: ['wandering', 'destination', 'back', '[unk]'] });
           setIsListening(true);
           setVoiceStatus('Say "Wandering", "Destination", or "Back"');
+          if (resultListenerRef.current) {
+            resultListenerRef.current.remove();
+            resultListenerRef.current = null;
+          }
           resultListenerRef.current = Vosk.onResult((result: string) => {
-            console.log('Choice voice result:', result);
             const lowerResult = result.toLowerCase();
             if (!hasNavigatedRef.current) {
               if (lowerResult.includes('wandering')) {

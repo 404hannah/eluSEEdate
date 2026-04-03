@@ -30,3 +30,8 @@ coverage/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Android local/build artifacts
+android/.gradle/
+android/build/
+android/app/build/

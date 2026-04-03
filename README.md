@@ -7,6 +7,14 @@
 
 React Native/Expo mobile application for real-time turn direction prediction using a ConvLSTM deep learning model with TensorFlow Lite inference.
 
+## Latest Release Summary (1.0.5)
+
+- Unified camera runtime remains centered on ActiveCamera mode routing.
+- Added release-hardening fixes for camera readiness lifecycle and capture stability.
+- Reduced temporary debug logging in camera and YOLO per-frame paths.
+- Updated wayfinding voice loop cleanup to clear delayed restart timers safely.
+- Added changelog tracking in CHANGELOG.md and refreshed technical reference in texts/TECHNICAL_APPENDIX.md.
+
 ## Overview
 
 This app uses two AI models working in parallel:
@@ -69,7 +77,7 @@ Minimalistic black & white palette for a clean, distraction-free interface.
 │   └── model/
 │       ├── convlstm.tflite          # ConvLSTM TFLite model file
 │       ├── convlstm.onnx            # ONNX model (backup)
-│       └── yolo-placeholder.txt     # Placeholder for YOLOv12 model
+│       └── yolo.tflite              # YOLOv12 TFLite model file
 ├── texts/
 │   ├── PACKAGE_DEPENDENCIES.txt     # All dependencies explained
 │   ├── TROUBLESHOOTING.txt          # Debugging and diagnostics guide
@@ -86,8 +94,11 @@ Minimalistic black & white palette for a clean, distraction-free interface.
     ├── navigation/
     │   └── types.ts                 # Navigation type definitions
     ├── screens/
-    │   ├── MainMenuScreen.tsx       # Main menu with Start button
-    │   └── CameraScreen.tsx         # Camera with dual-model inference
+    │   ├── MainMenuScreen.tsx       # Main menu with voice/touch start
+    │   ├── ChoiceScreen.tsx         # Wandering vs Destination mode selection
+    │   ├── WayfindingScreen.tsx     # Voice-first destination selection
+    │   ├── ActiveCameraScreen.tsx   # Unified camera inference runtime
+    │   └── logsScreen.tsx           # In-app log viewer
     ├── services/
     │   ├── preprocessor.ts          # Frame preprocessing (TypeScript)
     │   ├── convlstmWithoutIntentInference.ts  # ConvLSTM inference (no intent)
@@ -129,7 +140,7 @@ Minimalistic black & white palette for a clean, distraction-free interface.
 | Expected Inference | ~30-100ms (faster than ConvLSTM) |
 | Status | **Placeholder - awaiting real model** |
 
-**Note**: Currently using a placeholder for YOLO. The app will simulate detections in demo mode until you add your actual YOLOv12 .tflite model to `assets/model/yolo.tflite`.
+**Note**: In Expo Go, native TFLite inference is unavailable, so the app runs in demo mode. Development/preview builds can run real YOLO inference from assets/model/yolo.tflite.
 
 ## Intent Channels
 
