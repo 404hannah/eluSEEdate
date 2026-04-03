@@ -18,7 +18,8 @@ import {
   FRAME_HEIGHT,
   FRAME_WIDTH,
   CHANNELS,
-  DEVICE_CONFIG
+  DEVICE_CONFIG,
+  ENABLE_INTENT_MODE
 } from '../config/modelConfig';
 
 /**
@@ -31,6 +32,8 @@ export interface FrameData {
   height: number;        // Original frame height
   timestamp: number;     // Capture timestamp in ms
   sequenceId?: number;   // Monotonic capture sequence ID for debugging/tracing
+  intent?: number;       // Intent: 0 - Front, 1 - Left, 2 - Right
+  intentDistance: number;       // Distance before intent occurs
 }
 
 /**
@@ -292,9 +295,15 @@ export class VideoPreprocessor {
     const frameHeight = frame.height;
     const source = frame.data;
 
-    const channel0Offset = frameOffset;
-    const channel1Offset = frameOffset + this.framePlaneSize;
-    const channel2Offset = frameOffset + this.framePlaneSize * 2;
+    const channelOffset = [];
+    for (let i = 0; i < CHANNELS; i++) {
+      channelOffset[i] = frameOffset + this.framePlaneSize * i;
+    }
+
+    // const channel0Offset = frameOffset;
+    // const channel1Offset = frameOffset + this.framePlaneSize;
+    // const channel2Offset = frameOffset + this.framePlaneSize * 2;
+
     const maxSrcX = frameWidth - 1;
     const maxSrcY = frameHeight - 1;
 
@@ -324,16 +333,41 @@ export class VideoPreprocessor {
         const valueB = source[srcBase + 2];
 
         if (this.normalize) {
-          tensorData[channel0Offset + pixelOffset] = valueR / 255.0;
-          tensorData[channel1Offset + pixelOffset] = valueG / 255.0;
-          tensorData[channel2Offset + pixelOffset] = valueB / 255.0;
+          tensorData[channelOffset[0] + pixelOffset] = valueR / 255.0;
+          tensorData[channelOffset[1] + pixelOffset] = valueG / 255.0;
+          tensorData[channelOffset[2] + pixelOffset] = valueB / 255.0;
         } else {
-          tensorData[channel0Offset + pixelOffset] = valueR;
-          tensorData[channel1Offset + pixelOffset] = valueG;
-          tensorData[channel2Offset + pixelOffset] = valueB;
+          tensorData[channelOffset[0] + pixelOffset] = valueR;
+          tensorData[channelOffset[1] + pixelOffset] = valueG;
+          tensorData[channelOffset[2] + pixelOffset] = valueB;
+        }
+        
+        // Fill intent channels if with destination
+        if (ENABLE_INTENT_MODE){
+          this.addIntent(frame, tensorData, channelOffset, pixelOffset)
         }
       }
     }
+  }
+
+  private addIntent(
+    frame: FrameData,
+    tensorData: Float32Array,
+    channelOffset: number[],
+    pixelOffset: number
+  ): void {
+    // Obtain intent
+    const intentClass = frame.intent || 0; // Default to front
+    const intentDistance = frame.intentDistance || 0; // Default to 0
+
+    // Check if intent would occur within the next few meters (<5)
+    if (intentDistance <= 5) {
+      // Fill the pixel's specified intent channel of intent (1)
+      tensorData[channelOffset[intentClass + 3] + pixelOffset] = 1;
+    } else {
+      // Fill the pixel's front channel of intent (1)
+      tensorData[channelOffset[3] + pixelOffset] = 1;
+    }    
   }
 
   /**
