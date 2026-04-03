@@ -52,6 +52,13 @@ import {
   ENABLE_INTENT_MODE,
 } from '../config/modelConfig';
 import { decodeBase64ToPixels } from '../utils/imageUtils';
+import { fetchWalkingDirections, maneuverToIntent } from '../services/directionsService';
+import * as Location from 'expo-location';
+import { getDistance as getGeoDistance } from 'geolib'; // npm install geolib
+
+const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+const [directionsCache, setDirectionsCache] = useState<DirectionsResult | null>(null);
+const [currentStepIndex, setCurrentStepIndex] = useState<number>(0);
 
 type ActiveCameraScreenProps = NativeStackScreenProps<RootStackParamList, 'ActiveCamera'>;
 
@@ -170,6 +177,23 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
     
     initModels();
     
+    if (ENABLE_INTENT_MODE) {
+      const requestLocationPermission = async () => {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const location = await Location.getCurrentPositionAsync({});
+          setUserLocation({
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+          });
+        } else {
+          console.warn('Location permission denied');
+        }
+      };
+      
+      requestLocationPermission();
+    }
+    
     // Cleanup on unmount — use refs only, no state updates
     return () => {
       isCapturingRef.current = false;
@@ -202,6 +226,23 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
     isYOLOModelLoadedRef.current = isYOLOModelLoaded;
   }, [isYOLOModelLoaded]);
 
+  // Directions cache
+  useEffect(() => {
+    if (mode === 'destination' && userLocation && route.params.destination) {
+      const destination = route.params.destination; // { latitude, longitude }
+      const fetchAndCacheDirections = async () => {
+        try {
+          const directions = await fetchWalkingDirections(userLocation, destination);
+          setDirectionsCache(directions);
+          setCurrentStepIndex(0); // Start at first step
+          console.log('Directions cached:', directions.steps.length, 'steps');
+        } catch (error) {
+          console.warn('Failed to fetch directions:', error);
+        }
+      };
+      fetchAndCacheDirections();
+    }
+  }, [mode, userLocation, route.params.destination]);
   /**
    * Start continuous frame capture
    */
@@ -215,7 +256,7 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
     setIsCapturing(true);
     setDebugStatus('Starting capture...');
     console.log(`[ActiveCamera] Starting continuous capture at ${REALISTIC_CAPTURE_FPS} FPS...`);
-    
+
     // Use recursive timeout instead of setInterval for proper async handling
     const captureLoop = async () => {
       if (!isCapturingRef.current) return;
@@ -292,12 +333,39 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
           const decoded = await decodeBase64ToPixels(photo.base64, FRAME_WIDTH, FRAME_HEIGHT);
           const sequenceId = ++captureSequenceRef.current;
           
+          let intent = -1;
+          let intentDistance = 0;
+        
+          if (ENABLE_INTENT_MODE && directionsCache && userLocation) {
+            const directions = directionsCache;
+            const currentStep = directions.steps[currentStepIndex];
+
+            const steps = directions.steps;
+            if (currentStepIndex < steps.length) {
+              const currentStep = steps[currentStepIndex];
+              
+              // Check if the end of the current step is reached
+              const stepEnd = currentStep.endLocation;
+              const distanceToEnd = getGeoDistance(userLocation, stepEnd);
+              if (distanceToEnd < 10) { 
+                setCurrentStepIndex(prev => Math.min(prev + 1, steps.length - 1));
+              }
+              
+              // Set intent for current step
+              intent = maneuverToIntent(currentStep.maneuver);
+              intentDistance = currentStep.distanceMeters;
+            }
+          }
+
+          // Can I add intent here if YOLO accepts this as data
           frameData = {
             data: decoded.data,
             width: decoded.width,
             height: decoded.height,
             timestamp: Date.now(),
             sequenceId,
+            intent,
+            intentDistance
           };
           
           console.log(`[ActiveCamera] Frame decoded #${sequenceId}: ${decoded.width}x${decoded.height}, ${decoded.data.length} bytes`);

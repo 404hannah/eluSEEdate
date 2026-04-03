@@ -27,13 +27,13 @@ import {
  * Holds raw pixel data from camera capture
  */
 export interface FrameData {
-  data: Uint8Array;      // Raw pixel data (RGBA format from camera)
-  width: number;         // Original frame width
-  height: number;        // Original frame height
-  timestamp: number;     // Capture timestamp in ms
-  sequenceId?: number;   // Monotonic capture sequence ID for debugging/tracing
-  intent?: number;       // Intent: 0 - Front, 1 - Left, 2 - Right
-  intentDistance: number;       // Distance before intent occurs
+  data: Uint8Array;         // Raw pixel data (RGBA format from camera)
+  width: number;            // Original frame width
+  height: number;           // Original frame height
+  timestamp: number;        // Capture timestamp in ms
+  sequenceId?: number;      // Monotonic capture sequence ID for debugging/tracing
+  intent?: number;          // Intent: 0 - Front, 1 - Left, 2 - Right
+  intentDistance: number;   // Distance before intent occurs
 }
 
 /**
