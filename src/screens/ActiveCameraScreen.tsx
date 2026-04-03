@@ -1,9 +1,12 @@
 /*
- * Intent Screen - EluSEEdate
+ * Active Camera Screen - EluSEEdate
  *
  * Live camera view with real-time turn prediction
  * - Captures frames silently from rear camera (no sound/flash)
  * - Uses simplified capture approach compatible with Expo Go
+ * - Supports two modes via route params:
+ *   1) wandering: lightweight pipeline
+ *   2) destination: intent-capable pipeline (if enabled globally)
  * - Shows predicted direction at bottom
  * - Shows inference/latency metrics at top-left
  *
@@ -19,23 +22,22 @@ import {
   StatusBar,
   TouchableOpacity,
   Dimensions,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import {
   FrameBuffer,
   VideoPreprocessor,
   FrameData,
 } from '../services/preprocessor';
-import {
-  runPrediction,
-  initializeModel,
+import type {
   PredictionResult,
   PerformanceMetrics,
 } from '../services/convlstmWithoutIntentInference';
+import * as convlstmWithoutIntent from '../services/convlstmWithoutIntentInference';
+import * as convlstmWithIntent from '../services/convlstmWithIntentInference';
 import {
   runYOLODetection as detectObjects,
   initializeYOLOModel,
@@ -43,18 +45,29 @@ import {
   Detection,
 } from '../services/yoloInference';
 import BoundingBoxOverlay from '../components/BoundingBoxOverlay';
-import { SEQ_LEN, DEVICE_CONFIG, FRAME_WIDTH, FRAME_HEIGHT } from '../config/modelConfig';
+import {
+  SEQ_LEN,
+  FRAME_WIDTH,
+  FRAME_HEIGHT,
+  ENABLE_INTENT_MODE,
+} from '../config/modelConfig';
 import { decodeBase64ToPixels } from '../utils/imageUtils';
-import { ObjectSpeechService } from '../services/objectSpeechService';
 
-type IntentScreenProps = {
-  navigation: NativeStackNavigationProp<RootStackParamList, 'Camera'>;
-};
+type ActiveCameraScreenProps = NativeStackScreenProps<RootStackParamList, 'ActiveCamera'>;
 
 // Realistic capture FPS for takePictureAsync (slow but works in Expo Go)
 const REALISTIC_CAPTURE_FPS = 2;
 
-export default function IntentScreen({ navigation }: IntentScreenProps) {
+export default function ActiveCameraScreen({ navigation, route }: ActiveCameraScreenProps) {
+  const mode = route.params.mode;
+  const modeLabel = mode === 'destination' ? 'Destination' : 'Wandering';
+  const useIntentPipeline = mode === 'destination' && ENABLE_INTENT_MODE;
+  const convlstmService = useIntentPipeline ? convlstmWithIntent : convlstmWithoutIntent;
+
+  const destinationLabel = route.params.destinationLabel;
+  const routeStepCount = route.params.routeSteps?.length ?? 0;
+  const totalDistanceMeters = route.params.totalDistanceMeters;
+
   // Camera permission state
   const [permission, requestPermission] = useCameraPermissions();
   
@@ -88,19 +101,13 @@ export default function IntentScreen({ navigation }: IntentScreenProps) {
   const [isCapturing, setIsCapturing] = useState<boolean>(false);
   const [frameCount, setFrameCount] = useState<number>(0);
   const [predictionCount, setPredictionCount] = useState<number>(0);
-  const [debugStatus, setDebugStatus] = useState<string>('Initializing...');
+  const [debugStatus, setDebugStatus] = useState<string>(`Initializing ${modeLabel} mode...`);
   const [lastCaptureTime, setLastCaptureTime] = useState<number>(0);
   
   // YOLO detection state
   const [isYOLOModelLoaded, setIsYOLOModelLoaded] = useState<boolean>(false);
   const [yoloDetections, setYoloDetections] = useState<Detection[]>([]);
   const [yoloInferenceTime, setYoloInferenceTime] = useState<number>(0);
-  const objectSpeechServiceRef = useRef<ObjectSpeechService>(
-    new ObjectSpeechService({
-      confidenceThreshold: 0.45,
-      sameClassCooldownMs: 4000,
-    })
-  );
   
   // Inference lock to prevent concurrent inferences
   const isInferencingRef = useRef<boolean>(false);
@@ -119,21 +126,25 @@ export default function IntentScreen({ navigation }: IntentScreenProps) {
    * Initialize model on screen mount
    */
   useEffect(() => {
-    console.log('[Intent] Screen mounted');
-    console.log('[Intent] Permission status:', permission?.granted ? 'granted' : 'not granted');
+    console.log('[ActiveCamera] Screen mounted (mode=' + mode + ')');
+    console.log('[ActiveCamera] Permission status:', permission?.granted ? 'granted' : 'not granted');
     
     const initModels = async () => {
-      console.log('[Intent] Initializing models...');
+      console.log('[ActiveCamera] Initializing models for', modeLabel, 'mode...');
       setDebugStatus('Loading models...');
       
       // Initialize ConvLSTM model
-      const convlstmLoaded = await initializeModel();
+      const convlstmLoaded = await convlstmService.initializeModel();
       setIsModelLoaded(convlstmLoaded);
       isModelLoadedRef.current = convlstmLoaded;
       if (convlstmLoaded) {
-        console.log('[Intent] ConvLSTM model initialized successfully');
+        console.log(
+          '[ActiveCamera] ConvLSTM initialized successfully (' +
+            (useIntentPipeline ? 'intent pipeline' : 'wandering pipeline') +
+            ')'
+        );
       } else {
-        console.log('[Intent] ConvLSTM model failed to load');
+        console.log('[ActiveCamera] ConvLSTM model failed to load');
       }
       
       // Initialize YOLO model
@@ -141,9 +152,9 @@ export default function IntentScreen({ navigation }: IntentScreenProps) {
       setIsYOLOModelLoaded(yoloLoaded);
       isYOLOModelLoadedRef.current = yoloLoaded;
       if (yoloLoaded) {
-        console.log('[Intent] YOLO model initialized successfully');
+        console.log('[ActiveCamera] YOLO model initialized successfully');
       } else {
-        console.log('[Intent] YOLO model failed to load');
+        console.log('[ActiveCamera] YOLO model failed to load');
       }
 
       if (convlstmLoaded && yoloLoaded) {
@@ -203,7 +214,7 @@ export default function IntentScreen({ navigation }: IntentScreenProps) {
     setPredictionCount(0);
     setIsCapturing(true);
     setDebugStatus('Starting capture...');
-    console.log(`[Intent] Starting continuous capture at ${REALISTIC_CAPTURE_FPS} FPS...`);
+    console.log(`[ActiveCamera] Starting continuous capture at ${REALISTIC_CAPTURE_FPS} FPS...`);
     
     // Use recursive timeout instead of setInterval for proper async handling
     const captureLoop = async () => {
@@ -237,7 +248,7 @@ export default function IntentScreen({ navigation }: IntentScreenProps) {
     }
     setIsCapturing(false);
     setDebugStatus('Capture stopped');
-    console.log('[Intent] Capture stopped');
+    console.log('[ActiveCamera] Capture stopped');
   }, []);
 
   /**
@@ -263,14 +274,14 @@ export default function IntentScreen({ navigation }: IntentScreenProps) {
       });
       
       if (!photo) {
-        console.log('[Intent] No photo returned');
+        console.log('[ActiveCamera] No photo returned');
         setDebugStatus('Capture failed - no photo');
         return;
       }
       
       const captureTime = Date.now() - startTime;
       setLastCaptureTime(captureTime);
-      console.log(`[Intent] Frame captured in ${captureTime}ms`);
+      console.log(`[ActiveCamera] Frame captured in ${captureTime}ms`);
       
       // Decode base64 image to pixel data
       let frameData: FrameData;
@@ -289,15 +300,15 @@ export default function IntentScreen({ navigation }: IntentScreenProps) {
             sequenceId,
           };
           
-          console.log(`[Intent] Frame decoded #${sequenceId}: ${decoded.width}x${decoded.height}, ${decoded.data.length} bytes`);
+          console.log(`[ActiveCamera] Frame decoded #${sequenceId}: ${decoded.width}x${decoded.height}, ${decoded.data.length} bytes`);
         } catch (decodeError: any) {
-          console.warn('[Intent] Failed to decode image:', decodeError?.message);
+          console.warn('[ActiveCamera] Failed to decode image:', decodeError?.message);
           setDebugStatus(`Decode error: ${decodeError?.message || 'invalid frame'}`);
           return;
         }
       } else {
         // No base64 data available.
-        console.warn('[Intent] No base64 data in photo');
+        console.warn('[ActiveCamera] No base64 data in photo');
         setDebugStatus('Capture error: no base64 frame data');
         return;
       }
@@ -312,7 +323,7 @@ export default function IntentScreen({ navigation }: IntentScreenProps) {
           const buffer = frameBufferRef.current;
           const bufferCount = buffer.getFrameCount();
           setDebugStatus(`Captured: ${newCount} | Buffer: ${bufferCount}/${SEQ_LEN}`);
-          console.log(`[Intent] Frame ${newCount} added to buffer (${bufferCount}/${SEQ_LEN}) seq=${frameData.sequenceId ?? -1}`);
+          console.log(`[ActiveCamera] Frame ${newCount} added to buffer (${bufferCount}/${SEQ_LEN}) seq=${frameData.sequenceId ?? -1}`);
           return newCount;
         });
         
@@ -328,7 +339,7 @@ export default function IntentScreen({ navigation }: IntentScreenProps) {
         }
       }
     } catch (error: any) {
-      console.error('[Intent] Frame capture error:', error?.message || error);
+      console.error('[ActiveCamera] Frame capture error:', error?.message || error);
       setDebugStatus(`Error: ${error?.message || 'capture failed'}`);
     }
   };
@@ -394,16 +405,16 @@ export default function IntentScreen({ navigation }: IntentScreenProps) {
       const uniqueIds = Array.from(new Set(sequenceIds));
       const runTag = predictionCountRef.current + 1;
       console.log(
-        `[TRACK][Intent][Run ${runTag}] strategy=${strategy} buffer=${buffer.getFrameCount()}/${SEQ_LEN} unique=${uniqueIds.length}/${frames.length}`
+        `[TRACK][ActiveCamera][${mode}][Run ${runTag}] strategy=${strategy} buffer=${buffer.getFrameCount()}/${SEQ_LEN} unique=${uniqueIds.length}/${frames.length}`
       );
-      console.log(`[TRACK][Intent][Run ${runTag}] sequence=${sequenceIds.join(',')}`);
+      console.log(`[TRACK][ActiveCamera][${mode}][Run ${runTag}] sequence=${sequenceIds.join(',')}`);
       
       // Preprocess frames
       const preprocessor = preprocessorRef.current;
       const tensor = preprocessor.preprocessFrameSequence(frames);
       
       // Run prediction
-      const { prediction, metrics: newMetrics } = await runPrediction(tensor);
+      const { prediction, metrics: newMetrics } = await convlstmService.runPrediction(tensor);
       
       // Update state
       setCurrentPrediction(prediction);
@@ -417,13 +428,13 @@ export default function IntentScreen({ navigation }: IntentScreenProps) {
         const newPredCount = prev + 1;
         predictionCountRef.current = newPredCount;
         setDebugStatus(`Prediction #${newPredCount}: ${prediction.className}`);
-        console.log(`[Intent] Prediction #${newPredCount}: ${prediction.className} (${(prediction.confidence * 100).toFixed(1)}%)`);
-        console.log(`[Intent] Latency: ${newMetrics.totalLatencyMs.toFixed(1)}ms`);
+        console.log(`[ActiveCamera] Prediction #${newPredCount}: ${prediction.className} (${(prediction.confidence * 100).toFixed(1)}%)`);
+        console.log(`[ActiveCamera] Latency: ${newMetrics.totalLatencyMs.toFixed(1)}ms`);
         return newPredCount;
       });
       
     } catch (error: any) {
-      console.error('[Intent] Inference error:', error?.message || error);
+      console.error('[ActiveCamera] Inference error:', error?.message || error);
       setDebugStatus(`Inference error: ${error?.message || 'unknown'}`);
     } finally {
       isInferencingRef.current = false;
@@ -436,7 +447,6 @@ export default function IntentScreen({ navigation }: IntentScreenProps) {
   const handleBack = () => {
     stopCapture();
     if (navigation.canGoBack && navigation.canGoBack()) {
-      void objectSpeechServiceRef.current.stop();
       navigation.goBack();
     } else if (navigation.navigate) {
       navigation.navigate('MainMenu');
@@ -445,7 +455,7 @@ export default function IntentScreen({ navigation }: IntentScreenProps) {
 
   // Permission not determined yet
   if (!permission) {
-    console.log('[Intent] Permission not determined yet');
+    console.log('[ActiveCamera] Permission not determined yet');
     return (
       <SafeAreaView style={styles.container}>
         <Text style={styles.permissionText}>Requesting camera permission...</Text>
@@ -455,7 +465,7 @@ export default function IntentScreen({ navigation }: IntentScreenProps) {
 
   // Permission denied
   if (!permission.granted) {
-    console.log('[Intent] Permission denied');
+    console.log('[ActiveCamera] Permission denied');
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.permissionContainer}>
@@ -468,7 +478,7 @@ export default function IntentScreen({ navigation }: IntentScreenProps) {
     );
   }
   
-  console.log('[Intent] Rendering camera view - permission granted');
+  console.log('[ActiveCamera] Rendering camera view - permission granted');
 
   return (
     <View style={styles.container}>
@@ -483,12 +493,12 @@ export default function IntentScreen({ navigation }: IntentScreenProps) {
         animateShutter={false}
         enableTorch={false}
         onCameraReady={() => {
-          console.log('[Intent] Camera is ready!');
+          console.log('[ActiveCamera] Camera is ready!');
           setIsCameraReady(true);
           setDebugStatus('Camera ready');
         }}
         onMountError={(error) => {
-          console.error('[Intent] Mount error:', error);
+          console.error('[ActiveCamera] Mount error:', error);
           setDebugStatus(`Camera error: ${error.message}`);
         }}
       />
@@ -513,6 +523,23 @@ export default function IntentScreen({ navigation }: IntentScreenProps) {
         {/* Performance Overlay (Top-Left) */}
         <View style={styles.performanceOverlay}>
           <Text style={styles.performanceTitle}>Performance</Text>
+          <Text style={styles.performanceText}>
+            Mode: {modeLabel}
+          </Text>
+          <Text style={styles.performanceText}>
+            ConvLSTM: {useIntentPipeline ? 'Intent pipeline' : 'Wandering pipeline'}
+          </Text>
+          {mode === 'destination' && destinationLabel ? (
+            <Text style={styles.performanceText} numberOfLines={2}>
+              Target: {destinationLabel}
+            </Text>
+          ) : null}
+          {mode === 'destination' ? (
+            <Text style={styles.performanceText}>
+              Steps: {routeStepCount} | Dist: {totalDistanceMeters ? (totalDistanceMeters / 1000).toFixed(2) : '0.00'} km
+            </Text>
+          ) : null}
+          <View style={styles.performanceDivider} />
           <Text style={styles.performanceText}>
             Capture: {lastCaptureTime} ms
           </Text>

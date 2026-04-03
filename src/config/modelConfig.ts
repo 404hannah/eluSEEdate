@@ -63,6 +63,14 @@ export const MODEL_CONFIG = {
     inferenceBackend: 'TensorFlow Lite',
     preprocessingLocation: 'On-device',
     modelFormat: 'TFLite'
+  },
+
+  // Runtime switches
+  runtime: {
+    // Global toggle for destination-mode intent pipeline experiments.
+    // false = always use lightweight wandering pipeline.
+    // true  = allow destination mode to use intent-aware pipeline.
+    enableIntentMode: false,
   }
 } as const;
 
@@ -75,6 +83,7 @@ export const CHANNELS = MODEL_CONFIG.preprocessing.channels;
 export const NUM_CLASSES = MODEL_CONFIG.model.numClasses;
 export const CLASS_NAMES = MODEL_CONFIG.classes.map(c => c.name);
 export const INTENT_FRAMES = MODEL_CONFIG.intent.intentFrames;
+export const ENABLE_INTENT_MODE = MODEL_CONFIG.runtime.enableIntentMode;
 
 // Device-specific configuration for Redmi Note 13 Pro 5G
 export const DEVICE_CONFIG = {

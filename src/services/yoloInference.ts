@@ -174,13 +174,8 @@ class YOLOModelManager {
       // Run model inference
       const outputTensor = await this.model.run([preprocessed.data]);
       console.log('[YOLO-TFLite] Model inference complete, output:', typeof outputTensor);
-<<<<<<< HEAD
-      
-      // Parse YOLO output (format depends on your specific YOLOv12 model)
-=======
 
       // Parse YOLO output (format depends on the active YOLOv12 model).
->>>>>>> ba3a7bd3ab6c9470cf4006b4a9690aa31348096f
       const detections = this.parseYOLOOutput(outputTensor, frame.width, frame.height);
       
       console.log('[YOLO-TFLite] Detected', detections.length, 'objects');

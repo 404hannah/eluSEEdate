@@ -6,20 +6,23 @@
 
 import { RouteStep } from '../services/directionsService';
 
+export type ActiveCameraMode = 'wandering' | 'destination';
+
+export type ActiveCameraParams = {
+  mode: ActiveCameraMode;
+  origin?: { latitude: number; longitude: number };
+  destination?: { latitude: number; longitude: number };
+  destinationLabel?: string;
+  routeSteps?: RouteStep[];
+  totalDistanceMeters?: number;
+  totalDurationSeconds?: number;
+};
+
 export type RootStackParamList = {
   MainMenu: undefined;
   Choice: undefined;
   Wayfinding: undefined;
-  Wandering: undefined;
-  Destination: {
-    origin?: { latitude: number; longitude: number };
-    destination?: { latitude: number; longitude: number };
-    destinationLabel?: string;
-    routeSteps?: RouteStep[];
-    totalDistanceMeters?: number;
-    totalDurationSeconds?: number;
-  } | undefined;
-  Camera: undefined;
+  ActiveCamera: ActiveCameraParams;
   Logs: undefined;
 };
 

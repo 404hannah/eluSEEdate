@@ -17,9 +17,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import MainMenuScreen from './src/screens/MainMenuScreen';
 import ChoiceScreen from './src/screens/ChoiceScreen';
 import WayfindingScreen from './src/screens/WayfindingScreen';
-import NoIntentScreen from './src/screens/NoIntentScreen';
-import IntentScreen from './src/screens/IntentScreen';
-import LogsScreen from './src/screens/LogsScreen';
+import ActiveCameraScreen from './src/screens/ActiveCameraScreen';
+import LogsScreen from './src/screens/logsScreen';
 import { RootStackParamList } from './src/navigation/types';
 
 // Ignore specific warnings (for development)
@@ -55,16 +54,8 @@ export default function App() {
             component={WayfindingScreen}
           />
           <Stack.Screen 
-            name="Wandering" 
-            component={NoIntentScreen}
-          />
-          <Stack.Screen 
-            name="Destination" 
-            component={IntentScreen}
-          />
-          <Stack.Screen 
-            name="Camera" 
-            component={NoIntentScreen}
+            name="ActiveCamera" 
+            component={ActiveCameraScreen}
           />
           <Stack.Screen 
             name="Logs" 

@@ -3,325 +3,247 @@
                      EluSEEDate Mobile App
 ================================================================================
 
-This document provides a brief explanation of all key variables used in the 
-codebase. Variables are organized by configuration area and file.
+This document defines the main runtime variables, route params, and configuration
+values used by the current app architecture.
+
+Last updated: April 3, 2026
+
+================================================================================
+ARCHITECTURE SUMMARY
+================================================================================
+
+Core architecture now uses one unified camera screen:
+1. ActiveCameraScreen.tsx
+
+Removed duplicate screens:
+1. NoIntentScreen.tsx (removed)
+2. IntentScreen.tsx (removed)
+
+Unified behavior is selected via route param:
+1. mode: 'wandering' | 'destination'
+
+Global pipeline switch:
+1. ENABLE_INTENT_MODE (src/config/modelConfig.ts)
+
+Behavior matrix:
+1. mode='wandering' -> lightweight ConvLSTM path
+2. mode='destination' + ENABLE_INTENT_MODE=false -> lightweight ConvLSTM path
+3. mode='destination' + ENABLE_INTENT_MODE=true -> intent-aware ConvLSTM path
+
+================================================================================
+NAVIGATION CONTRACT (src/navigation/types.ts)
+================================================================================
+
+RootStackParamList routes:
+1. MainMenu: undefined
+2. Choice: undefined
+3. Wayfinding: undefined
+4. ActiveCamera: ActiveCameraParams
+5. Logs: undefined
+
+ActiveCameraParams:
+1. mode: 'wandering' | 'destination' (required)
+2. origin?: { latitude: number; longitude: number }
+3. destination?: { latitude: number; longitude: number }
+4. destinationLabel?: string
+5. routeSteps?: RouteStep[]
+6. totalDistanceMeters?: number
+7. totalDurationSeconds?: number
+
+Current route graph:
+1. MainMenu -> Choice
+2. Choice (Wandering) -> ActiveCamera { mode: 'wandering' }
+3. Choice (Destination) -> Wayfinding
+4. Wayfinding (confirmed) -> ActiveCamera { mode: 'destination', ...route payload }
+5. MainMenu -> Logs
 
 ================================================================================
 MODEL CONFIGURATION (src/config/modelConfig.ts)
 ================================================================================
 
-MODEL ARCHITECTURE:
-- inputDim: Number of input channels (6 = 3 RGB + 3 Intent)
-- hiddenDim: Hidden layer dimensions [64, 32] for ConvLSTM layers
-- kernelSize: Convolutional filter size [3, 3]
-- numLayers: Number of stacked ConvLSTM layers (2)
-- height: Frame height in pixels (128)
-- width: Frame width in pixels (128)
-- numClasses: Number of output classes (3: Front, Left, Right)
-- dropoutRate: Dropout probability for regularization (0.5)
-- hasGlobalAvgPool: Whether model has Global Average Pooling layer (true)
+ConvLSTM model metadata:
+1. inputDim: 6 (RGB 3 + Intent 3)
+2. hiddenDim: [64, 32]
+3. kernelSize: [3, 3]
+4. numLayers: 2
+5. height: 128
+6. width: 128
+7. numClasses: 3 (Front, Left, Right)
 
-PREPROCESSING:
-- seqLen: Number of frames per sequence (20)
-- fps: Target frames per second for processing (20)
-- duration: Video duration in seconds (1)
-- channels: Total channels per frame (6)
-- normalize: Whether to normalize pixel values to [0,1] (true)
-- colorFormat: Expected color format ('RGB')
+Preprocessing:
+1. seqLen: 20
+2. fps: 20
+3. channels: 6
+4. normalize: true
 
-INTENT CONFIGURATION:
-- numIntentChannels: Number of intent channels (3)
-- intentDuration: Intent signal duration in seconds (1)
-- intentFrames: Number of frames with intent signal (10)
-- intentProbability: Probability of intent being present (0.6)
-  NOTE: Current implementation uses "no intent" mode (all zeros)
+Runtime switch:
+1. MODEL_CONFIG.runtime.enableIntentMode: boolean
+2. ENABLE_INTENT_MODE: exported alias used by ActiveCameraScreen
+3. Purpose: globally allow/disable intent-aware destination pipeline
 
-CLASS LABELS:
-- classes: Array of output classes
-  - id 0: Front (User continues straight)
-  - id 1: Left (User turns left)
-  - id 2: Right (User turns right)
+Convenience exports:
+1. SEQ_LEN
+2. FPS
+3. FRAME_HEIGHT
+4. FRAME_WIDTH
+5. CHANNELS
+6. NUM_CLASSES
+7. CLASS_NAMES
+8. INTENT_FRAMES
+9. ENABLE_INTENT_MODE
 
-PERFORMANCE METRICS:
-- modelSizeMb: Model file size in megabytes (1.5)
-- parameters: Total model parameters (272,000)
-- expectedAccuracy: Expected prediction accuracy (0.95)
-- inferenceTimeMs: Expected inference time per device type
-  - highEndDevice: 50ms
-  - midRangeDevice: 100ms
-  - lowEndDevice: 200ms
+================================================================================
+ACTIVE CAMERA SCREEN (src/screens/ActiveCameraScreen.tsx)
+================================================================================
 
-DEVICE CONFIGURATION:
-- name: Target device name (Redmi Note 13 Pro 5G)
-- cameraFps: Target camera capture rate (20)
-- screenWidth: Device screen width in pixels (1080)
-- screenHeight: Device screen height in pixels (2400)
-- expectedInferenceMs: Expected inference time (100)
-- frameInterval: Frame sampling interval (1 = every frame)
-- bufferDurationMs: Buffer duration in milliseconds (1000)
-- predictionInterval: Run prediction every Nth frame (2)
+Route-driven mode state:
+1. mode: 'wandering' | 'destination' (from route params)
+2. modeLabel: display label derived from mode
+3. useIntentPipeline: boolean derived from mode + ENABLE_INTENT_MODE
+4. convlstmService: selected service module (with-intent or without-intent)
 
-EXPORTED CONSTANTS:
-- SEQ_LEN: Sequence length (20)
-- FPS: Frames per second (20)
-- FRAME_HEIGHT: Frame height (128)
-- FRAME_WIDTH: Frame width (128)
-- CHANNELS: Total channels (6)
-- NUM_CLASSES: Number of classes (3)
-- CLASS_NAMES: Array of class names ['Front', 'Left', 'Right']
-- INTENT_FRAMES: Number of intent frames (10)
+Destination metadata (optional, destination mode):
+1. destinationLabel
+2. routeStepCount
+3. totalDistanceMeters
 
-- YOLO_IOU_THRESHOLD: IoU threshold for NMS (0.45)
+Camera/runtime state:
+1. permission
+2. cameraRef
+3. isCameraReady
+4. isModelLoaded
+5. isYOLOModelLoaded
+6. isCapturing
+7. frameCount
+8. predictionCount
+9. debugStatus
+10. lastCaptureTime
 
-YOLO CONFIGURATION:
-- inputSize: Model input dimensions (128x128, adjustable)
-- channels: RGB channels (3)
-- numClasses: Number of object classes (80 for COCO)
-- confidenceThreshold: Minimum confidence for detection (0.5)
-- iouThreshold: IoU threshold for NMS (0.45)
-- commonObstacles: Array of common obstacle class names
+Inference outputs:
+1. currentPrediction
+2. directionLabel
+3. confidence
+4. metrics (preprocess, inference, total latency, fps)
+5. yoloDetections
+6. yoloInferenceTime
 
-YOLO CLASS NAMES:
-- YOLO_CLASS_NAMES: Array of all COCO class names (80 classes)
-  First 10: person, bicycle, car, motorcycle, airplane, bus, train, truck, boat, traffic light
-  NOTE: Update this array if using custom-trained YOLO model with different classes
+Control refs:
+1. isInferencingRef
+2. isCapturingRef
+3. isYOLOInferencingRef
+4. isModelLoadedRef
+5. isYOLOModelLoadedRef
+6. hasFirstPredictionRef
+7. captureSequenceRef
+8. predictionCountRef
+9. captureIntervalRef
 
-YOLO EXPORTS:
-export const YOLO_NUM_CLASSES = YOLO_CLASS_NAMES.length;
+Frame strategy:
+1. REALISTIC_CAPTURE_FPS = 2
+2. First inference: getFramesBootstrapDoubled()
+3. Later inference: getFramesPadded()
 
-// Convenience YOLO exports
-export const YOLO_INPUT_SIZE = YOLO_CONFIG.model.inputSize;
-export const YOLO_CONFIDENCE_THRESHOLD = YOLO_CONFIG.model.confidenceThreshold;
-export const YOLO_IOU_THRESHOLD = YOLO_CONFIG.model.iouThreshold;
+================================================================================
+WAYFINDING PIPELINE (src/screens/WayfindingScreen.tsx)
+================================================================================
+
+Purpose:
+1. Collect a spoken destination
+2. Geocode destination
+3. Confirm yes/no/back
+4. Fetch walking directions
+5. Navigate to ActiveCamera in destination mode
+
+Important constants:
+1. MAX_RADIUS_KM = 10
+
+Main state:
+1. userLocation
+2. phase: 'ask_location' | 'confirming'
+3. pendingCoord
+4. pendingLabel
+5. pendingDistance
+6. readyToListen
+7. voiceStatus
+
+Navigation payload to ActiveCamera:
+1. mode: 'destination'
+2. origin
+3. destination
+4. destinationLabel
+5. routeSteps
+6. totalDistanceMeters
+7. totalDurationSeconds
+
+================================================================================
+CHOICE SCREEN (src/screens/ChoiceScreen.tsx)
+================================================================================
+
+Wandering action:
+1. navigation.navigate('ActiveCamera', { mode: 'wandering' })
+
+Destination action:
+1. navigation.navigate('Wayfinding')
+
+Voice grammar:
+1. wandering
+2. destination
+3. back
+4. [unk]
 
 ================================================================================
 PREPROCESSOR (src/services/preprocessor.ts)
 ================================================================================
 
-FRAME DATA:
-- data: Raw pixel data in Uint8Array format (RGBA from camera)
-- width: Original frame width in pixels
-- height: Original frame height in pixels
-- timestamp: Frame capture time in milliseconds
+FrameData:
+1. data: Uint8Array (RGBA)
+2. width: number
+3. height: number
+4. timestamp: number
+5. sequenceId?: number
 
-PROCESSED TENSOR:
-- data: Preprocessed tensor as Float32Array
-- shape: Tensor dimensions [batch, seq_len, channels, height, width]
-CONVLSTM INFERENCE (src/services/convlstmWithoutIntentInference.ts)
-================================================================================
+ProcessedTensor:
+1. data: Float32Array
+2. shape: [batch, seq, channels, height, width]
+3. processingTimeMs: number
 
-NOTE: This file handles ConvLSTM turn prediction WITHOUT intent channels.
-      There's also convlstmWithIntentInference.ts (placeholder for future).
+FrameBuffer helpers:
+1. addFrame
+2. isReady
+3. canPredictEarly
+4. getFrames
+5. getFramesPadded
+6. getFramesBootstrapDoubled
 
-MODEL STATE:
-- isLoaded: Whether TFLite model is loaded (boolean)
-- model: TFLite model instance (null if not loaded)
-- demoMode: Whether app is in demo mode (true for Expo Go)
-- isDemoMode: Global flag for demo mode detection
-
-PREDICTION RESULT:
-- classId: Predicted class ID (0, 1, or 2)
-- className: Human-readable class name ('Front', 'Left', 'Right')
-- confidence: Prediction confidence score (0-1)
-- probabilities: Array of all class probabilities [front, left, right]
-- inferenceTimeMs: Time taken for inference in milliseconds
-
-PERFORMANCE METRICS:
-- preprocessingTimeMs: Time for preprocessing in milliseconds
-- inferenceTimeMs: Time for model inference in milliseconds
-- totalLatencyMs: Total end-to-end latency in milliseconds
-- fps: Frames processed per second
+Tensor/channel semantics:
+1. Shape: [1, 20, 6, 128, 128]
+2. Channels 0-2: RGB
+3. Channels 3-5: intent channels (currently zero-filled unless upstream injection is added)
 
 ================================================================================
-YOLO INFERENCE (src/services/yoloInference.ts)
+INFERENCE SERVICES
 ================================================================================
 
-NOTE: Handles YOLOv12 object detection for obstacle identification.
-      Currently uses placeholder - runs in demo mode until real model added.
+ConvLSTM without intent (convlstmWithoutIntentInference.ts):
+1. Current baseline classification path
+2. Exposes initializeModel, runPrediction, cleanupModel
 
-MODEL STATE:
-- isLoaded: Whether YOLO TFLite model is loaded (boolean)
-- model: TFLite model instance (null if not loaded)
-- demoMode: Whether in demo mode (true until real model added)
-- confidenceThreshold: Minimum confidence for detections (0-1, default 0.5)
+ConvLSTM with intent (convlstmWithIntentInference.ts):
+1. Parallel service API with same interface
+2. Selected by ActiveCamera when mode='destination' and ENABLE_INTENT_MODE=true
 
-BOUNDING BOX:
-- x: Top-left x coordinate (normalized 0-1)
-- y: Top-left y coordinate (normalized 0-1)
-- width: Box width (normalized 0-1)
-- height: Box height (normalized 0-1)
-
-DETECTION:
-- classId: YOLO class ID (integer 0-79 for COCO)
-- className: Human-readable class name (e.g., 'person', 'car', 'bicycle')
-- confidence: Detection confidence score (0-1)
-- boundingBox: BoundingBox object with normalized coordinates
-
-YOLO RESULT:
-- detections: Array of Detection objects
-- inferenceTimeMs: Time taken for YOLO inference in milliseconds
-- frameWidth: Input frame width
-- frameHeight: Input frame height
-
-FUNCTIONS:
-- runYOLODetection: High-level detection function (takes FrameData, returns YOLOResult)
-- initializeYOLOModel: Initialize model on app startup
-- cleanupYOLOModel: Cleanup resources on app close
-- isYOLOInDemoMode: Check if running in demo mode
-- setYOLOConfidenceThreshold: Adjust confidence threshold
+YOLO (yoloInference.ts):
+1. Exposes initializeYOLOModel, runYOLODetection, cleanupYOLOModel
+2. Produces Detection[] with normalized bounding boxes
 
 ================================================================================
-BOUNDING BOX OVERLAY (src/components/BoundingBoxOverlay.tsx)
-================================================================================
-Component that renders YOLO detections as bounding boxes on camera view
-
-PROPS:
-- detections: Array of Detection objects to render
-- containerWidth: Camera view width in pixels
-- containerHeight: Camera view height in pixels
-
-YOLO STATE:
-- isYOLOModelLoaded: Whether YOLO model loaded successfully (boolean)
-- yoloDetections: Array of current Detection objects
-- yoloInferenceTime: YOLO inference time in milliseconds
-
-PERFORMANCE STATE:
-- metrics: ConvLSTM peight: Camera view height in pixels
-
-RENDERING:
-- Converts normalized coordinates (0-1) to pixel coordinates
-- Renders green bounding boxes with class labels and confidence
-- Overlay is non-interactive (pointerEvents="none")
-- Label positioned above each bounding boxConvLSTM inference (boolean)
-- isCapturingRef: Lock to prevent concurrent captures (boolean)
-- isYOLOInferencingRef: Lock to prevent concurrent YOLO inference (boolean)
-- captureIntervalRef: Reference to capture timeout/interval
-
-BUFFER AND PROCESSOR (REFS):
-- frameBufferRef: FrameBuffer instance for storing frames (for ConvLSTM)
-- preprocessorRef: VideoPreprocessor instance for frame processing (for ConvLSTM)
-
-NOTE: YOLO runs on individual frames, ConvLSTM runs on frame sequences.
-      Both models run in parallel on each captured frame.
-
-CAPTURE SETTINGS:
-- REALISTIC_CAPTURE_FPS: Actual capture rate for takePictureAsync (2)
-  NOTE: Slower than desired due to takePictureAsync limitations
-  
-PRIORITY:
-- ConvLSTM has priority over YOLO if device struggles with both
-- YOLO frames can be skipped to maintain turn prediction performance
-PREDICTION RESULT:
-- classId: Predicted class ID (0, 1, or 2)
-- className: Human-readable class name ('Front', 'Left', 'Right')
-- confidence: Prediction confidence score (0-1)
-- probabilities: Array of all class probabilities [front, left, right]
-- inferenceTimeMs: Time taken for inference in milliseconds
-
-PERFORMANCE METRICS:
-- preprocessingTimeMs: Time for preprocessing in milliseconds
-- inferenceTimeMs: Time for model inference in milliseconds
-- totalLatencyMs: Total end-to-end latency in milliseconds
-- fps: Frames processed per second
-
-================================================================================
-MAIN MENU SCREEN (src/screens/MainMenuScreen.tsx)
+KEY NOTES
 ================================================================================
 
-TTS STATE:
-- hasSpokenGreeting: Module-level flag to ensure TTS greeting plays only once
-  per app session (boolean, default: false)
-  Set to true after first Speech.speak() call, prevents re-speaking when
-  navigating back from CameraScreen
+1. ActiveCamera is now the single camera runtime entry point.
+2. Route parameter mode is mandatory and controls screen behavior.
+3. Global ENABLE_INTENT_MODE controls whether destination mode uses intent pipeline.
+4. Legacy Wandering/Destination/Camera routes were removed from RootStackParamList.
+5. Update this file whenever route params or config toggles change.
 
-VOICE RECOGNITION STATE:
-- isListening: Whether Vosk is actively listening for commands (boolean)
-- voiceStatus: Current voice recognition status message (string)
-- modelLoaded: Whether the Vosk model has been loaded (boolean)
-- resultListenerRef: Reference to the Vosk result event listener
-- hasNavigatedRef: Ref to prevent duplicate navigation from voice command
-
-================================================================================
-CAMERA SCREEN (src/screens/CameraScreen.tsx)
-================================================================================
-
-CAMERA STATE:
-- permission: Camera permission status object
-- cameraRef: Reference to CameraView component
-- isCameraReady: Whether camera is mounted and ready (boolean)
-
-PREDICTION STATE:
-- currentPrediction: Latest prediction result object
-- directionLabel: Current direction label text ('Front', 'Left', 'Right')
-- confidence: Current prediction confidence (0-1)
-
-PERFORMANCE STATE:
-- metrics: Performance metrics object (preprocessing, inference, latency, fps)
-
-PROCESSING STATE:
-- isModelLoaded: Whether TFLite model loaded successfully (boolean)
-- isCapturing: Whether actively capturing frames (boolean)
-- frameCount: Total frames captured (counter)
-- predictionCount: Total predictions made (counter)
-- debugStatus: Current debug/status message (string)
-- lastCaptureTime: Timestamp of last capture in milliseconds
-
-PROCESSING FLAGS (REFS):
-- isInferencingRef: Lock to prevent concurrent inference (boolean)
-- isCapturingRef: Lock to prevent concurrent captures (boolean)
-- captureIntervalRef: Reference to capture timeout/interval
-
-BUFFER AND PROCESSOR (REFS):
-- frameBufferRef: FrameBuffer instance for storing frames
-- preprocessorRef: VideoPreprocessor instance for frame processing
-
-CAPTURE SETTINGS:
-- REALISTIC_CAPTURE_FPS: Actual capture rate for takePictureAsync (2)
-  NOTE: Slower than desired due to takePictureAsync limitations
-
-================================================================================
-IMAGE UTILITIES (src/utils/imageUtils.ts)
-================================================================================
-
-DECODE FUNCTIONS:
-- base64ToUint8Array: Converts base64 string to Uint8Array
-- decodeBase64ToPixels: Decodes base64 JPEG to RGBA pixel data
-  - Returns: { data: Uint8Array, width: number, height: number }
-
-RESIZE FUNCTIONS:
-- bilinearResize: Resizes image using bilinear interpolation
-  - Input: source data, dimensions, target dimensions
-  - Output: resized Uint8Array in RGBA format
-
-================================================================================
-NAVIGATION (src/navigation/types.ts)
-================================================================================
-
-ROUTE PARAMS:
-- RootStackParamList: Navigation route parameter types
-  - MainMenu: undefined (no params)
-  - Camera: undefined (no params)
-
-================================================================================
-TYPE DEFINITIONS
-================================================================================
-
-PREDICTION TYPES:
-- PredictionClass: 'Front' | 'Left' | 'Right'
-- ClassId: 0 | 1 | 2
-
-================================================================================
-NOTES
-================================================================================
-
-1. All time measurements are in milliseconds (ms)
-2. All pixel values are normalized to [0, 1] for model input
-3. Frame dimensions are always in pixels
-4. Confidence scores range from 0 to 1 (0-100%)
-5. Intent channels are currently unused (all zeros for 'no intent' mode)
-6. Demo mode simulates predictions when TFLite is unavailable (Expo Go)
-7. Capture FPS is limited by takePictureAsync performance (~200-500ms/frame)
-
-================================================================================
-LAST UPDATED: March 4, 2026
 ================================================================================

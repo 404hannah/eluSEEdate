@@ -1,7 +1,7 @@
 /**
  * Choice Screen
  * 
- * Allows users to choose between Wandering (NoIntent) and Destination (Intent) modes
+ * Allows users to choose between Wandering and Destination modes
  * Supports voice commands: "Wandering", "Destination", "Back"
  * 
  * Design: Minimalistic black & white (matches MainMenu)
@@ -40,7 +40,7 @@ export default function ChoiceScreen({ navigation }: ChoiceScreenProps) {
   const handleWanderingPress = () => {
     Speech.speak('Starting wandering mode', {
       language: 'en-US',
-      onDone: () => navigation.navigate('Wandering'),
+      onDone: () => navigation.navigate('ActiveCamera', { mode: 'wandering' }),
     });
   };
 
@@ -102,7 +102,7 @@ export default function ChoiceScreen({ navigation }: ChoiceScreenProps) {
                 setIsListening(false);
                 Speech.speak('Starting wandering mode', {
                   language: 'en-US',
-                  onDone: () => navigation.navigate('Wandering'),
+                  onDone: () => navigation.navigate('ActiveCamera', { mode: 'wandering' }),
                 });
               } else if (lowerResult.includes('destination')) {
                 hasNavigatedRef.current = true;

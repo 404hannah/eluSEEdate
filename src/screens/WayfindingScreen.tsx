@@ -12,7 +12,7 @@
  *  5. TTS reads it back: "Did you mean <address>? Say yes to confirm, no to try again,
  *     or back to return."
  *  6. STT listens for "yes" / "no" / "back".
- *     - yes  → validate 10 km radius → navigate to Destination (IntentScreen).
+ *     - yes  → validate 10 km radius → navigate to ActiveCamera (destination mode).
  *     - no   → clear & loop back to step 2.
  *     - back → return to ChoiceScreen.
  *  7. If out of bounds (> 10 km), TTS informs the user and loops back to step 2.
@@ -359,7 +359,8 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
         {
           language: 'en-US',
           onDone: () =>
-            navigation.navigate('Destination', {
+            navigation.navigate('ActiveCamera', {
+              mode: 'destination',
               origin: userLocation,
               destination: pendingCoord,
               destinationLabel: pendingLabel,
