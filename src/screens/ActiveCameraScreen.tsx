@@ -51,12 +51,13 @@ import {
   FRAME_HEIGHT,
   ENABLE_INTENT_MODE,
 } from '../config/modelConfig';
-import { decodeBase64ToPixels } from '../utils/imageUtils';
+import { decodeBase64ToPixels, decodeImageUriToPixels } from '../utils/imageUtils';
 
 type ActiveCameraScreenProps = NativeStackScreenProps<RootStackParamList, 'ActiveCamera'>;
 
 // Realistic capture FPS for takePictureAsync (slow but works in Expo Go)
 const REALISTIC_CAPTURE_FPS = 2;
+const TARGET_CAPTURE_AREA = 640 * 480;
 
 export default function ActiveCameraScreen({ navigation, route }: ActiveCameraScreenProps) {
   const mode = route.params.mode;
@@ -76,6 +77,8 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
   
   // Camera mount state
   const [isCameraReady, setIsCameraReady] = useState<boolean>(false);
+  const [cameraPictureSize, setCameraPictureSize] = useState<string | undefined>(undefined);
+  const [isPictureSizeConfigured, setIsPictureSizeConfigured] = useState<boolean>(false);
   
   // Frame buffer for storing captured frames (use realistic FPS)
   const frameBufferRef = useRef<FrameBuffer>(new FrameBuffer(REALISTIC_CAPTURE_FPS));
@@ -121,6 +124,53 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
   
   // Capture interval reference (now using setTimeout for async control)
   const captureIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const configurePictureSize = useCallback(async () => {
+    if (!cameraRef.current) {
+      setIsPictureSizeConfigured(true);
+      return;
+    }
+
+    try {
+      const sizes = await cameraRef.current.getAvailablePictureSizesAsync();
+
+      if (!sizes?.length) {
+        console.warn('[ActiveCamera] No picture sizes reported by device, using default');
+        return;
+      }
+
+      const parsedSizes = sizes
+        .map((raw) => {
+          const match = raw.match(/^(\d+)x(\d+)$/);
+          if (!match) return null;
+
+          const width = Number(match[1]);
+          const height = Number(match[2]);
+          if (!Number.isFinite(width) || !Number.isFinite(height)) return null;
+
+          return { raw, area: width * height };
+        })
+        .filter((item): item is { raw: string; area: number } => item !== null);
+
+      if (!parsedSizes.length) {
+        console.warn('[ActiveCamera] Unable to parse picture sizes, using default');
+        return;
+      }
+
+      const preferred = parsedSizes.reduce((best, current) => {
+        const bestDelta = Math.abs(best.area - TARGET_CAPTURE_AREA);
+        const currentDelta = Math.abs(current.area - TARGET_CAPTURE_AREA);
+        return currentDelta < bestDelta ? current : best;
+      });
+
+      setCameraPictureSize(preferred.raw);
+      console.log(`[ActiveCamera] Selected picture size: ${preferred.raw}`);
+    } catch (error: any) {
+      console.warn('[ActiveCamera] Failed to query picture sizes:', error?.message || error);
+    } finally {
+      setIsPictureSizeConfigured(true);
+    }
+  }, []);
 
   /**
    * Initialize model on screen mount
@@ -185,14 +235,14 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
    * Start regardless of model status (demo mode works too)
    */
   useEffect(() => {
-    if (permission?.granted) {
+    if (permission?.granted && isCameraReady && isPictureSizeConfigured) {
       // Small delay to ensure camera is ready
       const timer = setTimeout(() => {
         startCapture();
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [permission?.granted]);
+  }, [permission?.granted, isCameraReady, isPictureSizeConfigured]);
 
   useEffect(() => {
     isModelLoadedRef.current = isModelLoaded;
@@ -217,22 +267,37 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
     console.log(`[ActiveCamera] Starting continuous capture at ${REALISTIC_CAPTURE_FPS} FPS...`);
     
     // Use recursive timeout instead of setInterval for proper async handling
-    const captureLoop = async () => {
-      if (!isCapturingRef.current) return;
-      
-      const startTime = Date.now();
-      await captureFrame();
-      const elapsed = Date.now() - startTime;
-      
-      // Schedule next capture, accounting for time spent
-      const captureInterval = 1000 / REALISTIC_CAPTURE_FPS;
-      const delay = Math.max(0, captureInterval - elapsed);
-      
-      captureIntervalRef.current = setTimeout(captureLoop, delay) as any;
+    const captureLoop = async (): Promise<void> => {
+      if (!isCapturingRef.current) {
+        captureIntervalRef.current = null;
+        return;
+      }
+
+      const loopStart = Date.now();
+
+      try {
+        await captureFrame();
+      } catch (error: any) {
+        console.error('[ActiveCamera] Capture loop error:', error?.message || error);
+        setDebugStatus(`Loop error: ${error?.message || 'unknown'}`);
+      } finally {
+        if (!isCapturingRef.current) {
+          captureIntervalRef.current = null;
+          return;
+        }
+
+        const elapsed = Date.now() - loopStart;
+        const captureInterval = 1000 / REALISTIC_CAPTURE_FPS;
+        const delay = Math.max(0, captureInterval - elapsed);
+
+        captureIntervalRef.current = setTimeout(() => {
+          void captureLoop();
+        }, delay) as any;
+      }
     };
     
     // Start the loop
-    captureLoop();
+    void captureLoop();
   }, []);
 
   /**
@@ -256,7 +321,7 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
    * Uses takePictureAsync which is slow but works in Expo Go
    */
   const captureFrame = async () => {
-    if (!cameraRef.current) {
+    if (!cameraRef.current || !isCameraReady || !isPictureSizeConfigured) {
       return;
     }
     
@@ -267,8 +332,8 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
       
       // Capture frame silently (no sound, no animation)
       const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.1,           // Low quality for faster capture
-        base64: true,           // Get base64 for processing
+        quality: 0.2,           // Low quality for faster capture
+        base64: false,          // Avoid huge base64 payloads on JS thread
         skipProcessing: true,
         shutterSound: false,    // Disable shutter sound
       });
@@ -283,13 +348,13 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
       setLastCaptureTime(captureTime);
       console.log(`[ActiveCamera] Frame captured in ${captureTime}ms`);
       
-      // Decode base64 image to pixel data
+      // Decode image to pixel data
       let frameData: FrameData;
       
-      if (photo.base64) {
+      if (photo.uri) {
         try {
-          // Decode the base64 image to actual pixel data
-          const decoded = await decodeBase64ToPixels(photo.base64, FRAME_WIDTH, FRAME_HEIGHT);
+          // Native downscale first, then decode a tiny JPEG payload.
+          const decoded = await decodeImageUriToPixels(photo.uri, FRAME_WIDTH, FRAME_HEIGHT);
           const sequenceId = ++captureSequenceRef.current;
           
           frameData = {
@@ -306,10 +371,21 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
           setDebugStatus(`Decode error: ${decodeError?.message || 'invalid frame'}`);
           return;
         }
+      } else if (photo.base64) {
+        // Fallback path if URI is unavailable on a specific device/runtime.
+        const decoded = await decodeBase64ToPixels(photo.base64, FRAME_WIDTH, FRAME_HEIGHT);
+        const sequenceId = ++captureSequenceRef.current;
+
+        frameData = {
+          data: decoded.data,
+          width: decoded.width,
+          height: decoded.height,
+          timestamp: Date.now(),
+          sequenceId,
+        };
       } else {
-        // No base64 data available.
-        console.warn('[ActiveCamera] No base64 data in photo');
-        setDebugStatus('Capture error: no base64 frame data');
+        console.warn('[ActiveCamera] No image URI returned by camera');
+        setDebugStatus('Capture error: missing image URI');
         return;
       }
       
@@ -490,12 +566,15 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
         style={styles.camera}
         facing="back"
         mode="picture"
+        pictureSize={cameraPictureSize}
         animateShutter={false}
         enableTorch={false}
         onCameraReady={() => {
           console.log('[ActiveCamera] Camera is ready!');
           setIsCameraReady(true);
-          setDebugStatus('Camera ready');
+          setDebugStatus('Camera ready | configuring picture size');
+          setIsPictureSizeConfigured(false);
+          void configurePictureSize();
         }}
         onMountError={(error) => {
           console.error('[ActiveCamera] Mount error:', error);

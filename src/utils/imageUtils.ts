@@ -5,7 +5,66 @@
  */
 
 import { decode as decodeJpeg } from 'jpeg-js';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { FRAME_WIDTH, FRAME_HEIGHT } from '../config/modelConfig';
+
+interface PixelBufferResult {
+  data: Uint8Array;
+  width: number;
+  height: number;
+}
+
+/**
+ * Decode an image URI using native resize first, then decode tiny JPEG in JS.
+ * This is much faster than decoding full camera-resolution JPEG in JS.
+ */
+export async function decodeImageUriToPixels(
+  imageUri: string,
+  targetWidth: number = FRAME_WIDTH,
+  targetHeight: number = FRAME_HEIGHT
+): Promise<PixelBufferResult> {
+  try {
+    const manipulated = await ImageManipulator.manipulateAsync(
+      imageUri,
+      [{ resize: { width: targetWidth, height: targetHeight } }],
+      {
+        compress: 0.55,
+        format: ImageManipulator.SaveFormat.JPEG,
+        base64: true,
+      }
+    );
+
+    if (!manipulated.base64) {
+      throw new Error('ImageManipulator did not return base64 data');
+    }
+
+    const jpegBytes = base64ToUint8Array(manipulated.base64);
+    const decoded = decodeJpeg(jpegBytes, { useTArray: true });
+
+    if (!decoded?.data || decoded.width <= 0 || decoded.height <= 0) {
+      throw new Error('JPEG decode returned empty image');
+    }
+
+    const resized = (decoded.width === targetWidth && decoded.height === targetHeight)
+      ? decoded.data
+      : resizeRgbaNearest(
+          decoded.data,
+          decoded.width,
+          decoded.height,
+          targetWidth,
+          targetHeight
+        );
+
+    return {
+      data: resized,
+      width: targetWidth,
+      height: targetHeight,
+    };
+  } catch (error: any) {
+    console.error('[ImageUtils] Failed to decode image URI:', error?.message || error);
+    return createGrayFallback(targetWidth, targetHeight);
+  }
+}
 
 /**
  * Decode a base64 JPEG image to raw RGBA pixel data.
@@ -20,7 +79,7 @@ export async function decodeBase64ToPixels(
   base64Image: string,
   targetWidth: number = FRAME_WIDTH,
   targetHeight: number = FRAME_HEIGHT
-): Promise<{ data: Uint8Array; width: number; height: number }> {
+): Promise<PixelBufferResult> {
   try {
     // Remove data URI prefix if present
     let base64Data = base64Image;
@@ -50,24 +109,27 @@ export async function decodeBase64ToPixels(
     };
   } catch (error: any) {
     console.error('[ImageUtils] Failed to decode base64 image:', error?.message || error);
-
-    // Deterministic fallback if decoding fails.
-    const pixelCount = targetWidth * targetHeight;
-    const fallbackData = new Uint8Array(pixelCount * 4);
-    for (let i = 0; i < pixelCount; i++) {
-      const value = 128;
-      fallbackData[i * 4 + 0] = value;
-      fallbackData[i * 4 + 1] = value;
-      fallbackData[i * 4 + 2] = value;
-      fallbackData[i * 4 + 3] = 255;
-    }
-    
-    return {
-      data: fallbackData,
-      width: targetWidth,
-      height: targetHeight
-    };
+    return createGrayFallback(targetWidth, targetHeight);
   }
+}
+
+function createGrayFallback(targetWidth: number, targetHeight: number): PixelBufferResult {
+  const pixelCount = targetWidth * targetHeight;
+  const fallbackData = new Uint8Array(pixelCount * 4);
+
+  for (let i = 0; i < pixelCount; i++) {
+    const value = 128;
+    fallbackData[i * 4 + 0] = value;
+    fallbackData[i * 4 + 1] = value;
+    fallbackData[i * 4 + 2] = value;
+    fallbackData[i * 4 + 3] = 255;
+  }
+
+  return {
+    data: fallbackData,
+    width: targetWidth,
+    height: targetHeight,
+  };
 }
 
 /**

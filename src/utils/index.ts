@@ -3,4 +3,4 @@
  * Export all utility functions
  */
 
-export { decodeBase64ToPixels, isValidBase64Image } from './imageUtils';
+export { decodeBase64ToPixels, decodeImageUriToPixels, isValidBase64Image } from './imageUtils';
