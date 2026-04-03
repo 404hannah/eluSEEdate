@@ -347,13 +347,14 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
               // Check if the end of the current step is reached
               const stepEnd = currentStep.endLocation;
               const distanceToEnd = getGeoDistance(userLocation, stepEnd);
-              if (distanceToEnd < 10) { 
+              if (distanceToEnd < 5) { 
+                // If the user is within 5 meters to the end of the step, move to the next step
                 setCurrentStepIndex(prev => Math.min(prev + 1, steps.length - 1));
               }
               
               // Set intent for current step
               intent = maneuverToIntent(currentStep.maneuver);
-              intentDistance = currentStep.distanceMeters;
+              intentDistance = distanceToEnd;
             }
           }
 
