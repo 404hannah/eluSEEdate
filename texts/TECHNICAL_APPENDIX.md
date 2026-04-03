@@ -14,7 +14,7 @@ This appendix describes the code as it currently runs in the repository. It refl
 - src/screens/ChoiceScreen.tsx
 - src/screens/WayfindingScreen.tsx
 - src/screens/ActiveCameraScreen.tsx
-- src/screens/logsScreen.tsx
+- src/screens/LogsScreen.tsx
 - src/services/preprocessor.ts
 - src/services/convlstmWithoutIntentInference.ts
 - src/services/convlstmWithIntentInference.ts

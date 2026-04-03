@@ -242,7 +242,7 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
     
     initModels();
     
-    // Cleanup on unmount — use refs only, no state updates
+    // Cleanup on unmount â€” use refs only, no state updates
     return () => {
       isCapturingRef.current = false;
       isCameraReadyRef.current = false;
@@ -254,7 +254,7 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
         captureIntervalRef.current = null;
       }
     };
-  }, []);
+  }, [convlstmService]);
 
   useEffect(() => {
     isModelLoadedRef.current = isModelLoaded;
@@ -309,6 +309,8 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
     
     // Start the loop
     void captureLoop();
+  // captureFrame is invoked from the timed loop and guarded by refs.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /**
@@ -580,7 +582,7 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
         {/* Debug Camera Status - Center of screen */}
         {!isCameraReady && (
           <View style={styles.cameraStatusOverlay}>
-            <Text style={styles.cameraStatusText}>📷 Initializing Camera...</Text>
+            <Text style={styles.cameraStatusText}>ðŸ“· Initializing Camera...</Text>
             <Text style={styles.cameraStatusSubtext}>Please wait</Text>
           </View>
         )}
@@ -638,7 +640,7 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
 
         {/* Back Button (Top-Right) */}
         <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-          <Text style={styles.backButtonText}>✕</Text>
+          <Text style={styles.backButtonText}>âœ•</Text>
         </TouchableOpacity>
 
         {/* Status Indicator */}
@@ -885,3 +887,5 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 });
+
+

@@ -18,7 +18,7 @@ import MainMenuScreen from './src/screens/MainMenuScreen';
 import ChoiceScreen from './src/screens/ChoiceScreen';
 import WayfindingScreen from './src/screens/WayfindingScreen';
 import ActiveCameraScreen from './src/screens/ActiveCameraScreen';
-import LogsScreen from './src/screens/logsScreen';
+import LogsScreen from './src/screens/LogsScreen';
 import { RootStackParamList } from './src/navigation/types';
 
 // Ignore specific warnings (for development)

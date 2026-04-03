@@ -66,46 +66,46 @@ Minimalistic black & white palette for a clean, distraction-free interface.
 ## Project Structure
 
 ```
-├── App.tsx                          # Main entry point
-├── package.json                     # Dependencies
-├── app.json                         # Expo configuration
-├── VERSIONS.txt                     # Dependency versions & rationale
-├── tsconfig.json                    # TypeScript config
-├── babel.config.js                  # Babel config
-├── eas.json                         # EAS Build configuration
-├── assets/
-│   └── model/
-│       ├── convlstm.tflite          # ConvLSTM TFLite model file
-│       ├── convlstm.onnx            # ONNX model (backup)
-│       └── yolo.tflite              # YOLOv12 TFLite model file
-├── texts/
-│   ├── PACKAGE_DEPENDENCIES.txt     # All dependencies explained
-│   ├── TROUBLESHOOTING.txt          # Debugging and diagnostics guide
-│   ├── GIT_MERGE_GUIDE.txt          # How to merge branches
-│   ├── DATA_DICTIONARY.txt          # Variable documentation
-│   ├── DOCUMENTATION_UPDATE_GUIDE.txt # Maintenance guide
-│   └── *.txt                        # Other reference docs
-└── src/
-    ├── components/
-    │   ├── ErrorBoundary.tsx        # Error boundary component
-    │   └── BoundingBoxOverlay.tsx   # YOLO bounding box renderer
-    ├── config/
-    │   └── modelConfig.ts           # ConvLSTM & YOLO configuration
-    ├── navigation/
-    │   └── types.ts                 # Navigation type definitions
-    ├── screens/
-    │   ├── MainMenuScreen.tsx       # Main menu with voice/touch start
-    │   ├── ChoiceScreen.tsx         # Wandering vs Destination mode selection
-    │   ├── WayfindingScreen.tsx     # Voice-first destination selection
-    │   ├── ActiveCameraScreen.tsx   # Unified camera inference runtime
-    │   └── logsScreen.tsx           # In-app log viewer
-    ├── services/
-    │   ├── preprocessor.ts          # Frame preprocessing (TypeScript)
-    │   ├── convlstmWithoutIntentInference.ts  # ConvLSTM inference (no intent)
-    │   ├── convlstmWithIntentInference.ts     # ConvLSTM inference (with intent, future)
-    │   └── yoloInference.ts         # YOLO object detection inference
-    └── utils/
-        └── imageUtils.ts            # Image decoding utilities
+â”œâ”€â”€ App.tsx                          # Main entry point
+â”œâ”€â”€ package.json                     # Dependencies
+â”œâ”€â”€ app.json                         # Expo configuration
+â”œâ”€â”€ VERSIONS.txt                     # Dependency versions & rationale
+â”œâ”€â”€ tsconfig.json                    # TypeScript config
+â”œâ”€â”€ babel.config.js                  # Babel config
+â”œâ”€â”€ eas.json                         # EAS Build configuration
+â”œâ”€â”€ assets/
+â”‚   â””â”€â”€ model/
+â”‚       â”œâ”€â”€ convlstm.tflite          # ConvLSTM TFLite model file
+â”‚       â”œâ”€â”€ convlstm.onnx            # ONNX model (backup)
+â”‚       â””â”€â”€ yolo.tflite              # YOLOv12 TFLite model file
+â”œâ”€â”€ texts/
+â”‚   â”œâ”€â”€ PACKAGE_DEPENDENCIES.txt     # All dependencies explained
+â”‚   â”œâ”€â”€ TROUBLESHOOTING.txt          # Debugging and diagnostics guide
+â”‚   â”œâ”€â”€ GIT_MERGE_GUIDE.txt          # How to merge branches
+â”‚   â”œâ”€â”€ DATA_DICTIONARY.txt          # Variable documentation
+â”‚   â”œâ”€â”€ DOCUMENTATION_UPDATE_GUIDE.txt # Maintenance guide
+â”‚   â””â”€â”€ *.txt                        # Other reference docs
+â””â”€â”€ src/
+    â”œâ”€â”€ components/
+    â”‚   â”œâ”€â”€ errorBoundary.tsx        # Error boundary component
+    â”‚   â””â”€â”€ BoundingBoxOverlay.tsx   # YOLO bounding box renderer
+    â”œâ”€â”€ config/
+    â”‚   â””â”€â”€ modelConfig.ts           # ConvLSTM & YOLO configuration
+    â”œâ”€â”€ navigation/
+    â”‚   â””â”€â”€ types.ts                 # Navigation type definitions
+    â”œâ”€â”€ screens/
+    â”‚   â”œâ”€â”€ MainMenuScreen.tsx       # Main menu with voice/touch start
+    â”‚   â”œâ”€â”€ ChoiceScreen.tsx         # Wandering vs Destination mode selection
+    â”‚   â”œâ”€â”€ WayfindingScreen.tsx     # Voice-first destination selection
+    â”‚   â”œâ”€â”€ ActiveCameraScreen.tsx   # Unified camera inference runtime
+    â”‚   â””â”€â”€ LogsScreen.tsx           # In-app log viewer
+    â”œâ”€â”€ services/
+    â”‚   â”œâ”€â”€ preprocessor.ts          # Frame preprocessing (TypeScript)
+    â”‚   â”œâ”€â”€ convlstmWithoutIntentInference.ts  # ConvLSTM inference (no intent)
+    â”‚   â”œâ”€â”€ convlstmWithIntentInference.ts     # ConvLSTM inference (with intent, future)
+    â”‚   â””â”€â”€ yoloInference.ts         # YOLO object detection inference
+    â””â”€â”€ utils/
+        â””â”€â”€ imageUtils.ts            # Image decoding utilities
 ```
 
 ## Model Configuration
@@ -183,7 +183,7 @@ npx eas build --platform android --profile production
 
 ## Usage
 
-1. Launch the app — you will hear "Starting EluSEEdate" spoken aloud
+1. Launch the app â€” you will hear "Starting EluSEEdate" spoken aloud
 2. Tap the **Start** button on the main menu (or say "Start")
 3. Grant camera permission when prompted
 4. Point the camera in the direction you're moving
@@ -232,14 +232,14 @@ const output = await model.run([tensorData]); // Float32Array [1, 20, 6, 128, 12
 
 ### Frame Capture & Preprocessing
 
-The CameraScreen captures frames using `expo-camera`:
+The ActiveCameraScreen captures frames using `expo-camera`:
 - **Capture method**: `takePictureAsync` with base64 output (~200-500ms per frame)
 - **Frame processing**: Decodes JPEG to pixel data, resizes to 128x128
 - **Buffer management**: Rolling buffer of frames with padding for early predictions
 - **Preprocessing**: Normalizes to [0,1], adds intent channels (zeros), transposes to NCHW format
 
 **Preprocessing Pipeline** (see `src/services/preprocessor.ts`):
-1. Camera captures JPEG frame → base64
+1. Camera captures JPEG frame â†’ base64
 2. Image decoded to RGBA pixel data
 3. Resized to 128x128 using bilinear interpolation
 4. Normalized to [0, 1] range
@@ -262,3 +262,4 @@ Based on **Prototype 10** - Mobile-Optimized ConvLSTM with Global Average Poolin
 ## License
 
 Part of thesis project for ConvLSTM Turn Prediction.
+

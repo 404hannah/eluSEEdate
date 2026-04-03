@@ -50,13 +50,14 @@ export default function MainMenuScreen({ navigation }: MainMenuScreenProps) {
     Speech.speak('Exiting', { language: 'en-US' });
     // For mobile apps, exiting is not always supported, but we can try:
     if (Platform.OS === 'android') {
-      // eslint-disable-next-line no-undef
       BackHandler.exitApp();
     }
   };
 
   // Speak startup greeting once per app session, then start listening after a delay
   useEffect(() => {
+    let readyTimer: ReturnType<typeof setTimeout> | null = null;
+
     if (!hasSpokenGreeting) {
       hasSpokenGreeting = true;
       Speech.speak(
@@ -64,7 +65,7 @@ export default function MainMenuScreen({ navigation }: MainMenuScreenProps) {
         {
           language: 'en-US',
           onDone: () => {
-            setTimeout(() => {
+            readyTimer = setTimeout(() => {
               setReadyToListen(true);
             }, 1000); // 1 second delay after TTS
           },
@@ -73,6 +74,10 @@ export default function MainMenuScreen({ navigation }: MainMenuScreenProps) {
     } else {
       setReadyToListen(true);
     }
+
+    return () => {
+      if (readyTimer) clearTimeout(readyTimer);
+    };
   }, []);
 
   // Load Vosk model on component mount
@@ -115,7 +120,6 @@ export default function MainMenuScreen({ navigation }: MainMenuScreenProps) {
           setIsListening(true);
           setVoiceStatus('Say "Start" to begin');
           resultListenerRef.current = Vosk.onResult((result: string) => {
-            console.log('Voice result:', result);
             const lowerResult = result.toLowerCase();
             if (!hasNavigatedRef.current) {
               if (lowerResult.includes('start')) {
@@ -174,7 +178,7 @@ export default function MainMenuScreen({ navigation }: MainMenuScreenProps) {
       <View style={styles.headerSection}>
         <Text style={styles.title}>EluSEEdate</Text>
         <Text style={styles.subtitle}>Turn Prediction</Text>
-        <Text style={styles.version}>v1.0.4</Text>
+        <Text style={styles.version}>v1.0.5</Text>
       </View>
 
       {/* Center Section with Start and Exit Buttons */}

@@ -9,7 +9,7 @@ export * from './preprocessor';
 export * from './convlstmWithoutIntentInference';
 
 // ConvLSTM WITH intent available via explicit import:
-// import { ... } from './services/convlstmWithIntentInference';
+// import { ... } from './convlstmWithIntentInference';
 
 // Export YOLO inference
 export * from './yoloInference';
@@ -21,3 +21,4 @@ export * from './directionsService';
 export * from './geocodingService';
 // Export object speech service
 export * from './ObjectSpeechService';
+

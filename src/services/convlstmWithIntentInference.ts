@@ -8,7 +8,7 @@
  * Run: npx expo prebuild && npx expo run:android
  */
 
-import { NUM_CLASSES, CLASS_NAMES, ClassId, PredictionClass } from '../config/modelConfig';
+import { CLASS_NAMES, ClassId, PredictionClass } from '../config/modelConfig';
 import { ProcessedTensor } from './preprocessor';
 
 // TFLite import - requires development build
@@ -19,11 +19,13 @@ let isDemoMode = true;
 
 // Try to load TFLite (will fail in Expo Go, work in dev build)
 try {
+  // react-native-fast-tflite must be loaded dynamically at runtime.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const tfliteModule = require('react-native-fast-tflite');
   loadTensorflowModel = tfliteModule.loadTensorflowModel;
   isDemoMode = false;
   console.log('[ConvLSTM-Intent-TFLite] react-native-fast-tflite loaded successfully');
-} catch (e) {
+} catch {
   console.log('[ConvLSTM-Intent-TFLite] react-native-fast-tflite not available (Expo Go mode)');
   console.log('[ConvLSTM-Intent-TFLite] Real inference unavailable without native TFLite support');
   isDemoMode = true;
@@ -70,15 +72,15 @@ class TFLiteModelManager {
 
     // Check if we're in demo mode (Expo Go)
     if (this.demoMode || !loadTensorflowModel) {
-      console.log('[ConvLSTM-Intent-TFLite] ═══════════════════════════════════════════════');
-      console.log('[ConvLSTM-Intent-TFLite] ⚠️  TFLite INFERENCE UNAVAILABLE');
-      console.log('[ConvLSTM-Intent-TFLite] ───────────────────────────────────────────────');
+      console.log('[ConvLSTM-Intent-TFLite] â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
+      console.log('[ConvLSTM-Intent-TFLite] âš ï¸  TFLite INFERENCE UNAVAILABLE');
+      console.log('[ConvLSTM-Intent-TFLite] â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€');
       console.log('[ConvLSTM-Intent-TFLite] Camera and UI work, but no model inference will run');
       console.log('[ConvLSTM-Intent-TFLite] ');
       console.log('[ConvLSTM-Intent-TFLite] To use TFLite inference, create a dev build:');
       console.log('[ConvLSTM-Intent-TFLite]   1. npx expo prebuild');
       console.log('[ConvLSTM-Intent-TFLite]   2. npx expo run:android');
-      console.log('[ConvLSTM-Intent-TFLite] ═══════════════════════════════════════════════');
+      console.log('[ConvLSTM-Intent-TFLite] â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
       
       this.isLoaded = false;
       this.demoMode = true;
@@ -97,13 +99,14 @@ class TFLiteModelManager {
       };
       
       this.model = await loadTensorflowModel(
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         require('../../assets/model/convlstm.tflite'),
         modelOptions
       );
       
       this.isLoaded = true;
       this.demoMode = false;
-      console.log('[ConvLSTM-Intent-TFLite] ✅ Model loaded successfully with GPU acceleration!');
+      console.log('[ConvLSTM-Intent-TFLite] âœ… Model loaded successfully with GPU acceleration!');
       console.log('[ConvLSTM-Intent-TFLite] Model: float16 with Global Average Pooling');
       console.log('[ConvLSTM-Intent-TFLite] Model ready for real-time inference');
       
@@ -114,7 +117,7 @@ class TFLiteModelManager {
       
       return true;
     } catch (error: any) {
-      console.error('[ConvLSTM-Intent-TFLite] ❌ Failed to load model:', error?.message || error);
+      console.error('[ConvLSTM-Intent-TFLite] âŒ Failed to load model:', error?.message || error);
       console.log('[ConvLSTM-Intent-TFLite] Model not available for inference');
       this.demoMode = true;
       return false;
@@ -149,17 +152,12 @@ class TFLiteModelManager {
         throw new Error('ConvLSTM intent model is not loaded');
       }
 
-      // Real inference with TFLite model
-      console.log('[ConvLSTM-Intent-TFLite] Running real inference...');
-      console.log('[ConvLSTM-Intent-TFLite] Input shape:', tensor.shape);
-
       // Run model inference
       // Input: Float32Array with shape [1, 20, 6, 128, 128]
       const outputTensor = await this.model.run([tensor.data]);
 
       // Get output (should be [1, 3] for 3 classes)
       const output = Array.from(outputTensor[0] as ArrayLike<number>);
-      console.log('[ConvLSTM-Intent-TFLite] Raw output:', output);
       
       const inferenceTimeMs = performance.now() - startTime;
 
@@ -171,9 +169,6 @@ class TFLiteModelManager {
       const className = CLASS_NAMES[classId] as PredictionClass;
       const confidence = probabilities[classId];
       
-      const modeLabel = this.demoMode ? '[DEMO]' : '[REAL]';
-      console.log(`[ConvLSTM-Intent-TFLite] ${modeLabel} Prediction: ${className} (${(confidence * 100).toFixed(1)}%) in ${inferenceTimeMs.toFixed(1)}ms`);
-
       return {
         classId,
         className,
@@ -287,3 +282,4 @@ export async function cleanupModel(): Promise<void> {
 export function isRunningInDemoMode(): boolean {
   return getModelManager().isInDemoMode();
 }
+

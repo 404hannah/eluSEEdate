@@ -51,6 +51,6 @@ Preview/Production Build:
 QUICK COMMANDS
 --------------
 
-Preview APK:  npx eas build --profile preview --platform android
+Preview APK:  eas build --profile preview --platform android
 Production:   npx eas build --profile production --platform android
 Check builds: npx eas build:list

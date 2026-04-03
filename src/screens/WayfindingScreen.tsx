@@ -8,13 +8,13 @@
  *  1. GPS locates the user (expo-location).
  *  2. TTS: "Choose your location. Say the name of your destination."
  *  3. STT listens for a place name (free-form via expo-speech-recognition).
- *  4. Geocode the spoken text → get an address (Nominatim geocoding service).
+ *  4. Geocode the spoken text â†’ get an address (Nominatim geocoding service).
  *  5. TTS reads it back: "Did you mean <address>? Say yes to confirm, no to try again,
  *     or back to return."
  *  6. STT listens for "yes" / "no" / "back".
- *     - yes  → validate 10 km radius → navigate to ActiveCamera (destination mode).
- *     - no   → clear & loop back to step 2.
- *     - back → return to ChoiceScreen.
+ *     - yes  â†’ validate 10 km radius â†’ navigate to ActiveCamera (destination mode).
+ *     - no   â†’ clear & loop back to step 2.
+ *     - back â†’ return to ChoiceScreen.
  *  7. If out of bounds (> 10 km), TTS informs the user and loops back to step 2.
 
  */
@@ -26,7 +26,6 @@ import {
   StyleSheet,
   StatusBar,
   ActivityIndicator,
-  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -36,11 +35,10 @@ import * as Speech from 'expo-speech';
 import { ExpoSpeechRecognitionModule } from 'expo-speech-recognition';
 import { RootStackParamList } from '../navigation/types';
 import { geocodeForward } from '../services/geocodingService';
-import { fetchWalkingDirections, RouteStep } from '../services/directionsService';
+import { fetchWalkingDirections } from '../services/directionsService';
 
 // ---------- constants ----------
 const MAX_RADIUS_KM = 10;
-const { width } = Dimensions.get('window');
 
 type WayfindingScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Wayfinding'>;
@@ -53,8 +51,8 @@ type Coordinate = {
 
 /**
  * Conversation phases:
- *  ask_location  – waiting for the user to say a place name
- *  confirming    – geocoded result read back, waiting for yes / no / back
+ *  ask_location  â€“ waiting for the user to say a place name
+ *  confirming    â€“ geocoded result read back, waiting for yes / no / back
  */
 type Phase = 'ask_location' | 'confirming';
 
@@ -165,7 +163,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
   );
 
   // ================================================================
-  //  Voice recognition – switches behaviour based on current phase
+  //  Voice recognition â€“ switches behaviour based on current phase
   //  Uses expo-speech-recognition (Google/Apple cloud speech) for
   //  accurate free-form place name recognition.
   // ================================================================
@@ -281,6 +279,8 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
         if (timeout) clearTimeout(timeout);
         if (restartTimeout) clearTimeout(restartTimeout);
       };
+      // Intentionally keyed to focus/listen phase transitions.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [navigation, readyToListen, phase]),
   );
 
@@ -300,7 +300,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
       const coord: Coordinate = { latitude: result.latitude, longitude: result.longitude };
       const label = result.displayName;
 
-      // Store candidate – do NOT commit yet
+      // Store candidate â€“ do NOT commit yet
       setPendingCoord(coord);
       setPendingLabel(label);
 
@@ -330,7 +330,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
   //  Confirmation handlers
   // ================================================================
 
-  /** User said "yes" – validate radius, fetch directions, then navigate or reject. */
+  /** User said "yes" â€“ validate radius, fetch directions, then navigate or reject. */
   const handleConfirmYes = async () => {
     if (!pendingCoord || !userLocation) return;
 
@@ -344,7 +344,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
       return;
     }
 
-    // Fetch walking directions from origin → destination
+    // Fetch walking directions from origin â†’ destination
     hasNavigatedRef.current = true;
     Speech.speak('Destination confirmed. Fetching walking directions. Please wait.', {
       language: 'en-US',
@@ -382,7 +382,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
     }
   };
 
-  /** User said "no" – discard candidate and ask again. */
+  /** User said "no" â€“ discard candidate and ask again. */
   const handleConfirmNo = () => {
     ExpoSpeechRecognitionModule.abort();
     setIsListening(false);
@@ -390,7 +390,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
   };
 
   // ================================================================
-  //  Helper – speak a message then loop back to ask_location phase
+  //  Helper â€“ speak a message then loop back to ask_location phase
   // ================================================================
   const restartAskLocation = (message: string) => {
     setPendingCoord(null);
@@ -408,7 +408,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
   };
 
   // ================================================================
-  //  Render – voice-first UI for visually impaired users
+  //  Render â€“ voice-first UI for visually impaired users
   // ================================================================
 
   if (loading) {
@@ -417,7 +417,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
         <StatusBar barStyle="light-content" backgroundColor="#000000" />
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#ffffff" />
-          <Text style={styles.statusText}>Getting your location…</Text>
+          <Text style={styles.statusText}>Getting your locationâ€¦</Text>
         </View>
       </SafeAreaView>
     );
@@ -429,7 +429,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
         <StatusBar barStyle="light-content" backgroundColor="#000000" />
         <View style={styles.centerContainer}>
           <Text style={styles.errorText}>{errorMsg}</Text>
-          <Text style={styles.hintText}>Say "Back" to return</Text>
+          <Text style={styles.hintText}>Say Back to return</Text>
         </View>
       </SafeAreaView>
     );
@@ -444,7 +444,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
         <Text style={styles.title}>Choose Your Location</Text>
       </View>
 
-      {/* Centre – spoken feedback area */}
+      {/* Centre â€“ spoken feedback area */}
       <View style={styles.centerSection}>
         {phase === 'confirming' && pendingLabel ? (
           <>
@@ -453,7 +453,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
               {pendingDistance.toFixed(1)} km away
             </Text>
             <Text style={styles.promptText}>
-              Say "Yes" to confirm{'\n'}Say "No" to try again
+              Say Yes to confirm{'\n'}Say No to try again
             </Text>
           </>
         ) : (
@@ -474,7 +474,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
           />
           <Text style={styles.voiceStatusText}>{voiceStatus}</Text>
         </View>
-        <Text style={styles.hintText}>Say "Back" to return</Text>
+        <Text style={styles.hintText}>Say Back to return</Text>
       </View>
     </SafeAreaView>
   );
@@ -574,3 +574,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 });
+
+

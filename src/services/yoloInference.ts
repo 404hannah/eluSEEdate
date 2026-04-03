@@ -21,10 +21,11 @@ let isDemoMode = true;
 
 // Try to load TFLite (will fail in Expo Go, work in dev build)
 try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const tfliteModule = require('react-native-fast-tflite');
   loadTensorflowModel = tfliteModule.loadTensorflowModel;
   isDemoMode = false;
-} catch (e) {
+} catch {
   isDemoMode = true;
 }
 
@@ -92,6 +93,7 @@ class YOLOModelManager {
       };
 
       this.model = await loadTensorflowModel(
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         require('../../assets/model/yolo.tflite'),
         modelOptions
       );
@@ -104,7 +106,7 @@ class YOLOModelManager {
 
       return true;
     } catch (error: any) {
-      console.error('[YOLO-TFLite] ❌ Failed to load model:', error?.message || error);
+      console.error('[YOLO-TFLite] âŒ Failed to load model:', error?.message || error);
       this.demoMode = true;
       return false;
     }
@@ -247,7 +249,6 @@ class YOLOModelManager {
       if (totalValues >= 84 * 2) {
         const val0 = outputData[0];
         const val84 = outputData[84];
-        const val1 = outputData[1];
         const val336 = outputData[336];
         
         // If values at stride=84 are more similar than values at stride=336,
@@ -482,3 +483,4 @@ export function isYOLOInDemoMode(): boolean {
 export function setYOLOConfidenceThreshold(threshold: number): void {
   getYOLOModelManager().setConfidenceThreshold(threshold);
 }
+
