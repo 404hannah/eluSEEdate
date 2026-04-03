@@ -174,8 +174,13 @@ class YOLOModelManager {
       // Run model inference
       const outputTensor = await this.model.run([preprocessed.data]);
       console.log('[YOLO-TFLite] Model inference complete, output:', typeof outputTensor);
+<<<<<<< HEAD
       
       // Parse YOLO output (format depends on your specific YOLOv12 model)
+=======
+
+      // Parse YOLO output (format depends on the active YOLOv12 model).
+>>>>>>> ba3a7bd3ab6c9470cf4006b4a9690aa31348096f
       const detections = this.parseYOLOOutput(outputTensor, frame.width, frame.height);
       
       console.log('[YOLO-TFLite] Detected', detections.length, 'objects');
@@ -223,17 +228,25 @@ class YOLOModelManager {
         const srcIdx = (srcY * frame.width + srcX) * 4; // RGBA = 4 bytes per pixel
         
         // Output index in BCHW format
-        const dstIdx = y * inputSize + x;
+        // const dstIdx = y * inputSize + x;
         
+        // Output index in BHWC format
+        const dstIdx = (y * inputSize + x) * 3;
+
         // Extract and normalize RGB values (0-255 -> 0-1)
         const r = frame.data[srcIdx] / 255.0;
         const g = frame.data[srcIdx + 1] / 255.0;
         const b = frame.data[srcIdx + 2] / 255.0;
         
         // Store in BCHW format: [all R values, all G values, all B values]
-        data[0 * inputSize * inputSize + dstIdx] = r; // R channel
-        data[1 * inputSize * inputSize + dstIdx] = g; // G channel
-        data[2 * inputSize * inputSize + dstIdx] = b; // B channel
+        // data[0 * inputSize * inputSize + dstIdx] = r; // R channel
+        // data[1 * inputSize * inputSize + dstIdx] = g; // G channel
+        // data[2 * inputSize * inputSize + dstIdx] = b; // B channel
+
+        // Store in BHWC format
+        data[0 + dstIdx] = r; // R channel
+        data[1 + dstIdx] = g; // G channel
+        data[2 + dstIdx] = b; // B channel
       }
     }
     
@@ -267,13 +280,13 @@ class YOLOModelManager {
       const totalValues = outputData?.length || 0;
       const expectedValues = 84 * 336; // 28224
       
-      // Try to infer the layout based on typical YOLO patterns
-      // If length matches, we need to determine if it's [84, 336] or [336, 84]
+      // Infer the layout based on typical YOLO patterns.
+      // If length matches, the layout is determined as [84, 336] or [336, 84].
       let isTransposed = true; // Assume [84, 336] by default
       
-      // Check if the data looks more like [336, 84] format
-      // In [336, 84] format, each detection would be 84 consecutive values
-      // We can check by looking at value ranges - bbox coords should be similar across channels
+      // Check whether data resembles the [336, 84] format.
+      // In [336, 84] format, each detection contains 84 consecutive values.
+      // Value-range comparison provides a heuristic for selecting the likely format.
       if (totalValues >= 84 * 2) {
         const val0 = outputData[0];
         const val84 = outputData[84];
@@ -283,7 +296,7 @@ class YOLOModelManager {
         // If values at stride=84 are more similar than values at stride=336,
         // it's likely [336, 84] format
         if (Math.abs(val0 - val84) < Math.abs(val0 - val336)) {
-          isTransposed = false;
+          // isTransposed = false;
           console.log('[YOLO-DEBUG] Detected non-transposed tensor format [336, 84]');
         } else {
           console.log('[YOLO-DEBUG] Using transposed tensor format [84, 336]');

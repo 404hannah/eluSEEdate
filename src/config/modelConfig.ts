@@ -140,8 +140,8 @@ export const YOLO_CONFIG = {
     }
   },
 
-  // Common COCO classes for obstacle detection
-  // NOTE: This is a placeholder - adjust based on your actual YOLOv12 model classes
+  // Common COCO classes for obstacle detection.
+  // NOTE: This list is a placeholder and should be aligned with the active YOLOv12 model classes.
   commonObstacles: [
     'person',
     'bicycle',
@@ -156,8 +156,8 @@ export const YOLO_CONFIG = {
   ]
 } as const;
 
-// YOLO class names (COCO dataset - 80 classes)
-// NOTE: Replace with your actual YOLOv12 model classes
+// YOLO class names (COCO dataset - 80 classes).
+// NOTE: This list should be replaced with the active YOLOv12 model classes.
 export const YOLO_CLASS_NAMES = [
   'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat',
   'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat',

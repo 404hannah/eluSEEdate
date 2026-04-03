@@ -19,3 +19,5 @@ export * from './directionsService';
 
 // Export Geocoding service (Nominatim / OpenStreetMap)
 export * from './geocodingService';
+// Export object speech service
+export * from './objectSpeechService';

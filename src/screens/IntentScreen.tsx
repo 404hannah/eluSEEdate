@@ -45,6 +45,7 @@ import {
 import BoundingBoxOverlay from '../components/BoundingBoxOverlay';
 import { SEQ_LEN, DEVICE_CONFIG, FRAME_WIDTH, FRAME_HEIGHT } from '../config/modelConfig';
 import { decodeBase64ToPixels } from '../utils/imageUtils';
+import { ObjectSpeechService } from '../services/objectSpeechService';
 
 type IntentScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Camera'>;
@@ -94,6 +95,12 @@ export default function IntentScreen({ navigation }: IntentScreenProps) {
   const [isYOLOModelLoaded, setIsYOLOModelLoaded] = useState<boolean>(false);
   const [yoloDetections, setYoloDetections] = useState<Detection[]>([]);
   const [yoloInferenceTime, setYoloInferenceTime] = useState<number>(0);
+  const objectSpeechServiceRef = useRef<ObjectSpeechService>(
+    new ObjectSpeechService({
+      confidenceThreshold: 0.45,
+      sameClassCooldownMs: 4000,
+    })
+  );
   
   // Inference lock to prevent concurrent inferences
   const isInferencingRef = useRef<boolean>(false);
@@ -429,6 +436,7 @@ export default function IntentScreen({ navigation }: IntentScreenProps) {
   const handleBack = () => {
     stopCapture();
     if (navigation.canGoBack && navigation.canGoBack()) {
+      void objectSpeechServiceRef.current.stop();
       navigation.goBack();
     } else if (navigation.navigate) {
       navigation.navigate('MainMenu');
