@@ -44,6 +44,7 @@ import {
   YOLOResult,
   Detection,
 } from '../services/yoloInference';
+import { ObjectSpeechService } from '../services/ObjectSpeechService';
 import BoundingBoxOverlay from '../components/BoundingBoxOverlay';
 import {
   SEQ_LEN,
@@ -111,6 +112,9 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
   const [isYOLOModelLoaded, setIsYOLOModelLoaded] = useState<boolean>(false);
   const [yoloDetections, setYoloDetections] = useState<Detection[]>([]);
   const [yoloInferenceTime, setYoloInferenceTime] = useState<number>(0);
+
+  // Object speech service (single instance for the screen lifecycle)
+  const objectSpeechServiceRef = useRef<ObjectSpeechService>(new ObjectSpeechService());
   
   // Inference lock to prevent concurrent inferences
   const isInferencingRef = useRef<boolean>(false);
@@ -263,6 +267,18 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
   useEffect(() => {
     isYOLOModelLoadedRef.current = isYOLOModelLoaded;
   }, [isYOLOModelLoaded]);
+
+  /**
+   * Start/stop object speech with the screen lifecycle.
+   */
+  useEffect(() => {
+    objectSpeechServiceRef.current.start();
+
+    return () => {
+      // Dispose speech engine state to avoid background playback leaks.
+      void objectSpeechServiceRef.current.dispose();
+    };
+  }, []);
 
   /**
    * Start continuous frame capture
@@ -449,6 +465,11 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
       const result: YOLOResult = await detectObjects(frame);
       setYoloDetections(result.detections);
       setYoloInferenceTime(result.inferenceTimeMs);
+
+      // Non-blocking announcement to avoid slowing camera processing.
+      void objectSpeechServiceRef.current.announceDetections(result.detections).catch((error: any) => {
+        console.warn('[ObjectSpeech] Announcement error:', error?.message || error);
+      });
     } catch (error: any) {
       console.error('[YOLO] Detection error:', error?.message || error);
       setYoloDetections([]);

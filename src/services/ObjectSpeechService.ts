@@ -1,4 +1,5 @@
 import * as Speech from 'expo-speech';
+import { YOLO_CLASS_NAMES } from '../config/modelConfig';
 import { Detection } from './yoloInference';
 
 /**
@@ -16,6 +17,8 @@ export interface ObjectSpeechServiceOptions {
   globalCooldownMs?: number;
   /** Minimum priority increase required to interrupt active speech. */
   interruptPriorityDelta?: number;
+  /** Minimum danger score that can pre-empt non-danger speech. */
+  dangerInterruptThreshold?: number;
   /** Text-to-speech playback rate. */
   rate?: number;
   /** Text-to-speech playback pitch. */
@@ -42,16 +45,18 @@ interface AnnouncementCandidate {
 interface ActiveSpeechState {
   className: string;
   priority: number;
+  danger: number;
 }
 
 const AREA_EPSILON = 0.0001;
 const CONFIDENCE_EPSILON = 0.0001;
 
 const DEFAULT_OPTIONS: Required<ObjectSpeechServiceOptions> = {
-  confidenceThreshold: 0.45,
-  sameClassCooldownMs: 4000,
-  globalCooldownMs: 1200,
-  interruptPriorityDelta: 0.2,
+  confidenceThreshold: 0.5,
+  sameClassCooldownMs: 5000,
+  globalCooldownMs: 1500,
+  interruptPriorityDelta: 0.18,
+  dangerInterruptThreshold: 0.9,
   rate: 0.98,
   pitch: 1.0,
   language: 'en-US',
@@ -102,6 +107,11 @@ export class ObjectSpeechService {
     }
   }
 
+  /** Starts speech announcements for the current screen/session. */
+  start(): void {
+    this.setEnabled(true);
+  }
+
   /**
    * Announces one object candidate from the current detection list.
    *
@@ -137,6 +147,7 @@ export class ObjectSpeechService {
     this.activeSpeech = {
       className: candidate.className,
       priority: candidate.priority,
+      danger: candidate.danger,
     };
     const token = ++this.activeSpeechToken;
 
@@ -200,19 +211,20 @@ export class ObjectSpeechService {
         continue;
       }
 
+      const resolvedClassName = this.resolveClassName(detection);
       const area = width * height;
-      const danger = this.getDangerWeight(detection.className);
+      const danger = this.getDangerWeight(resolvedClassName);
       const direction = this.getDirectionFromBounds(xMin, xMax);
 
-      // Priority emphasizes proximity first so the nearest/largest object is preferred.
-      const priority = (Math.min(1, area) * 0.75) + (confidence * 0.2) + (danger * 0.05);
-      const spokenClass = this.toSpokenClassName(detection.className);
+      // Priority emphasizes proximity first while giving danger enough impact to pre-empt low-risk speech.
+      const priority = (Math.min(1, area) * 0.68) + (confidence * 0.2) + (danger * 0.12);
+      const spokenClass = this.toSpokenClassName(resolvedClassName);
       const message = direction === 'ahead'
         ? `${spokenClass} ahead`
         : `${spokenClass} on the ${direction}`;
 
       const candidate: AnnouncementCandidate = {
-        className: detection.className,
+        className: resolvedClassName,
         confidence,
         area,
         danger,
@@ -258,8 +270,11 @@ export class ObjectSpeechService {
     }
 
     const globalCooldownPassed = (now - this.lastAnnouncementMs) >= this.options.globalCooldownMs;
-    if (!globalCooldownPassed && !this.shouldInterrupt(candidate)) {
-      return false;
+    if (!globalCooldownPassed) {
+      // Allow cooldown bypass only when there is active speech and candidate should pre-empt it.
+      if (!this.activeSpeech || !this.shouldInterrupt(candidate)) {
+        return false;
+      }
     }
 
     return true;
@@ -273,6 +288,13 @@ export class ObjectSpeechService {
     // Repeated class announcements do not interrupt active speech.
     if (candidate.className === this.activeSpeech.className) {
       return false;
+    }
+
+    const candidateIsDanger = candidate.danger >= this.options.dangerInterruptThreshold;
+    const activeIsDanger = this.activeSpeech.danger >= this.options.dangerInterruptThreshold;
+
+    if (candidateIsDanger && !activeIsDanger) {
+      return true;
     }
 
     return candidate.priority >= (this.activeSpeech.priority + this.options.interruptPriorityDelta);
@@ -297,6 +319,30 @@ export class ObjectSpeechService {
   private getDangerWeight(className: string): number {
     const normalized = className.trim().toLowerCase();
     return DANGER_WEIGHTS[normalized] ?? 0.6;
+  }
+
+  private resolveClassName(detection: Detection): string {
+    const normalizedRaw = detection.className?.trim().toLowerCase() ?? '';
+    const hasMeaningfulRawName = normalizedRaw.length > 0 && !normalizedRaw.startsWith('class_');
+
+    if (hasMeaningfulRawName) {
+      return normalizedRaw;
+    }
+
+    const classId = Number.isFinite(detection.classId) ? Math.floor(detection.classId) : -1;
+    const mappedName = classId >= 0 && classId < YOLO_CLASS_NAMES.length
+      ? YOLO_CLASS_NAMES[classId]
+      : undefined;
+
+    if (mappedName) {
+      return mappedName;
+    }
+
+    if (normalizedRaw.length > 0) {
+      return normalizedRaw;
+    }
+
+    return 'object';
   }
 
   private toSpokenClassName(rawClassName: string): string {

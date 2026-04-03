@@ -163,6 +163,36 @@ Hardening updates applied:
 2. Removed commented-out legacy tensor write blocks.
 3. Enabled non-transposed tensor branch assignment in layout detection logic.
 
+### 5.1 ObjectSpeech Runtime (Audio Obstacle Feedback)
+
+ObjectSpeech is now wired directly into the ActiveCamera YOLO loop.
+
+Integration flow:
+1. ActiveCamera creates a single ObjectSpeechService instance in a stable useRef.
+2. The service is started on screen mount.
+3. Immediately after YOLO returns detections, ActiveCamera calls announceDetections(detections).
+4. The call is non-blocking (fire-and-forget with Promise error catch) so camera/inference loop timing is not blocked by TTS.
+5. The service is disposed on unmount to stop playback and avoid background audio leaks.
+
+Multi-object selection behavior:
+1. Only one candidate is spoken per detection cycle.
+2. Candidate filtering requires confidence > 0.5 and valid normalized box geometry.
+3. Best candidate is selected by largest bounding-box area first (closest-on-screen proxy).
+4. If area is tied, higher confidence wins.
+5. If area and confidence are tied, higher danger weight wins.
+
+Speech priority and anti-spam policy:
+1. sameClassCooldownMs = 5000
+2. globalCooldownMs = 1500
+3. interruptPriorityDelta = 0.18
+4. dangerInterruptThreshold = 0.9
+5. High-danger objects (for example car, bus, truck, train, motorcycle) can pre-empt lower-priority active speech.
+
+Class name mapping for TTS:
+1. Uses detection.className when meaningful.
+2. If className is missing/placeholder (for example class_7), falls back to YOLO class lookup by classId.
+3. Final spoken phrase is direction-aware: "<Object> ahead", "<Object> on the left", or "<Object> on the right".
+
 ---
 
 ## 6. Configuration and Runtime Switches

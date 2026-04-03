@@ -14,6 +14,8 @@ This app uses two AI models working in parallel:
 1. **ConvLSTM** (Convolutional Long Short-Term Memory) for turn direction prediction - analyzes sequences of video frames to predict if the user should go **Front**, **Left**, or **Right**
 2. **YOLOv12** for real-time obstacle detection - identifies nearby objects (people, cars, bicycles, etc.) and displays bounding boxes on the camera view
 
+Audio feedback is powered by **ObjectSpeechService**, which converts YOLO detections into spoken obstacle prompts with priority and cooldown controls.
+
 **Turn Prediction Model**: Prototype 10 (ConvLSTM with Global Average Pooling)
 **Obstacle Detection**: YOLOv12 with TFLite optimization
 **Inference Engine**: TensorFlow Lite via `react-native-fast-tflite`
@@ -51,8 +53,22 @@ Minimalistic black & white palette for a clean, distraction-free interface.
 - **Unified camera runtime** in `ActiveCameraScreen` for both wandering and destination pipelines
 - **Live ConvLSTM turn prediction** with rolling frame buffer and low-latency updates
 - **Live YOLO obstacle detection** with bounding box overlay
+- **Priority-based spoken obstacle feedback** from YOLO detections (one object at a time, with cooldowns and danger interruption)
 - **Performance overlay** with capture, preprocessing, ConvLSTM, and YOLO timings
 - **Debug logs screen** for in-app runtime diagnostics
+
+## Spoken Obstacle Feedback Rules
+
+When multiple objects are detected in the same frame:
+1. The app announces one object per cycle.
+2. It prioritizes the largest bounding box (closest-on-screen proxy).
+3. Ties are resolved by higher confidence, then higher danger weight.
+
+Announcement pacing and priority:
+1. Same-class cooldown: 5000 ms.
+2. Global cooldown: 1500 ms.
+3. Danger objects can interrupt lower-priority speech (for example car, bus, truck, train, motorcycle).
+4. Speech call is asynchronous so camera/inference processing is not blocked.
 
 ## Route Graph
 
