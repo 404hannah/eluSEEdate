@@ -8,13 +8,13 @@
  *  1. GPS locates the user (expo-location).
  *  2. TTS: "Choose your location. Say the name of your destination."
  *  3. STT listens for a place name (free-form via expo-speech-recognition).
- *  4. Geocode the spoken text â†’ get an address (Nominatim geocoding service).
+ *  4. Geocode the spoken text → get an address (Nominatim geocoding service).
  *  5. TTS reads it back: "Did you mean <address>? Say yes to confirm, no to try again,
  *     or back to return."
  *  6. STT listens for "yes" / "no" / "back".
- *     - yes  â†’ validate 10 km radius â†’ navigate to ActiveCamera (destination mode).
- *     - no   â†’ clear & loop back to step 2.
- *     - back â†’ return to ChoiceScreen.
+ *     - yes  → validate 10 km radius → navigate to Destination (IntentScreen).
+ *     - no   → clear & loop back to step 2.
+ *     - back → return to ChoiceScreen.
  *  7. If out of bounds (> 10 km), TTS informs the user and loops back to step 2.
 
  */
@@ -51,8 +51,8 @@ type Coordinate = {
 
 /**
  * Conversation phases:
- *  ask_location  â€“ waiting for the user to say a place name
- *  confirming    â€“ geocoded result read back, waiting for yes / no / back
+ *  ask_location  – waiting for the user to say a place name
+ *  confirming    – geocoded result read back, waiting for yes / no / back
  */
 type Phase = 'ask_location' | 'confirming';
 
@@ -138,6 +138,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
   useFocusEffect(
     useCallback(() => {
       if (loading || !userLocation) return;
+      let readyTimer: ReturnType<typeof setTimeout> | null = null;
 
       setReadyToListen(false);
       hasNavigatedRef.current = false;
@@ -150,7 +151,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
         {
           language: 'en-US',
           onDone: () => {
-            setTimeout(() => setReadyToListen(true), 1000);
+            readyTimer = setTimeout(() => setReadyToListen(true), 1000);
           },
         },
       );
@@ -158,12 +159,136 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
       return () => {
         Speech.stop();
         setReadyToListen(false);
+        if (readyTimer) clearTimeout(readyTimer);
       };
     }, [loading, userLocation]),
   );
 
   // ================================================================
-  //  Voice recognition â€“ switches behaviour based on current phase
+  //  Helper – speak a message then loop back to ask_location phase
+  // ================================================================
+  const restartAskLocation = useCallback((message: string) => {
+    setPendingCoord(null);
+    setPendingLabel('');
+    setPendingDistance(0);
+    setPhase('ask_location');
+    setReadyToListen(false);
+
+    Speech.speak(message, {
+      language: 'en-US',
+      onDone: () => {
+        setTimeout(() => setReadyToListen(true), 1000);
+      },
+    });
+  }, []);
+
+  // ================================================================
+  //  Geocode a spoken place name, read it back and enter confirming
+  // ================================================================
+  const geocodePlace = useCallback(async (placeName: string) => {
+    try {
+      Speech.speak(`Looking up ${placeName}.`, { language: 'en-US' });
+
+      const result = await geocodeForward(placeName);
+      if (!result) {
+        restartAskLocation('I could not find that place. Please say another destination.');
+        return;
+      }
+
+      const coord: Coordinate = { latitude: result.latitude, longitude: result.longitude };
+      const label = result.displayName;
+
+      // Store candidate – do NOT commit yet
+      setPendingCoord(coord);
+      setPendingLabel(label);
+
+      const dist = userLocation ? haversineKm(userLocation, coord) : 0;
+      setPendingDistance(dist);
+
+      // Read back for confirmation
+      setPhase('confirming');
+      setReadyToListen(false);
+
+      Speech.speak(
+        `Did you mean ${label}? It is ${dist.toFixed(1)} kilometres away. Say yes to confirm, no to try again, or back to return.`,
+        {
+          language: 'en-US',
+          onDone: () => {
+            setTimeout(() => setReadyToListen(true), 1000);
+          },
+        },
+      );
+    } catch (err) {
+      console.error('Geocoding error:', err);
+      restartAskLocation('I could not find that place. Please say another destination.');
+    }
+  }, [restartAskLocation, userLocation]);
+
+  // ================================================================
+  //  Confirmation handlers
+  // ================================================================
+
+  /** User said "yes" – validate radius, fetch directions, then navigate or reject. */
+  const handleConfirmYes = useCallback(async () => {
+    if (!pendingCoord || !userLocation) return;
+
+    ExpoSpeechRecognitionModule.abort();
+    setIsListening(false);
+
+    if (pendingDistance > MAX_RADIUS_KM) {
+      restartAskLocation(
+        `That location is ${pendingDistance.toFixed(1)} kilometres away. Out of bounds. The maximum walking radius is ${MAX_RADIUS_KM} kilometres. Please choose a closer destination.`,
+      );
+      return;
+    }
+
+    // Fetch walking directions from origin → destination
+    hasNavigatedRef.current = true;
+    Speech.speak('Destination confirmed. Fetching walking directions. Please wait.', {
+      language: 'en-US',
+    });
+    setVoiceStatus('Fetching route...');
+
+    try {
+      const directions = await fetchWalkingDirections(userLocation, pendingCoord);
+
+      const totalSteps = directions.steps.length;
+      const totalMinutes = Math.round(directions.totalDurationSeconds / 60);
+
+      Speech.speak(
+        `Route found. ${totalSteps} steps. About ${totalMinutes} minutes walking. Starting destination mode.`,
+        {
+          language: 'en-US',
+          onDone: () =>
+            navigation.navigate('ActiveCamera', {
+              mode: 'destination',
+              origin: userLocation,
+              destination: pendingCoord,
+              destinationLabel: pendingLabel,
+              routeSteps: directions.steps,
+              totalDistanceMeters: directions.totalDistanceMeters,
+              totalDurationSeconds: directions.totalDurationSeconds,
+            }),
+        },
+      );
+    } catch (err) {
+      console.error('Directions API error:', err);
+      hasNavigatedRef.current = false;
+      restartAskLocation(
+        'Could not fetch walking directions for that destination. Please try a different location.',
+      );
+    }
+  }, [navigation, pendingCoord, pendingDistance, pendingLabel, restartAskLocation, userLocation]);
+
+  /** User said "no" – discard candidate and ask again. */
+  const handleConfirmNo = useCallback(() => {
+    ExpoSpeechRecognitionModule.abort();
+    setIsListening(false);
+    restartAskLocation('Okay, say another destination.');
+  }, [restartAskLocation]);
+
+  // ================================================================
+  //  Voice recognition – switches behaviour based on current phase
   //  Uses expo-speech-recognition (Google/Apple cloud speech) for
   //  accurate free-form place name recognition.
   // ================================================================
@@ -279,136 +404,11 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
         if (timeout) clearTimeout(timeout);
         if (restartTimeout) clearTimeout(restartTimeout);
       };
-      // Intentionally keyed to focus/listen phase transitions.
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [navigation, readyToListen, phase]),
+    }, [readyToListen, phase, navigation, geocodePlace, handleConfirmYes, handleConfirmNo]),
   );
 
   // ================================================================
-  //  Geocode a spoken place name, read it back and enter confirming
-  // ================================================================
-  const geocodePlace = async (placeName: string) => {
-    try {
-      Speech.speak(`Looking up ${placeName}.`, { language: 'en-US' });
-
-      const result = await geocodeForward(placeName);
-      if (!result) {
-        restartAskLocation('I could not find that place. Please say another destination.');
-        return;
-      }
-
-      const coord: Coordinate = { latitude: result.latitude, longitude: result.longitude };
-      const label = result.displayName;
-
-      // Store candidate â€“ do NOT commit yet
-      setPendingCoord(coord);
-      setPendingLabel(label);
-
-      const dist = userLocation ? haversineKm(userLocation, coord) : 0;
-      setPendingDistance(dist);
-
-      // Read back for confirmation
-      setPhase('confirming');
-      setReadyToListen(false);
-
-      Speech.speak(
-        `Did you mean ${label}? It is ${dist.toFixed(1)} kilometres away. Say yes to confirm, no to try again, or back to return.`,
-        {
-          language: 'en-US',
-          onDone: () => {
-            setTimeout(() => setReadyToListen(true), 1000);
-          },
-        },
-      );
-    } catch (err) {
-      console.error('Geocoding error:', err);
-      restartAskLocation('I could not find that place. Please say another destination.');
-    }
-  };
-
-  // ================================================================
-  //  Confirmation handlers
-  // ================================================================
-
-  /** User said "yes" â€“ validate radius, fetch directions, then navigate or reject. */
-  const handleConfirmYes = async () => {
-    if (!pendingCoord || !userLocation) return;
-
-    ExpoSpeechRecognitionModule.abort();
-    setIsListening(false);
-
-    if (pendingDistance > MAX_RADIUS_KM) {
-      restartAskLocation(
-        `That location is ${pendingDistance.toFixed(1)} kilometres away. Out of bounds. The maximum walking radius is ${MAX_RADIUS_KM} kilometres. Please choose a closer destination.`,
-      );
-      return;
-    }
-
-    // Fetch walking directions from origin â†’ destination
-    hasNavigatedRef.current = true;
-    Speech.speak('Destination confirmed. Fetching walking directions. Please wait.', {
-      language: 'en-US',
-    });
-    setVoiceStatus('Fetching route...');
-
-    try {
-      const directions = await fetchWalkingDirections(userLocation, pendingCoord);
-
-      const totalSteps = directions.steps.length;
-      const totalMinutes = Math.round(directions.totalDurationSeconds / 60);
-
-      Speech.speak(
-        `Route found. ${totalSteps} steps. About ${totalMinutes} minutes walking. Starting destination mode.`,
-        {
-          language: 'en-US',
-          onDone: () =>
-            navigation.navigate('ActiveCamera', {
-              mode: 'destination',
-              origin: userLocation,
-              destination: pendingCoord,
-              destinationLabel: pendingLabel,
-              routeSteps: directions.steps,
-              totalDistanceMeters: directions.totalDistanceMeters,
-              totalDurationSeconds: directions.totalDurationSeconds,
-            }),
-        },
-      );
-    } catch (err) {
-      console.error('Directions API error:', err);
-      hasNavigatedRef.current = false;
-      restartAskLocation(
-        'Could not fetch walking directions for that destination. Please try a different location.',
-      );
-    }
-  };
-
-  /** User said "no" â€“ discard candidate and ask again. */
-  const handleConfirmNo = () => {
-    ExpoSpeechRecognitionModule.abort();
-    setIsListening(false);
-    restartAskLocation('Okay, say another destination.');
-  };
-
-  // ================================================================
-  //  Helper â€“ speak a message then loop back to ask_location phase
-  // ================================================================
-  const restartAskLocation = (message: string) => {
-    setPendingCoord(null);
-    setPendingLabel('');
-    setPendingDistance(0);
-    setPhase('ask_location');
-    setReadyToListen(false);
-
-    Speech.speak(message, {
-      language: 'en-US',
-      onDone: () => {
-        setTimeout(() => setReadyToListen(true), 1000);
-      },
-    });
-  };
-
-  // ================================================================
-  //  Render â€“ voice-first UI for visually impaired users
+  //  Render – voice-first UI for visually impaired users
   // ================================================================
 
   if (loading) {
@@ -417,7 +417,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
         <StatusBar barStyle="light-content" backgroundColor="#000000" />
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#ffffff" />
-          <Text style={styles.statusText}>Getting your locationâ€¦</Text>
+          <Text style={styles.statusText}>Getting your location…</Text>
         </View>
       </SafeAreaView>
     );
@@ -444,7 +444,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
         <Text style={styles.title}>Choose Your Location</Text>
       </View>
 
-      {/* Centre â€“ spoken feedback area */}
+      {/* Centre – spoken feedback area */}
       <View style={styles.centerSection}>
         {phase === 'confirming' && pendingLabel ? (
           <>
@@ -574,5 +574,3 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 });
-
-

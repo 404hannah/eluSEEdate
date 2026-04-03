@@ -7,14 +7,6 @@
 
 React Native/Expo mobile application for real-time turn direction prediction using a ConvLSTM deep learning model with TensorFlow Lite inference.
 
-## Latest Release Summary (1.0.5)
-
-- Unified camera runtime remains centered on ActiveCamera mode routing.
-- Added release-hardening fixes for camera readiness lifecycle and capture stability.
-- Reduced temporary debug logging in camera and YOLO per-frame paths.
-- Updated wayfinding voice loop cleanup to clear delayed restart timers safely.
-- Added changelog tracking in CHANGELOG.md and refreshed technical reference in texts/TECHNICAL_APPENDIX.md.
-
 ## Overview
 
 This app uses two AI models working in parallel:
@@ -53,59 +45,74 @@ Minimalistic black & white palette for a clean, distraction-free interface.
 
 ## Features
 
- - **Main Menu**: Simple start button with voice command support
-- **TTS Startup Announcement**: Speaks "Starting EluSEEdate" when the app launches
-- **Live Camera**: Real-time camera preview with dual-model prediction
-- **Direction Label**: Large direction indicator at the bottom (from ConvLSTM)
-- **Obstacle Detection**: Real-time object detection with bounding boxes (from YOLO)
-- **Performance Overlay**: Inference times for both models displayed at top-left (in ms)
-- **Auto-Prediction**: Sliding window inference - captures at ~2 FPS (limited by takePictureAsync)
-- **Dual Inference**: ConvLSTM runs on frame sequences (20 frames), YOLO runs on single frames
-- **Priority**: ConvLSTM takes priority if device struggles with both models
+- **Voice-first main menu** with Vosk commands (`Start`, `Exit`)
+- **Mode selection flow** (`Wandering`, `Destination`, `Back`) with speech prompts
+- **Wayfinding flow** for destination geocoding + spoken confirmation
+- **Unified camera runtime** in `ActiveCameraScreen` for both wandering and destination pipelines
+- **Live ConvLSTM turn prediction** with rolling frame buffer and low-latency updates
+- **Live YOLO obstacle detection** with bounding box overlay
+- **Performance overlay** with capture, preprocessing, ConvLSTM, and YOLO timings
+- **Debug logs screen** for in-app runtime diagnostics
+
+## Route Graph
+
+Current stack routes in `App.tsx`:
+
+1. `MainMenu`
+2. `Choice`
+3. `Wayfinding`
+4. `ActiveCamera`
+5. `Logs`
+
+Runtime flow:
+
+1. `MainMenu` -> `Choice`
+2. `Choice` -> `ActiveCamera` (wandering mode)
+3. `Choice` -> `Wayfinding` -> `ActiveCamera` (destination mode with route payload)
+4. `MainMenu` -> `Logs` (debug diagnostics)
 
 ## Project Structure
 
 ```
-â”œâ”€â”€ App.tsx                          # Main entry point
-â”œâ”€â”€ package.json                     # Dependencies
-â”œâ”€â”€ app.json                         # Expo configuration
-â”œâ”€â”€ VERSIONS.txt                     # Dependency versions & rationale
-â”œâ”€â”€ tsconfig.json                    # TypeScript config
-â”œâ”€â”€ babel.config.js                  # Babel config
-â”œâ”€â”€ eas.json                         # EAS Build configuration
-â”œâ”€â”€ assets/
-â”‚   â””â”€â”€ model/
-â”‚       â”œâ”€â”€ convlstm.tflite          # ConvLSTM TFLite model file
-â”‚       â”œâ”€â”€ convlstm.onnx            # ONNX model (backup)
-â”‚       â””â”€â”€ yolo.tflite              # YOLOv12 TFLite model file
-â”œâ”€â”€ texts/
-â”‚   â”œâ”€â”€ PACKAGE_DEPENDENCIES.txt     # All dependencies explained
-â”‚   â”œâ”€â”€ TROUBLESHOOTING.txt          # Debugging and diagnostics guide
-â”‚   â”œâ”€â”€ GIT_MERGE_GUIDE.txt          # How to merge branches
-â”‚   â”œâ”€â”€ DATA_DICTIONARY.txt          # Variable documentation
-â”‚   â”œâ”€â”€ DOCUMENTATION_UPDATE_GUIDE.txt # Maintenance guide
-â”‚   â””â”€â”€ *.txt                        # Other reference docs
-â””â”€â”€ src/
-    â”œâ”€â”€ components/
-    â”‚   â”œâ”€â”€ errorBoundary.tsx        # Error boundary component
-    â”‚   â””â”€â”€ BoundingBoxOverlay.tsx   # YOLO bounding box renderer
-    â”œâ”€â”€ config/
-    â”‚   â””â”€â”€ modelConfig.ts           # ConvLSTM & YOLO configuration
-    â”œâ”€â”€ navigation/
-    â”‚   â””â”€â”€ types.ts                 # Navigation type definitions
-    â”œâ”€â”€ screens/
-    â”‚   â”œâ”€â”€ MainMenuScreen.tsx       # Main menu with voice/touch start
-    â”‚   â”œâ”€â”€ ChoiceScreen.tsx         # Wandering vs Destination mode selection
-    â”‚   â”œâ”€â”€ WayfindingScreen.tsx     # Voice-first destination selection
-    â”‚   â”œâ”€â”€ ActiveCameraScreen.tsx   # Unified camera inference runtime
-    â”‚   â””â”€â”€ LogsScreen.tsx           # In-app log viewer
-    â”œâ”€â”€ services/
-    â”‚   â”œâ”€â”€ preprocessor.ts          # Frame preprocessing (TypeScript)
-    â”‚   â”œâ”€â”€ convlstmWithoutIntentInference.ts  # ConvLSTM inference (no intent)
-    â”‚   â”œâ”€â”€ convlstmWithIntentInference.ts     # ConvLSTM inference (with intent, future)
-    â”‚   â””â”€â”€ yoloInference.ts         # YOLO object detection inference
-    â””â”€â”€ utils/
-        â””â”€â”€ imageUtils.ts            # Image decoding utilities
+├── App.tsx                          # Main entry point
+├── package.json                     # Dependencies
+├── app.json                         # Expo configuration
+├── tsconfig.json                    # TypeScript config
+├── babel.config.js                  # Babel config
+├── eas.json                         # EAS Build configuration
+├── assets/
+│   └── model/
+│       ├── convlstm.tflite          # ConvLSTM TFLite model file
+│       ├── convlstm.onnx            # ONNX model (backup)
+│       └── yolo.tflite              # YOLOv12 TFLite model
+├── texts/
+│   ├── TECHNICAL_APPENDIX.md        # Source-code-truth architecture reference
+│   ├── STANDALONE_APK_BUILD.txt     # EAS standalone APK guide
+│   └── *.txt                        # Other reference docs
+└── src/
+    ├── components/
+    │   ├── errorBoundary.tsx        # Error boundary component
+    │   └── BoundingBoxOverlay.tsx   # YOLO bounding box renderer
+    ├── config/
+    │   └── modelConfig.ts           # ConvLSTM & YOLO configuration
+    ├── navigation/
+    │   └── types.ts                 # Navigation type definitions
+    ├── screens/
+  │   ├── MainMenuScreen.tsx       # Voice-first entry screen
+  │   ├── ChoiceScreen.tsx         # Mode selection (Wandering/Destination)
+  │   ├── WayfindingScreen.tsx     # Destination speech/geocoding flow
+  │   ├── ActiveCameraScreen.tsx   # Unified camera + inference runtime
+  │   └── LogsScreen.tsx           # Runtime log viewer
+    ├── services/
+    │   ├── preprocessor.ts          # Frame preprocessing (TypeScript)
+    │   ├── convlstmWithoutIntentInference.ts  # ConvLSTM inference (no intent)
+    │   ├── convlstmWithIntentInference.ts     # ConvLSTM inference (with intent, future)
+  │   ├── yoloInference.ts         # YOLO object detection inference
+  │   ├── geocodingService.ts      # Destination geocoding
+  │   ├── directionsService.ts     # Walking route fetcher
+  │   └── ObjectSpeechService.ts   # Spoken obstacle announcements
+    └── utils/
+        └── imageUtils.ts            # Image decoding utilities
 ```
 
 ## Model Configuration
@@ -140,7 +147,7 @@ Minimalistic black & white palette for a clean, distraction-free interface.
 | Expected Inference | ~30-100ms (faster than ConvLSTM) |
 | Status | **Placeholder - awaiting real model** |
 
-**Note**: In Expo Go, native TFLite inference is unavailable, so the app runs in demo mode. Development/preview builds can run real YOLO inference from assets/model/yolo.tflite.
+**Note**: Currently using a placeholder for YOLO. The app will simulate detections in demo mode until you add your actual YOLOv12 .tflite model to `assets/model/yolo.tflite`.
 
 ## Intent Channels
 
@@ -183,7 +190,7 @@ npx eas build --platform android --profile production
 
 ## Usage
 
-1. Launch the app â€” you will hear "Starting EluSEEdate" spoken aloud
+1. Launch the app — you will hear "Starting EluSEEdate" spoken aloud
 2. Tap the **Start** button on the main menu (or say "Start")
 3. Grant camera permission when prompted
 4. Point the camera in the direction you're moving
@@ -232,14 +239,14 @@ const output = await model.run([tensorData]); // Float32Array [1, 20, 6, 128, 12
 
 ### Frame Capture & Preprocessing
 
-The ActiveCameraScreen captures frames using `expo-camera`:
+The CameraScreen captures frames using `expo-camera`:
 - **Capture method**: `takePictureAsync` with base64 output (~200-500ms per frame)
 - **Frame processing**: Decodes JPEG to pixel data, resizes to 128x128
 - **Buffer management**: Rolling buffer of frames with padding for early predictions
 - **Preprocessing**: Normalizes to [0,1], adds intent channels (zeros), transposes to NCHW format
 
 **Preprocessing Pipeline** (see `src/services/preprocessor.ts`):
-1. Camera captures JPEG frame â†’ base64
+1. Camera captures JPEG frame → base64
 2. Image decoded to RGBA pixel data
 3. Resized to 128x128 using bilinear interpolation
 4. Normalized to [0, 1] range
@@ -262,4 +269,3 @@ Based on **Prototype 10** - Mobile-Optimized ConvLSTM with Global Average Poolin
 ## License
 
 Part of thesis project for ConvLSTM Turn Prediction.
-

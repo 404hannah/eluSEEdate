@@ -6,23 +6,19 @@
 
 import { RouteStep } from '../services/directionsService';
 
-export type ActiveCameraMode = 'wandering' | 'destination';
-
-export type ActiveCameraParams = {
-  mode: ActiveCameraMode;
-  origin?: { latitude: number; longitude: number };
-  destination?: { latitude: number; longitude: number };
-  destinationLabel?: string;
-  routeSteps?: RouteStep[];
-  totalDistanceMeters?: number;
-  totalDurationSeconds?: number;
-};
-
 export type RootStackParamList = {
   MainMenu: undefined;
   Choice: undefined;
   Wayfinding: undefined;
-  ActiveCamera: ActiveCameraParams;
+  ActiveCamera: {
+    mode: 'wandering' | 'destination';
+    origin?: { latitude: number; longitude: number };
+    destination?: { latitude: number; longitude: number };
+    destinationLabel?: string;
+    routeSteps?: RouteStep[];
+    totalDistanceMeters?: number;
+    totalDurationSeconds?: number;
+  };
   Logs: undefined;
 };
 
@@ -33,4 +29,3 @@ declare global {
     interface RootParamList extends RootStackParamList {}
   }
 }
-

@@ -1,7 +1,7 @@
 /**
  * Choice Screen
  * 
- * Allows users to choose between Wandering and Destination modes
+ * Allows users to choose between Wandering (NoIntent) and Destination (Intent) modes
  * Supports voice commands: "Wandering", "Destination", "Back"
  * 
  * Design: Minimalistic black & white (matches MainMenu)
@@ -59,13 +59,14 @@ export default function ChoiceScreen({ navigation }: ChoiceScreenProps) {
   // TTS greeting, then enable listening after it finishes + delay
   useFocusEffect(
     useCallback(() => {
+      let readyTimer: ReturnType<typeof setTimeout> | null = null;
       setReadyToListen(false);
       Speech.speak(
         'Choose your mode, Wandering or Destination. If you want to return to the main menu say back.',
         {
           language: 'en-US',
           onDone: () => {
-            setTimeout(() => {
+            readyTimer = setTimeout(() => {
               setReadyToListen(true);
             }, 1000);
           },
@@ -75,6 +76,7 @@ export default function ChoiceScreen({ navigation }: ChoiceScreenProps) {
       return () => {
         Speech.stop();
         setReadyToListen(false);
+        if (readyTimer) clearTimeout(readyTimer);
       };
     }, [])
   );
@@ -91,10 +93,12 @@ export default function ChoiceScreen({ navigation }: ChoiceScreenProps) {
           await Vosk.start({ grammar: ['wandering', 'destination', 'back', '[unk]'] });
           setIsListening(true);
           setVoiceStatus('Say "Wandering", "Destination", or "Back"');
+
           if (resultListenerRef.current) {
             resultListenerRef.current.remove();
             resultListenerRef.current = null;
           }
+
           resultListenerRef.current = Vosk.onResult((result: string) => {
             const lowerResult = result.toLowerCase();
             if (!hasNavigatedRef.current) {

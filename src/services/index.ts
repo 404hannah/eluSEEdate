@@ -21,4 +21,3 @@ export * from './directionsService';
 export * from './geocodingService';
 // Export object speech service
 export * from './ObjectSpeechService';
-
