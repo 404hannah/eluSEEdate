@@ -52,10 +52,9 @@ import {
   ENABLE_INTENT_MODE,
 } from '../config/modelConfig';
 import { decodeBase64ToPixels } from '../utils/imageUtils';
-import { fetchWalkingDirections, maneuverToIntent } from '../services/directionsService';
+import { fetchWalkingDirections, maneuverToIntent, DirectionsResult } from '../services/directionsService';
 import * as Location from 'expo-location';
 import { getDistance as getGeoDistance } from 'geolib'; // npm install geolib
-import { DirectionsResult } from '../services/directionsService';
 
 type ActiveCameraScreenProps = NativeStackScreenProps<RootStackParamList, 'ActiveCamera'>;
 
@@ -71,6 +70,11 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
   const destinationLabel = route.params.destinationLabel;
   const routeStepCount = route.params.routeSteps?.length ?? 0;
   const totalDistanceMeters = route.params.totalDistanceMeters;
+
+  // Wayfinding state (live GPS + directions)
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [directionsCache, setDirectionsCache] = useState<DirectionsResult | null>(null);
+  const [currentStepIndex, setCurrentStepIndex] = useState<number>(0);
 
   // Camera permission state
   const [permission, requestPermission] = useCameraPermissions();
@@ -126,11 +130,6 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
   // Capture interval reference (now using setTimeout for async control)
   const captureIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // User location state (for destination mode)
-  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [directionsCache, setDirectionsCache] = useState<DirectionsResult | null>(null);
-  const [currentStepIndex, setCurrentStepIndex] = useState<number>(0);
-
   /**
    * Initialize model on screen mount
    */
@@ -179,21 +178,25 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
     
     initModels();
     
+    let locationSub: Location.LocationSubscription | null = null;
+
     if (ENABLE_INTENT_MODE) {
-      const requestLocationPermission = async () => {
+      (async () => {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status === 'granted') {
-          const location = await Location.getCurrentPositionAsync({});
-          setUserLocation({
-            latitude: location.coords.latitude,
-            longitude: location.coords.longitude,
-          });
+          locationSub = await Location.watchPositionAsync(
+            { accuracy: Location.Accuracy.High, distanceInterval: 2 },
+            (loc) => {
+              setUserLocation({
+                latitude: loc.coords.latitude,
+                longitude: loc.coords.longitude,
+              });
+            },
+          );
         } else {
           console.warn('Location permission denied');
         }
-      };
-      
-      requestLocationPermission();
+      })();
     }
     
     // Cleanup on unmount — use refs only, no state updates
@@ -202,6 +205,9 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
       if (captureIntervalRef.current) {
         clearTimeout(captureIntervalRef.current);
         captureIntervalRef.current = null;
+      }
+      if (locationSub) {
+        locationSub.remove();
       }
     };
   }, []);
