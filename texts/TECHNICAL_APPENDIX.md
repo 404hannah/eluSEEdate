@@ -1,6 +1,6 @@
 # EluSEEDate Technical Appendix (Source-Code Truth)
 
-Prepared on: 2026-04-03
+Prepared on: 2026-04-04
 Purpose: implementation-grounded technical reference for maintenance and release hardening.
 
 ---
@@ -19,6 +19,7 @@ This appendix describes the code as it currently runs in the repository. It refl
 - src/services/convlstmWithoutIntentInference.ts
 - src/services/convlstmWithIntentInference.ts
 - src/services/yoloInference.ts
+- src/services/ObjectSpeechService.ts
 - src/services/geocodingService.ts
 - src/services/directionsService.ts
 - src/utils/imageUtils.ts
@@ -126,7 +127,8 @@ Selection matrix:
 Hardening changes in current source:
 1. Camera-ready callback is guarded by refs so one-time picture-size configuration is not repeatedly re-run.
 2. Capture gating checks ref-backed readiness flags to avoid stale-closure gating.
-3. High-frequency console.log debug statements removed from capture and render paths.
+3. Structured runtime diagnostics are active in inference paths using INFERENCE-DEBUG, PRIORITY-DEBUG, and CONVLSTM-TRACE log families.
+4. Performance overlay now includes audio diagnostics: current audio state and last announced object.
 
 ### 4.3 Frame Buffer and ConvLSTM Input
 
@@ -144,6 +146,20 @@ Buffer behavior:
 1. Early inference supported once minimum buffered frames are available.
 2. First inference uses bootstrap doubling.
 3. Subsequent inference uses tail padding.
+
+### 4.4 Unified Inference Diagnostics
+
+Current ActiveCamera diagnostics:
+1. YOLO emits INFERENCE-DEBUG count logs and PRIORITY-DEBUG closest-object logs using largest bounding-box area.
+2. ConvLSTM emits INFERENCE-DEBUG and PRIORITY-DEBUG logs using highest class probability.
+3. ConvLSTM emits CONVLSTM-TRACE logs for:
+	- pipeline and buffer status at inference start
+	- tensor readiness and preprocessing time
+	- predicted label, confidence, and top probability ranking
+	- timing summary (preprocess, inference, total latency, and FPS)
+4. UI overlay surfaces the same runtime intent by showing:
+	- Audio: Ready | Speaking | Error
+	- Last Announced: most recent spoken object label
 
 ---
 
@@ -173,6 +189,7 @@ Integration flow:
 3. Immediately after YOLO returns detections, ActiveCamera calls announceDetections(detections).
 4. The call is non-blocking (fire-and-forget with Promise error catch) so camera/inference loop timing is not blocked by TTS.
 5. The service is disposed on unmount to stop playback and avoid background audio leaks.
+6. ActiveCamera subscribes to speech debug snapshots to drive overlay audio state and last-announced label.
 
 Multi-object selection behavior:
 1. Only one candidate is spoken per detection cycle.
@@ -187,6 +204,12 @@ Speech priority and anti-spam policy:
 3. interruptPriorityDelta = 0.18
 4. dangerInterruptThreshold = 0.9
 5. High-danger objects (for example car, bus, truck, train, motorcycle) can pre-empt lower-priority active speech.
+
+Audio hardening and tracing:
+1. Service attempts local/offline voice selection using getAvailableVoicesAsync and language matching.
+2. AUDIO-TRACE logs are emitted for service input and skip reasons (for example low confidence or cooldown).
+3. Speech.speak is guarded with error capture, logging code and message when playback fails.
+4. Audio runtime state is tracked as ready, speaking, or error.
 
 Class name mapping for TTS:
 1. Uses detection.className when meaningful.
@@ -209,7 +232,8 @@ In src/config/modelConfig.ts:
 1. ActiveCamera is the only camera inference screen in active navigation flow.
 2. Destination route payload is generated in Wayfinding and displayed in ActiveCamera performance overlay.
 3. Logs screen is still available for diagnostics routing.
-4. Release hardening removed temporary console.log noise in active capture and inference paths.
+4. Runtime diagnostics are intentionally verbose in inference and audio paths to support field debugging.
+5. ConvLSTM currently has on-screen output (direction/confidence) and debug logs; spoken obstacle feedback is driven by YOLO detections through ObjectSpeechService.
 
 ---
 
@@ -217,7 +241,7 @@ In src/config/modelConfig.ts:
 
 1. Keep route and param changes mirrored in src/navigation/types.ts and this appendix.
 2. Keep model input format comments synchronized with actual tensor write order in yoloInference.
-3. Re-run TypeScript and Expo diagnostics before each release candidate.
+3. Re-run npx expo-doctor, npx tsc --noEmit, and npx expo lint before each release candidate and before EAS preview/production builds.
 4. Maintain changelog entries for each semantic version bump.
 
 ---
