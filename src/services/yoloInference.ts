@@ -8,7 +8,7 @@
  * Run: npx expo prebuild && npx expo run:android
  */
 
-import { YOLO_NUM_CLASSES, YOLO_CLASS_NAMES } from '../config/modelConfig';
+import { YOLO_CLASS_NAMES } from '../config/modelConfig';
 import { FrameData } from './preprocessor';
 
 const ALLOWED_CLASS_IDS = new Set<number>([0, 1, 2, 3, 5, 7, 9, 11, 13, 14, 15, 16, 39]);
@@ -21,11 +21,13 @@ let isDemoMode = true;
 
 // Try to load TFLite (will fail in Expo Go, work in dev build)
 try {
+  // react-native-fast-tflite must be loaded dynamically at runtime.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const tfliteModule = require('react-native-fast-tflite');
   loadTensorflowModel = tfliteModule.loadTensorflowModel;
   isDemoMode = false;
   console.log('[YOLO-TFLite] react-native-fast-tflite loaded successfully');
-} catch (e) {
+} catch {
   console.log('[YOLO-TFLite] react-native-fast-tflite not available (Expo Go mode)');
   console.log('[YOLO-TFLite] Real inference unavailable without native TFLite support');
   isDemoMode = true;
@@ -106,6 +108,7 @@ class YOLOModelManager {
       };
 
       this.model = await loadTensorflowModel(
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         require('../../assets/model/yolo.tflite'),
         modelOptions
       );
@@ -165,25 +168,15 @@ class YOLOModelManager {
       }
 
       // Real inference with TFLite model
-      console.log('[YOLO-TFLite] Running real inference...');
-      
       // Preprocess frame for YOLO (resize to model input size, normalize)
       const preprocessed = this.preprocessFrame(frame);
-      console.log('[YOLO-TFLite] Preprocessed data shape:', preprocessed.data.length, 'expected:', 1*3*128*128);
-      
+
       // Run model inference
       const outputTensor = await this.model.run([preprocessed.data]);
-      console.log('[YOLO-TFLite] Model inference complete, output:', typeof outputTensor);
-      
-      // Parse YOLO output (format depends on your specific YOLOv12 model)
+      // Parse YOLO output (format depends on the active YOLOv12 model).
       const detections = this.parseYOLOOutput(outputTensor, frame.width, frame.height);
-      
-      console.log('[YOLO-TFLite] Detected', detections.length, 'objects');
-      
-      const inferenceTimeMs = performance.now() - startTime;
 
-      const modeLabel = this.demoMode ? '[DEMO]' : '[REAL]';
-      console.log(`[YOLO-TFLite] ${modeLabel} Detections: ${detections.length} objects in ${inferenceTimeMs.toFixed(1)}ms`);
+      const inferenceTimeMs = performance.now() - startTime;
 
       return {
         detections,
@@ -223,17 +216,25 @@ class YOLOModelManager {
         const srcIdx = (srcY * frame.width + srcX) * 4; // RGBA = 4 bytes per pixel
         
         // Output index in BCHW format
-        const dstIdx = y * inputSize + x;
+        // const dstIdx = y * inputSize + x;
         
+        // Output index in BHWC format
+        const dstIdx = (y * inputSize + x) * 3;
+
         // Extract and normalize RGB values (0-255 -> 0-1)
         const r = frame.data[srcIdx] / 255.0;
         const g = frame.data[srcIdx + 1] / 255.0;
         const b = frame.data[srcIdx + 2] / 255.0;
         
         // Store in BCHW format: [all R values, all G values, all B values]
-        data[0 * inputSize * inputSize + dstIdx] = r; // R channel
-        data[1 * inputSize * inputSize + dstIdx] = g; // G channel
-        data[2 * inputSize * inputSize + dstIdx] = b; // B channel
+        // data[0 * inputSize * inputSize + dstIdx] = r; // R channel
+        // data[1 * inputSize * inputSize + dstIdx] = g; // G channel
+        // data[2 * inputSize * inputSize + dstIdx] = b; // B channel
+
+        // Store in BHWC format
+        data[0 + dstIdx] = r; // R channel
+        data[1 + dstIdx] = g; // G channel
+        data[2 + dstIdx] = b; // B channel
       }
     }
     
@@ -265,71 +266,27 @@ class YOLOModelManager {
       
       // Detect tensor layout: (1, 84, 336) vs (1, 336, 84)
       const totalValues = outputData?.length || 0;
-      const expectedValues = 84 * 336; // 28224
       
-      // Try to infer the layout based on typical YOLO patterns
-      // If length matches, we need to determine if it's [84, 336] or [336, 84]
+      // Infer the layout based on typical YOLO patterns.
+      // If length matches, the layout is determined as [84, 336] or [336, 84].
       let isTransposed = true; // Assume [84, 336] by default
       
-      // Check if the data looks more like [336, 84] format
-      // In [336, 84] format, each detection would be 84 consecutive values
-      // We can check by looking at value ranges - bbox coords should be similar across channels
+      // Check whether data resembles the [336, 84] format.
+      // In [336, 84] format, each detection contains 84 consecutive values.
+      // Value-range comparison provides a heuristic for selecting the likely format.
       if (totalValues >= 84 * 2) {
         const val0 = outputData[0];
         const val84 = outputData[84];
-        const val1 = outputData[1];
         const val336 = outputData[336];
-        
+
         // If values at stride=84 are more similar than values at stride=336,
         // it's likely [336, 84] format
         if (Math.abs(val0 - val84) < Math.abs(val0 - val336)) {
-          // isTransposed = false;
-          console.log('[YOLO-DEBUG] Detected non-transposed tensor format [336, 84]');
-        } else {
-          console.log('[YOLO-DEBUG] Using transposed tensor format [84, 336]');
-        }
-      }
-      
-      // DEBUG: Log tensor info on first few calls
-      if (Math.random() < 0.1) { // 10% sampling to avoid spam
-        console.log('[YOLO-DEBUG] Output tensor type:', typeof outputData);
-        console.log('[YOLO-DEBUG] Output tensor length:', totalValues, '(expected:', expectedValues, ')');
-        console.log('[YOLO-DEBUG] Sample values [0-5]:', JSON.stringify({
-          "0": outputData[0],
-          "1": outputData[1],
-          "2": outputData[2],
-          "3": outputData[3],
-          "4": outputData[4]
-        }));
-      }
-      
-      // Sample and log a few detections for debugging
-      if (Math.random() < 0.05) {
-        console.log('[YOLO-DEBUG] Sample detection data:');
-        for (let i = 0; i < Math.min(3, numDetections); i++) {
-          let x, y, w, h, firstClassScore;
-          
-          if (isTransposed) {
-            x = outputData[0 * numDetections + i];
-            y = outputData[1 * numDetections + i];
-            w = outputData[2 * numDetections + i];
-            h = outputData[3 * numDetections + i];
-            firstClassScore = outputData[4 * numDetections + i];
-          } else {
-            x = outputData[i * 84 + 0];
-            y = outputData[i * 84 + 1];
-            w = outputData[i * 84 + 2];
-            h = outputData[i * 84 + 3];
-            firstClassScore = outputData[i * 84 + 4];
-          }
-          
-          console.log(`  Detection ${i}: x=${x.toFixed(3)}, y=${y.toFixed(3)}, w=${w.toFixed(3)}, h=${h.toFixed(3)}, first_class=${firstClassScore.toFixed(3)}`);
+          isTransposed = false;
         }
       }
       
       // Parse each detection
-      let maxConfidenceFound = 0;
-      let detectionCandidates = 0;
       
       for (let i = 0; i < numDetections; i++) {
         // Extract bbox coordinates (x, y, w, h)
@@ -375,14 +332,6 @@ class YOLOModelManager {
         // Float16 model outputs are already floating values.
         const confidence = Math.max(0, Math.min(1, maxClassScore));
         
-        if (confidence > maxConfidenceFound) {
-          maxConfidenceFound = confidence;
-        }
-        
-        if (confidence >= 0.25) { // Count candidates at lower threshold for debugging
-          detectionCandidates++;
-        }
-        
         // Filter by confidence threshold (use actual threshold, not temp one)
         if (confidence >= this.confidenceThreshold && ALLOWED_CLASS_IDS.has(maxClassId)) {
           // Convert from center format (x, y, w, h) to corner format (x, y, width, height)
@@ -414,21 +363,7 @@ class YOLOModelManager {
       
       // Apply Non-Maximum Suppression (NMS) to remove overlapping boxes
       const nmsDetections = this.applyNMS(detections, 0.45); // IoU threshold = 0.45
-      
-      // DEBUG: Log detection stats
-      console.log(`[YOLO-DEBUG] Pre-NMS detections: ${detections.length}, Post-NMS: ${nmsDetections.length}, Max confidence: ${maxConfidenceFound.toFixed(4)}, Candidates@0.25: ${detectionCandidates}`);
-      
-      // DEBUG: Check for suspicious identical confidence scores
-      if (nmsDetections.length > 5) {
-        const confidences = nmsDetections.map(d => d.confidence.toFixed(2));
-        const uniqueConfidences = new Set(confidences);
-        if (uniqueConfidences.size < nmsDetections.length / 2) {
-          console.log('[YOLO-WARNING] Many detections have identical confidence scores!');
-          console.log('[YOLO-WARNING] This suggests the model output may not be parsed correctly');
-          console.log('[YOLO-WARNING] Unique confidences:', Array.from(uniqueConfidences).join(', '));
-        }
-      }
-      
+
       return nmsDetections;
     } catch (error: any) {
       console.error('[YOLO-TFLite] Error parsing output:', error?.message || error);

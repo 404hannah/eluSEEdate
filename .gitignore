@@ -23,6 +23,11 @@ web-build/
 # Metro
 .metro-health-check*
 
+# Android build artifacts (machine-local/generated)
+android/.gradle/
+android/build/
+android/app/build/
+
 # Testing
 coverage/
 

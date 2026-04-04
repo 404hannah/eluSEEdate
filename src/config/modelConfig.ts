@@ -63,6 +63,14 @@ export const MODEL_CONFIG = {
     inferenceBackend: 'TensorFlow Lite',
     preprocessingLocation: 'On-device',
     modelFormat: 'TFLite'
+  },
+
+  // Runtime switches
+  runtime: {
+    // Global toggle for destination-mode intent pipeline experiments.
+    // false = always use lightweight wandering pipeline.
+    // true  = allow destination mode to use intent-aware pipeline.
+    enableIntentMode: false,
   }
 } as const;
 
@@ -75,6 +83,7 @@ export const CHANNELS = MODEL_CONFIG.preprocessing.channels;
 export const NUM_CLASSES = MODEL_CONFIG.model.numClasses;
 export const CLASS_NAMES = MODEL_CONFIG.classes.map(c => c.name);
 export const INTENT_FRAMES = MODEL_CONFIG.intent.intentFrames;
+export const ENABLE_INTENT_MODE = MODEL_CONFIG.runtime.enableIntentMode;
 
 // Device-specific configuration for Redmi Note 13 Pro 5G
 export const DEVICE_CONFIG = {
@@ -140,8 +149,8 @@ export const YOLO_CONFIG = {
     }
   },
 
-  // Common COCO classes for obstacle detection
-  // NOTE: This is a placeholder - adjust based on your actual YOLOv12 model classes
+  // Common COCO classes for obstacle detection.
+  // NOTE: This list is a placeholder and should be aligned with the active YOLOv12 model classes.
   commonObstacles: [
     'person',
     'bicycle',
@@ -156,8 +165,8 @@ export const YOLO_CONFIG = {
   ]
 } as const;
 
-// YOLO class names (COCO dataset - 80 classes)
-// NOTE: Replace with your actual YOLOv12 model classes
+// YOLO class names (COCO dataset - 80 classes).
+// NOTE: This list should be replaced with the active YOLOv12 model classes.
 export const YOLO_CLASS_NAMES = [
   'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat',
   'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat',

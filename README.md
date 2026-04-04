@@ -14,6 +14,8 @@ This app uses two AI models working in parallel:
 1. **ConvLSTM** (Convolutional Long Short-Term Memory) for turn direction prediction - analyzes sequences of video frames to predict if the user should go **Front**, **Left**, or **Right**
 2. **YOLOv12** for real-time obstacle detection - identifies nearby objects (people, cars, bicycles, etc.) and displays bounding boxes on the camera view
 
+Audio feedback is powered by **ObjectSpeechService**, which converts YOLO detections into spoken obstacle prompts with priority and cooldown controls.
+
 **Turn Prediction Model**: Prototype 10 (ConvLSTM with Global Average Pooling)
 **Obstacle Detection**: YOLOv12 with TFLite optimization
 **Inference Engine**: TensorFlow Lite via `react-native-fast-tflite`
@@ -45,15 +47,45 @@ Minimalistic black & white palette for a clean, distraction-free interface.
 
 ## Features
 
- - **Main Menu**: Simple start button with voice command support
-- **TTS Startup Announcement**: Speaks "Starting EluSEEdate" when the app launches
-- **Live Camera**: Real-time camera preview with dual-model prediction
-- **Direction Label**: Large direction indicator at the bottom (from ConvLSTM)
-- **Obstacle Detection**: Real-time object detection with bounding boxes (from YOLO)
-- **Performance Overlay**: Inference times for both models displayed at top-left (in ms)
-- **Auto-Prediction**: Sliding window inference - captures at ~2 FPS (limited by takePictureAsync)
-- **Dual Inference**: ConvLSTM runs on frame sequences (20 frames), YOLO runs on single frames
-- **Priority**: ConvLSTM takes priority if device struggles with both models
+- **Voice-first main menu** with Vosk commands (`Start`, `Exit`)
+- **Mode selection flow** (`Wandering`, `Destination`, `Back`) with speech prompts
+- **Wayfinding flow** for destination geocoding + spoken confirmation
+- **Unified camera runtime** in `ActiveCameraScreen` for both wandering and destination pipelines
+- **Live ConvLSTM turn prediction** with rolling frame buffer and low-latency updates
+- **Live YOLO obstacle detection** with bounding box overlay
+- **Priority-based spoken obstacle feedback** from YOLO detections (one object at a time, with cooldowns and danger interruption)
+- **Performance overlay** with capture, preprocessing, ConvLSTM, and YOLO timings
+- **Debug logs screen** for in-app runtime diagnostics
+
+## Spoken Obstacle Feedback Rules
+
+When multiple objects are detected in the same frame:
+1. The app announces one object per cycle.
+2. It prioritizes the largest bounding box (closest-on-screen proxy).
+3. Ties are resolved by higher confidence, then higher danger weight.
+
+Announcement pacing and priority:
+1. Same-class cooldown: 5000 ms.
+2. Global cooldown: 1500 ms.
+3. Danger objects can interrupt lower-priority speech (for example car, bus, truck, train, motorcycle).
+4. Speech call is asynchronous so camera/inference processing is not blocked.
+
+## Route Graph
+
+Current stack routes in `App.tsx`:
+
+1. `MainMenu`
+2. `Choice`
+3. `Wayfinding`
+4. `ActiveCamera`
+5. `Logs`
+
+Runtime flow:
+
+1. `MainMenu` -> `Choice`
+2. `Choice` -> `ActiveCamera` (wandering mode)
+3. `Choice` -> `Wayfinding` -> `ActiveCamera` (destination mode with route payload)
+4. `MainMenu` -> `Logs` (debug diagnostics)
 
 ## Project Structure
 
@@ -61,7 +93,6 @@ Minimalistic black & white palette for a clean, distraction-free interface.
 ├── App.tsx                          # Main entry point
 ├── package.json                     # Dependencies
 ├── app.json                         # Expo configuration
-├── VERSIONS.txt                     # Dependency versions & rationale
 ├── tsconfig.json                    # TypeScript config
 ├── babel.config.js                  # Babel config
 ├── eas.json                         # EAS Build configuration
@@ -69,30 +100,33 @@ Minimalistic black & white palette for a clean, distraction-free interface.
 │   └── model/
 │       ├── convlstm.tflite          # ConvLSTM TFLite model file
 │       ├── convlstm.onnx            # ONNX model (backup)
-│       └── yolo-placeholder.txt     # Placeholder for YOLOv12 model
+│       └── yolo.tflite              # YOLOv12 TFLite model
 ├── texts/
-│   ├── PACKAGE_DEPENDENCIES.txt     # All dependencies explained
-│   ├── TROUBLESHOOTING.txt          # Debugging and diagnostics guide
-│   ├── GIT_MERGE_GUIDE.txt          # How to merge branches
-│   ├── DATA_DICTIONARY.txt          # Variable documentation
-│   ├── DOCUMENTATION_UPDATE_GUIDE.txt # Maintenance guide
+│   ├── TECHNICAL_APPENDIX.md        # Source-code-truth architecture reference
+│   ├── STANDALONE_APK_BUILD.txt     # EAS standalone APK guide
 │   └── *.txt                        # Other reference docs
 └── src/
     ├── components/
-    │   ├── ErrorBoundary.tsx        # Error boundary component
+    │   ├── errorBoundary.tsx        # Error boundary component
     │   └── BoundingBoxOverlay.tsx   # YOLO bounding box renderer
     ├── config/
     │   └── modelConfig.ts           # ConvLSTM & YOLO configuration
     ├── navigation/
     │   └── types.ts                 # Navigation type definitions
     ├── screens/
-    │   ├── MainMenuScreen.tsx       # Main menu with Start button
-    │   └── CameraScreen.tsx         # Camera with dual-model inference
+  │   ├── MainMenuScreen.tsx       # Voice-first entry screen
+  │   ├── ChoiceScreen.tsx         # Mode selection (Wandering/Destination)
+  │   ├── WayfindingScreen.tsx     # Destination speech/geocoding flow
+  │   ├── ActiveCameraScreen.tsx   # Unified camera + inference runtime
+  │   └── LogsScreen.tsx           # Runtime log viewer
     ├── services/
     │   ├── preprocessor.ts          # Frame preprocessing (TypeScript)
     │   ├── convlstmWithoutIntentInference.ts  # ConvLSTM inference (no intent)
     │   ├── convlstmWithIntentInference.ts     # ConvLSTM inference (with intent, future)
-    │   └── yoloInference.ts         # YOLO object detection inference
+  │   ├── yoloInference.ts         # YOLO object detection inference
+  │   ├── geocodingService.ts      # Destination geocoding
+  │   ├── directionsService.ts     # Walking route fetcher
+  │   └── ObjectSpeechService.ts   # Spoken obstacle announcements
     └── utils/
         └── imageUtils.ts            # Image decoding utilities
 ```

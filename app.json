@@ -3,7 +3,7 @@
     "name": "EluSEEdate",
     "slug": "eluseedate",
     "owner": "eluseedate-thesis",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "splash": {
@@ -15,6 +15,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.thesis.eluseedate",
+      "buildNumber": "2",
       "infoPlist": {
         "NSCameraUsageDescription": "This app uses the camera to predict turn directions.",
         "NSMicrophoneUsageDescription": "Allow EluSEEdate to access your microphone for voice commands."
@@ -22,9 +23,12 @@
     },
     "android": {
       "package": "com.thesis.eluseedate",
+      "versionCode": 2,
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
       ]
     },
     "plugins": [
@@ -34,12 +38,26 @@
           "cameraPermission": "Allow EluSEEdate to access your camera for turn prediction."
         }
       ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow EluSEEdate to use your location for wayfinding."
+        }
+      ],
       "react-native-fast-tflite",
       [
         "react-native-vosk",
         {
           "models": ["assets/model-en-us"],
           "iOSMicrophonePermission": "Allow EluSEEdate to access your microphone for voice commands."
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow EluSEEdate to access your microphone for voice commands.",
+          "speechRecognitionPermission": "Allow EluSEEdate to use speech recognition.",
+          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
         }
       ]
     ],
