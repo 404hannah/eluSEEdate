@@ -50,6 +50,7 @@ import {
   SEQ_LEN,
   FRAME_WIDTH,
   FRAME_HEIGHT,
+  CLASS_NAMES,
   ENABLE_INTENT_MODE,
 } from '../config/modelConfig';
 import { decodeBase64ToPixels, decodeImageUriToPixels } from '../utils/imageUtils';
@@ -59,6 +60,62 @@ type ActiveCameraScreenProps = NativeStackScreenProps<RootStackParamList, 'Activ
 // Realistic capture FPS for takePictureAsync (slow but works in Expo Go)
 const REALISTIC_CAPTURE_FPS = 2;
 const TARGET_CAPTURE_AREA = 640 * 480;
+
+const getDetectionArea = (detection: Detection): number => {
+  return detection.boundingBox.width * detection.boundingBox.height;
+};
+
+const getLargestAreaDetection = (detections: Detection[]): Detection | null => {
+  if (!detections.length) {
+    return null;
+  }
+
+  return detections.reduce((largest, current) => {
+    return getDetectionArea(current) > getDetectionArea(largest) ? current : largest;
+  });
+};
+
+const getConvLSTMPriority = (prediction: PredictionResult): {
+  label: string;
+  probability: number;
+} => {
+  if (!prediction.probabilities.length) {
+    return {
+      label: prediction.className,
+      probability: prediction.confidence,
+    };
+  }
+
+  let bestIndex = 0;
+  for (let index = 1; index < prediction.probabilities.length; index += 1) {
+    if (prediction.probabilities[index] > prediction.probabilities[bestIndex]) {
+      bestIndex = index;
+    }
+  }
+
+  return {
+    label: CLASS_NAMES[bestIndex] ?? prediction.className,
+    probability: prediction.probabilities[bestIndex],
+  };
+};
+
+const formatConvLSTMTopProbabilities = (probabilities: number[]): string => {
+  if (!probabilities.length) {
+    return 'none';
+  }
+
+  const ranked = probabilities
+    .map((value, index) => ({
+      label: CLASS_NAMES[index] ?? `Class-${index}`,
+      probability: value,
+    }))
+    .sort((a, b) => b.probability - a.probability)
+    .slice(0, 3);
+
+  return ranked
+    .map((entry) => `${entry.label}:${entry.probability.toFixed(4)}`)
+    .join(' | ');
+};
 
 export default function ActiveCameraScreen({ navigation, route }: ActiveCameraScreenProps) {
   const mode = route.params.mode;
@@ -112,6 +169,8 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
   const [isYOLOModelLoaded, setIsYOLOModelLoaded] = useState<boolean>(false);
   const [yoloDetections, setYoloDetections] = useState<Detection[]>([]);
   const [yoloInferenceTime, setYoloInferenceTime] = useState<number>(0);
+  const [audioState, setAudioState] = useState<'Ready' | 'Speaking' | 'Error'>('Ready');
+  const [lastAnnouncedObject, setLastAnnouncedObject] = useState<string>('None');
 
   // Object speech service (single instance for the screen lifecycle)
   const objectSpeechServiceRef = useRef<ObjectSpeechService>(new ObjectSpeechService());
@@ -272,11 +331,25 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
    * Start/stop object speech with the screen lifecycle.
    */
   useEffect(() => {
-    objectSpeechServiceRef.current.start();
+    const speechService = objectSpeechServiceRef.current;
+
+    speechService.setDebugListener((snapshot) => {
+      const normalizedAudioState = snapshot.state === 'speaking'
+        ? 'Speaking'
+        : snapshot.state === 'error'
+          ? 'Error'
+          : 'Ready';
+
+      setAudioState(normalizedAudioState);
+      setLastAnnouncedObject(snapshot.lastAnnouncedLabel ?? 'None');
+    });
+
+    speechService.start();
 
     return () => {
       // Dispose speech engine state to avoid background playback leaks.
-      void objectSpeechServiceRef.current.dispose();
+      speechService.setDebugListener(undefined);
+      void speechService.dispose();
     };
   }, []);
 
@@ -466,6 +539,18 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
       setYoloDetections(result.detections);
       setYoloInferenceTime(result.inferenceTimeMs);
 
+      console.log(`[INFERENCE-DEBUG] Mode: [YOLO] | Detections: ${result.detections.length}.`);
+
+      const closestDetection = getLargestAreaDetection(result.detections);
+      if (closestDetection) {
+        const closestArea = getDetectionArea(closestDetection);
+        console.log(
+          `[PRIORITY-DEBUG] Closest: [${closestDetection.className}] | Area/Prob: [${closestArea.toFixed(4)}].`
+        );
+      } else {
+        console.log('[PRIORITY-DEBUG] Closest: [None] | Area/Prob: [0.0000].');
+      }
+
       // Non-blocking announcement to avoid slowing camera processing.
       void objectSpeechServiceRef.current.announceDetections(result.detections).catch((error: any) => {
         console.warn('[ObjectSpeech] Announcement error:', error?.message || error);
@@ -500,6 +585,12 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
       // Before first prediction, duplicate each buffered frame in order
       // (1,1,2,2,...) to bootstrap sequence length faster.
       const isFirstPrediction = !hasFirstPredictionRef.current;
+      const bufferedFrameCount = buffer.getFrameCount();
+      const pipelineLabel = useIntentPipeline ? 'Intent' : 'Wandering';
+      console.log(
+        `[CONVLSTM-TRACE] Start | Pipeline: [${pipelineLabel}] | Buffered Frames: ${bufferedFrameCount}/${SEQ_LEN} | Bootstrap: ${isFirstPrediction ? 'ON' : 'OFF'}.`
+      );
+
       const frames = isFirstPrediction
         ? buffer.getFramesBootstrapDoubled()
         : buffer.getFramesPadded();
@@ -511,9 +602,25 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
       // Preprocess frames
       const preprocessor = preprocessorRef.current;
       const tensor = preprocessor.preprocessFrameSequence(frames);
+      console.log(
+        `[CONVLSTM-TRACE] Tensor Ready | Frames Used: ${frames.length} | Shape: [1, ${SEQ_LEN}, 6, ${FRAME_HEIGHT}, ${FRAME_WIDTH}] | Preprocess: ${tensor.processingTimeMs.toFixed(1)} ms.`
+      );
       
       // Run prediction
       const { prediction, metrics: newMetrics } = await convlstmService.runPrediction(tensor);
+      const priority = getConvLSTMPriority(prediction);
+      const topProbabilities = formatConvLSTMTopProbabilities(prediction.probabilities);
+
+      console.log(`[INFERENCE-DEBUG] Mode: [ConvLSTM] | Detections: ${prediction.probabilities.length}.`);
+      console.log(
+        `[PRIORITY-DEBUG] Closest: [${priority.label}] | Area/Prob: [${priority.probability.toFixed(4)}].`
+      );
+      console.log(
+        `[CONVLSTM-TRACE] Output | Predicted: [${prediction.className}] | Confidence: [${prediction.confidence.toFixed(4)}] | Top: [${topProbabilities}].`
+      );
+      console.log(
+        `[CONVLSTM-TRACE] Timing | Preprocess: ${newMetrics.preprocessingTimeMs.toFixed(1)} ms | Inference: ${newMetrics.inferenceTimeMs.toFixed(1)} ms | Total: ${newMetrics.totalLatencyMs.toFixed(1)} ms | FPS: ${newMetrics.fps.toFixed(2)}.`
+      );
       
       // Update state
       setCurrentPrediction(prediction);
@@ -649,6 +756,12 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
           </Text>
           <Text style={styles.performanceText}>
             Objects: {yoloDetections.length}
+          </Text>
+          <Text style={styles.performanceText}>
+            Audio: {audioState}
+          </Text>
+          <Text style={styles.performanceText} numberOfLines={1}>
+            Last Announced: {lastAnnouncedObject}
           </Text>
           <Text style={styles.performanceText}>
             Predictions: {predictionCount}

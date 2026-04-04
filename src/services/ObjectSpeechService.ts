@@ -2,6 +2,14 @@ import * as Speech from 'expo-speech';
 import { YOLO_CLASS_NAMES } from '../config/modelConfig';
 import { Detection } from './yoloInference';
 
+export type AudioEngineState = 'ready' | 'speaking' | 'error';
+
+export interface AudioDebugSnapshot {
+  state: AudioEngineState;
+  lastAnnouncedLabel: string | null;
+  lastErrorCode: string | null;
+}
+
 /**
  * Configuration options for object-to-speech announcements.
  *
@@ -88,11 +96,33 @@ export class ObjectSpeechService {
   private activeSpeech: ActiveSpeechState | null = null;
   private activeSpeechToken = 0;
   private enabled = true;
+  private selectedLanguage: string;
+  private selectedVoiceId: string | null = null;
+  private hasResolvedVoice = false;
+  private audioState: AudioEngineState = 'ready';
+  private lastAnnouncedLabel: string | null = null;
+  private lastErrorCode: string | null = null;
+  private debugListener?: (snapshot: AudioDebugSnapshot) => void;
 
   constructor(options?: ObjectSpeechServiceOptions) {
     this.options = {
       ...DEFAULT_OPTIONS,
       ...options,
+    };
+
+    this.selectedLanguage = this.options.language;
+  }
+
+  setDebugListener(listener?: (snapshot: AudioDebugSnapshot) => void): void {
+    this.debugListener = listener;
+    this.emitDebugSnapshot();
+  }
+
+  getDebugSnapshot(): AudioDebugSnapshot {
+    return {
+      state: this.audioState,
+      lastAnnouncedLabel: this.lastAnnouncedLabel,
+      lastErrorCode: this.lastErrorCode,
     };
   }
 
@@ -104,12 +134,15 @@ export class ObjectSpeechService {
       void Speech.stop();
       this.activeSpeech = null;
       this.activeSpeechToken += 1;
+      this.setAudioState('ready');
     }
   }
 
   /** Starts speech announcements for the current screen/session. */
   start(): void {
     this.setEnabled(true);
+    this.setAudioState('ready');
+    void this.resolveOfflineVoice();
   }
 
   /**
@@ -119,7 +152,15 @@ export class ObjectSpeechService {
    * when cooldowns block output, or when active speech should not be interrupted.
    */
   async announceDetections(detections: Detection[]): Promise<void> {
-    if (!this.enabled || detections.length === 0) {
+    console.log(`[AUDIO-TRACE] Service received ${detections.length} items. Processing....`);
+
+    if (!this.enabled) {
+      console.log('[AUDIO-TRACE] Skipped frame - Reason: Service Disabled.');
+      return;
+    }
+
+    if (detections.length === 0) {
+      console.log('[AUDIO-TRACE] Skipped frame - Reason: No Detections.');
       return;
     }
 
@@ -129,18 +170,25 @@ export class ObjectSpeechService {
     }
 
     const now = Date.now();
-    if (!this.passesCooldowns(candidate, now)) {
+    const cooldownResult = this.passesCooldowns(candidate, now);
+    if (!cooldownResult.passed) {
+      const spokenName = this.toSpokenClassName(candidate.className);
+      console.log(`[AUDIO-TRACE] Skipped [${spokenName}] - Reason: [${cooldownResult.reason}].`);
       return;
     }
 
     const isSpeaking = await Speech.isSpeakingAsync().catch(() => false);
     if (isSpeaking) {
       if (!this.shouldInterrupt(candidate)) {
+        const spokenName = this.toSpokenClassName(candidate.className);
+        console.log(`[AUDIO-TRACE] Skipped [${spokenName}] - Reason: [Cooldown Active].`);
         return;
       }
 
       await Speech.stop().catch(() => undefined);
     }
+
+    await this.resolveOfflineVoice();
 
     this.lastClassAnnouncementMs.set(candidate.className, now);
     this.lastAnnouncementMs = now;
@@ -149,22 +197,46 @@ export class ObjectSpeechService {
       priority: candidate.priority,
       danger: candidate.danger,
     };
+    this.lastAnnouncedLabel = this.toSpokenClassName(candidate.className);
+    this.lastErrorCode = null;
+    this.emitDebugSnapshot();
     const token = ++this.activeSpeechToken;
 
-    Speech.speak(candidate.message, {
-      language: this.options.language,
+    const speechOptions: any = {
+      language: this.selectedLanguage,
       rate: this.options.rate,
       pitch: this.options.pitch,
+      onStart: () => {
+        this.setAudioState('speaking');
+      },
       onDone: () => {
-        this.clearActiveSpeech(token);
+        this.clearActiveSpeech(token, 'ready');
       },
       onStopped: () => {
-        this.clearActiveSpeech(token);
+        this.clearActiveSpeech(token, 'ready');
       },
-      onError: () => {
-        this.clearActiveSpeech(token);
+      onError: (speechError: any) => {
+        const errorCode = this.extractErrorCode(speechError);
+        const errorMessage = this.extractErrorMessage(speechError);
+        this.lastErrorCode = errorCode;
+        console.error(`[AUDIO-TRACE] Speech playback error | Code: ${errorCode} | Message: ${errorMessage}`);
+        this.clearActiveSpeech(token, 'error');
       },
-    });
+    };
+
+    if (this.selectedVoiceId) {
+      speechOptions.voice = this.selectedVoiceId;
+    }
+
+    try {
+      Speech.speak(candidate.message, speechOptions);
+    } catch (error: any) {
+      const errorCode = this.extractErrorCode(error);
+      const errorMessage = this.extractErrorMessage(error);
+      this.lastErrorCode = errorCode;
+      console.error(`[AUDIO-TRACE] Speech.speak failed | Code: ${errorCode} | Message: ${errorMessage}`);
+      this.clearActiveSpeech(token, 'error');
+    }
   }
 
   /** Stops current speech playback and clears active speech state. */
@@ -172,6 +244,7 @@ export class ObjectSpeechService {
     await Speech.stop().catch(() => undefined);
     this.activeSpeechToken += 1;
     this.activeSpeech = null;
+    this.setAudioState('ready');
   }
 
   /** Disposes service state and resets announcement history. */
@@ -181,9 +254,10 @@ export class ObjectSpeechService {
     this.lastAnnouncementMs = 0;
   }
 
-  private clearActiveSpeech(token: number): void {
+  private clearActiveSpeech(token: number, nextState: AudioEngineState): void {
     if (this.activeSpeechToken === token) {
       this.activeSpeech = null;
+      this.setAudioState(nextState);
     }
   }
 
@@ -195,6 +269,8 @@ export class ObjectSpeechService {
 
       // Confidence must be strictly greater than the configured threshold.
       if (!Number.isFinite(confidence) || confidence <= this.options.confidenceThreshold) {
+        const skippedLabel = this.toSpokenClassName(this.resolveClassName(detection));
+        console.log(`[AUDIO-TRACE] Skipped [${skippedLabel}] - Reason: [Low Confidence].`);
         continue;
       }
 
@@ -262,22 +338,136 @@ export class ObjectSpeechService {
     return false;
   }
 
-  private passesCooldowns(candidate: AnnouncementCandidate, now: number): boolean {
+  private passesCooldowns(candidate: AnnouncementCandidate, now: number): {
+    passed: boolean;
+    reason?: 'Cooldown Active';
+  } {
     const lastForClass = this.lastClassAnnouncementMs.get(candidate.className) ?? 0;
     const sameClassCooldownPassed = (now - lastForClass) >= this.options.sameClassCooldownMs;
     if (!sameClassCooldownPassed) {
-      return false;
+      return { passed: false, reason: 'Cooldown Active' };
     }
 
     const globalCooldownPassed = (now - this.lastAnnouncementMs) >= this.options.globalCooldownMs;
     if (!globalCooldownPassed) {
       // Allow cooldown bypass only when there is active speech and candidate should pre-empt it.
       if (!this.activeSpeech || !this.shouldInterrupt(candidate)) {
-        return false;
+        return { passed: false, reason: 'Cooldown Active' };
       }
     }
 
-    return true;
+    return { passed: true };
+  }
+
+  private async resolveOfflineVoice(): Promise<void> {
+    if (this.hasResolvedVoice) {
+      return;
+    }
+
+    this.hasResolvedVoice = true;
+
+    try {
+      const voices = await Speech.getAvailableVoicesAsync();
+
+      if (!voices?.length) {
+        console.warn(`[AUDIO-TRACE] No local voices listed. Using language fallback: ${this.selectedLanguage}.`);
+        return;
+      }
+
+      const preferredLanguage = this.options.language.toLowerCase();
+      const languagePrefix = preferredLanguage.split('-')[0];
+
+      const languageMatched = voices.filter((voice: any) => {
+        const voiceLanguage = String(voice?.language ?? '').toLowerCase();
+        return voiceLanguage === preferredLanguage || voiceLanguage.startsWith(languagePrefix);
+      });
+
+      const isInstalled = (voice: any): boolean => voice?.notInstalled !== true;
+      const isOffline = (voice: any): boolean => {
+        if (typeof voice?.networkConnectionRequired === 'boolean') {
+          return !voice.networkConnectionRequired;
+        }
+
+        if (typeof voice?.requiresNetworkConnectivity === 'boolean') {
+          return !voice.requiresNetworkConnectivity;
+        }
+
+        return true;
+      };
+
+      const pickVoice = (pool: any[]): any | null => {
+        if (!pool.length) {
+          return null;
+        }
+
+        return pool.find((voice) => isInstalled(voice) && isOffline(voice))
+          ?? pool.find((voice) => isInstalled(voice))
+          ?? pool[0];
+      };
+
+      const selectedVoice = pickVoice(languageMatched) ?? pickVoice(voices);
+
+      if (selectedVoice?.identifier) {
+        this.selectedVoiceId = selectedVoice.identifier;
+      }
+
+      if (typeof selectedVoice?.language === 'string' && selectedVoice.language.length > 0) {
+        this.selectedLanguage = selectedVoice.language;
+      }
+
+      console.log(
+        `[AUDIO-TRACE] Offline voice selected: ${selectedVoice?.name ?? selectedVoice?.identifier ?? 'system-default'} | Language: ${this.selectedLanguage}.`
+      );
+    } catch (error: any) {
+      this.selectedVoiceId = null;
+      this.selectedLanguage = this.options.language;
+      console.warn(
+        `[AUDIO-TRACE] Offline voice resolution failed. Falling back to ${this.selectedLanguage}.`,
+        error?.message || error,
+      );
+    }
+  }
+
+  private setAudioState(state: AudioEngineState): void {
+    this.audioState = state;
+    this.emitDebugSnapshot();
+  }
+
+  private emitDebugSnapshot(): void {
+    if (!this.debugListener) {
+      return;
+    }
+
+    this.debugListener({
+      state: this.audioState,
+      lastAnnouncedLabel: this.lastAnnouncedLabel,
+      lastErrorCode: this.lastErrorCode,
+    });
+  }
+
+  private extractErrorCode(error: any): string {
+    const candidateCode = error?.code
+      ?? error?.nativeErrorCode
+      ?? error?.error?.code
+      ?? error?.name;
+
+    if (typeof candidateCode === 'string' && candidateCode.trim().length > 0) {
+      return candidateCode;
+    }
+
+    if (typeof candidateCode === 'number') {
+      return String(candidateCode);
+    }
+
+    return 'unknown';
+  }
+
+  private extractErrorMessage(error: any): string {
+    const message = error?.message
+      ?? error?.error?.message
+      ?? error;
+
+    return typeof message === 'string' ? message : String(message);
   }
 
   private shouldInterrupt(candidate: AnnouncementCandidate): boolean {
