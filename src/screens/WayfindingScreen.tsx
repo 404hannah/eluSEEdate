@@ -232,21 +232,27 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
 
   /** User said "yes" – validate radius, fetch directions, then navigate or reject. */
   const handleConfirmYes = useCallback(async () => {
-    if (!pendingCoord || !userLocation || destinationTransitionLockedRef.current) return;
+    if (!pendingCoord || !userLocation || destinationTransitionLockedRef.current || hasNavigatedRef.current) {
+      return;
+    }
 
-    destinationTransitionLockedRef.current = true;
+    // Guard against duplicate "yes" results while we stop the current listener.
+    hasNavigatedRef.current = true;
 
     await stopExpoListening();
 
     if (pendingDistance > MAX_RADIUS_KM) {
+      hasNavigatedRef.current = false;
       restartAskLocation(
         `That location is ${pendingDistance.toFixed(1)} kilometres away. Out of bounds. The maximum walking radius is ${MAX_RADIUS_KM} kilometres. Please choose a closer destination.`,
       );
       return;
     }
 
+    // Lock handoff only after explicit confirmation and route-fetch transition begins.
+    destinationTransitionLockedRef.current = true;
+
     // Fetch walking directions from origin → destination
-    hasNavigatedRef.current = true;
     speakMessage({ message: 'Destination confirmed. Fetching walking directions. Please wait.' });
     setVoiceStatus('Fetching route...');
 

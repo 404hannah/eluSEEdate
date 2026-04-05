@@ -62,6 +62,11 @@ interface UseVoiceInteractionOptions {
 type ListenerWithRemove = { remove: () => void };
 type ListenerEngine = 'vosk' | 'expo';
 
+const TTS_HANDOFF_MS_PER_CHAR = 50;
+const TTS_HANDOFF_BASE_MS = 700;
+const TTS_HANDOFF_MIN_MS = 1500;
+const TTS_HANDOFF_MAX_MS = 20000;
+
 let voiceInteractionInstanceCounter = 0;
 let speechOwnerId: number | null = null;
 let voskOwnerId: number | null = null;
@@ -122,6 +127,8 @@ export function useVoiceInteraction(options?: UseVoiceInteractionOptions) {
   const interactionIdRef = useRef(++voiceInteractionInstanceCounter);
 
   const readyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handoffFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handoffSequenceRef = useRef(0);
   const pendingListeningRef = useRef<TransitionToListeningOptions | null>(null);
   const voskResultListenerRef = useRef<ListenerWithRemove | null>(null);
   const expoListenersRef = useRef<ListenerWithRemove[]>([]);
@@ -134,6 +141,16 @@ export function useVoiceInteraction(options?: UseVoiceInteractionOptions) {
       clearTimeout(readyTimerRef.current);
       readyTimerRef.current = null;
     }
+
+    if (handoffFallbackTimerRef.current) {
+      clearTimeout(handoffFallbackTimerRef.current);
+      handoffFallbackTimerRef.current = null;
+    }
+  }, []);
+
+  const estimateSpeechDurationMs = useCallback((message: string): number => {
+    const estimated = TTS_HANDOFF_BASE_MS + (message.trim().length * TTS_HANDOFF_MS_PER_CHAR);
+    return Math.max(TTS_HANDOFF_MIN_MS, Math.min(TTS_HANDOFF_MAX_MS, estimated));
   }, []);
 
   const playTtsEarcon = useCallback(async () => {
@@ -354,32 +371,64 @@ export function useVoiceInteraction(options?: UseVoiceInteractionOptions) {
       onListeningReady: speakOptions.onListeningReady,
       emitCue: true,
     };
+    const handoffSequence = ++handoffSequenceRef.current;
+    const delayMs = Math.max(0, speakOptions.delayMs ?? defaultListeningDelayMs);
+    const estimatedSpeechMs = estimateSpeechDurationMs(speakOptions.message);
+    let handoffCompleted = false;
+
+    const completeHandoff = (source: 'onDone' | 'onError' | 'fallback') => {
+      if (handoffCompleted || handoffSequenceRef.current !== handoffSequence) {
+        return;
+      }
+
+      handoffCompleted = true;
+
+      if (source === 'onDone') {
+        clearReadyTimer();
+        readyTimerRef.current = setTimeout(() => {
+          if (handoffSequenceRef.current !== handoffSequence) {
+            return;
+          }
+
+          void transitionToListening(pendingListeningRef.current ?? listeningOptions);
+        }, delayMs);
+        return;
+      }
+
+      clearReadyTimer();
+      void transitionToListening(pendingListeningRef.current ?? listeningOptions);
+    };
 
     pendingListeningRef.current = listeningOptions;
+    clearReadyTimer();
+    handoffFallbackTimerRef.current = setTimeout(() => {
+      if (handoffSequenceRef.current !== handoffSequence || handoffCompleted) {
+        return;
+      }
+
+      console.warn('[AUDIO-DEBUG] TTS onDone fallback triggered; forcing listening handoff');
+      completeHandoff('fallback');
+    }, estimatedSpeechMs + delayMs);
 
     speakMessage({
       message: speakOptions.message,
       language: speakOptions.language,
       statusWhileSpeaking: speakOptions.statusWhileSpeaking,
       onDone: () => {
-        const delayMs = Math.max(0, speakOptions.delayMs ?? defaultListeningDelayMs);
-        clearReadyTimer();
-        readyTimerRef.current = setTimeout(() => {
-          void transitionToListening(pendingListeningRef.current ?? listeningOptions);
-        }, delayMs);
+        completeHandoff('onDone');
 
         if (speakOptions.onDone) {
           speakOptions.onDone();
         }
       },
       onError: () => {
-        void transitionToListening(pendingListeningRef.current ?? listeningOptions);
+        completeHandoff('onError');
         if (speakOptions.onError) {
           speakOptions.onError();
         }
       },
     });
-  }, [clearReadyTimer, defaultListeningDelayMs, speakMessage, transitionToListening]);
+  }, [clearReadyTimer, defaultListeningDelayMs, estimateSpeechDurationMs, speakMessage, transitionToListening]);
 
   const skipSpeech = useCallback(async () => {
     clearReadyTimer();

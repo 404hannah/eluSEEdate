@@ -100,7 +100,7 @@ High-level sequence:
 Hardening behavior:
 - Auto-restart voice-listening timeout is tracked and cleared during cleanup to avoid stale delayed restarts.
 - Skip command/button can immediately interrupt prompts and move directly to listening state.
-- Destination confirmation now sets a transition lock so Skip/Back/listener auto-restart cannot interrupt the committed handoff.
+- Destination confirmation now sets a transition lock only after explicit Yes confirmation passes validation and route fetch starts, so confirmation listening remains available.
 - On successful directions fetch, Wayfinding now navigates immediately to ActiveCamera (destination mode) instead of waiting on a trailing TTS onDone callback.
 
 ### 3.3 Shared Voice Interaction Hook
@@ -114,6 +114,11 @@ Current hook contract provides:
 4. startVoskListening / stopVoskListening for command grammar loops.
 5. startExpoListening / stopExpoListening for free-form destination capture.
 6. stopAllVoiceActivity for cleanup during blur/unmount.
+
+Handoff reliability behavior:
+1. speakThenListen wires native Speech onDone to the listening transition path.
+2. A fallback timeout estimates prompt duration with `700 + (message.length * 50)` ms (clamped to 1500-20000 ms), plus configured delay, and forces listening if native onDone is swallowed.
+3. The fallback timeout is cleared automatically when native onDone, onError, skipSpeech, or cleanup runs.
 
 Accessibility listening cue behavior:
 1. Every transition to listening emits haptic feedback using expo-haptics.
