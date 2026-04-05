@@ -56,7 +56,7 @@ import {
 import { decodeBase64ToPixels, decodeImageUriToPixels } from '../utils/imageUtils';
 import { fetchWalkingDirections, maneuverToIntent, DirectionsResult } from '../services/directionsService';
 import * as Location from 'expo-location';
-import { getDistance as getGeoDistance } from 'geolib'; // npm install geolib
+import getGeoDistance from 'geolib/es/getDistance';
 
 type ActiveCameraScreenProps = NativeStackScreenProps<RootStackParamList, 'ActiveCamera'>;
 
@@ -343,33 +343,35 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
    * Request location permission and start GPS tracking if in intent mode
    */
   useEffect(() => {
+    if (!ENABLE_INTENT_MODE) {
+      return;
+    }
+
     let subscription: Location.LocationSubscription | null = null;
 
-    if (ENABLE_INTENT_MODE) {
-      const startTracking = async () => {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          console.warn('Location permission denied');
-          return;
+    const startTracking = async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        console.warn('Location permission denied');
+        return;
+      }
+
+      subscription = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          distanceInterval: 2,             // Updates every 2 meters
+          timeInterval: 2000,              // Updates every 2 seconds
+        },
+        (location) => {
+          setUserLocation({
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+          });
         }
+      );
+    };
 
-        subscription = await Location.watchPositionAsync(
-          {
-            accuracy: Location.Accuracy.High,
-            distanceInterval: 2,             // Updates every 2 meters
-            timeInterval: 2000,              // Updates every 2 seconds
-          },
-          (location) => {
-            setUserLocation({
-              latitude: location.coords.latitude,
-              longitude: location.coords.longitude,
-            });
-          }
-        );
-      };
-
-      startTracking();
-    }  
+    startTracking();
 
     return () => {
       if (subscription) {
@@ -377,7 +379,7 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
         console.log("GPS tracking stopped.");
       }
     };
-  }, [ENABLE_INTENT_MODE]);
+  }, []);
 
   // Directions cache
   useEffect(() => {
