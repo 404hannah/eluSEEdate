@@ -100,6 +100,8 @@ High-level sequence:
 Hardening behavior:
 - Auto-restart voice-listening timeout is tracked and cleared during cleanup to avoid stale delayed restarts.
 - Skip command/button can immediately interrupt prompts and move directly to listening state.
+- Destination confirmation now sets a transition lock so Skip/Back/listener auto-restart cannot interrupt the committed handoff.
+- On successful directions fetch, Wayfinding now navigates immediately to ActiveCamera (destination mode) instead of waiting on a trailing TTS onDone callback.
 
 ### 3.3 Shared Voice Interaction Hook
 
@@ -128,17 +130,18 @@ ActiveCamera is the single camera runtime for both modes.
 
 Pipeline is selected by:
 - route.params.mode
-- ENABLE_INTENT_MODE in modelConfig runtime settings
 
 Selection matrix:
 1. mode=wandering -> convlstmWithoutIntentInference
-2. mode=destination and ENABLE_INTENT_MODE=false -> convlstmWithoutIntentInference
-3. mode=destination and ENABLE_INTENT_MODE=true -> convlstmWithIntentInference
+2. mode=destination -> convlstmWithIntentInference
+
+Overlay pipeline label:
+1. mode=wandering -> "Wandering pipeline"
+2. mode=destination -> "Wayfinding pipeline"
 
 Preprocessor channel allocation:
 1. wandering path -> channels=3
-2. destination path with ENABLE_INTENT_MODE=false -> channels=3
-3. destination path with ENABLE_INTENT_MODE=true -> channels=6
+2. destination path -> channels=6
 
 ### 4.2 Camera Setup and Capture
 
@@ -150,11 +153,13 @@ Preprocessor channel allocation:
 - Fallback decode path: decodeBase64ToPixels.
 
 Destination-mode route progress wiring in current source:
-1. ActiveCamera starts live GPS tracking using expo-location watchPositionAsync when ENABLE_INTENT_MODE is enabled.
-2. ActiveCamera fetches and caches walking directions from current GPS position to route.params.destination.
-3. Step advancement is distance-driven: when distance to current step end is less than 2 meters, currentStepIndex advances.
-4. Distance checks use getGeoDistance imported from geolib/es/getDistance.
-5. routeProgress keeps both distanceRemaining and distanceToStepEnd for intent-aware frame metadata.
+1. ActiveCamera starts live GPS tracking using expo-location watchPositionAsync in destination mode when destination coordinates are present.
+2. ActiveCamera updates userLocation on every GPS fix.
+3. ActiveCamera fetches and caches walking directions from current GPS position to route.params.destination once per session.
+4. Step advancement is distance-driven: when distance to current step end is less than 2 meters, currentStepIndex advances.
+5. Distance checks use getGeoDistance imported from geolib/es/getDistance.
+6. routeProgress keeps both distanceRemaining and distanceToStepEnd for intent-aware frame metadata.
+7. currentDistance is recalculated on every location update and shown in overlay as meters when under 100 m, otherwise kilometers.
 
 Hardening changes in current source:
 1. Camera-ready callback is guarded by refs so one-time picture-size configuration is not repeatedly re-run.
@@ -176,7 +181,7 @@ Channel semantics:
 Current truth:
 1. In 3-channel path, RGB is tightly packed and no intent slots are allocated.
 2. In 6-channel path, RGB is written into positions 0-2 and positions 3-5 stay reserved for addIntent writes.
-3. If ENABLE_INTENT_MODE is true, ActiveCamera writes per-frame intent metadata:
+3. In destination mode, ActiveCamera writes per-frame intent metadata:
 	- intent from maneuverToIntent(currentStep.maneuver)
 	- intentDistance from routeProgress.distanceToStepEnd
 4. Preprocessor addIntent writes intent channels per pixel:
@@ -271,8 +276,8 @@ Class name mapping for TTS:
 
 In src/config/modelConfig.ts:
 1. ConvLSTM preprocessing constants and model metadata are centralized.
-2. Runtime switch MODEL_CONFIG.runtime.enableIntentMode controls destination-mode intent pipeline enablement.
-3. ENABLE_INTENT_MODE is exported and consumed in ActiveCameraScreen.
+2. Runtime switch MODEL_CONFIG.runtime.enableIntentMode remains available for configuration-level experimentation.
+3. ENABLE_INTENT_MODE is exported and currently consumed by preprocessor-level intent-channel logic, while ActiveCamera pipeline selection is mode-driven.
 
 ---
 
@@ -285,6 +290,7 @@ In src/config/modelConfig.ts:
 5. ConvLSTM currently has on-screen output (direction/confidence) and debug logs; spoken obstacle feedback is driven by YOLO detections through ObjectSpeechService.
 6. ActiveCamera currently performs in-screen route distance checks using geolib/es/getDistance for step progression.
 7. Voice-first navigation screens now share one hook-level cleanup path to reduce listener/timer leak risk.
+8. Destination overlay Dist is now live-updated from GPS fixes (not static route-entry distance).
 
 ---
 
@@ -297,10 +303,9 @@ In src/config/modelConfig.ts:
 
 ---
 
-## 9. Troubleshooting Toolkit Results (2026-04-05)
+## 9. Troubleshooting Toolkit Results (2026-04-05, Destination Transition + Live Overlay Distance/Pipeline Sync)
 
-Validation run performed on the current branch head after merge.
-This run includes the shared voice-hook refactor, Skip command/button behavior, and listening cue integration.
+Validation run performed after fixing destination mode transition reliability and synchronizing ActiveCamera pipeline label + live destination distance behavior with runtime mode.
 
 1. Expo Doctor
 	- Command: npx expo-doctor
@@ -315,8 +320,10 @@ This run includes the shared voice-hook refactor, Skip command/button behavior, 
 	- Result: Completed with no lint errors or warnings.
 
 Issue summary from this troubleshooting pass:
-1. No current blocking or non-blocking issues were reported by the three toolkits.
-2. No runtime source-code changes were required for Live GPS flow or preprocessor intent-channel behavior during this pass.
+1. Blocking runtime issue fixed in Wayfinding destination flow by removing the route-success dependency on trailing TTS completion.
+2. Added a destination transition lock to prevent Skip/Back/listener auto-restart from hijacking the handoff after confirmation.
+3. ActiveCamera overlay now reports pipeline label from route mode and updates destination distance on each location fix with dynamic unit formatting.
+4. No static analysis or configuration issues were reported by the three toolkits after applying the fix.
 
 ---
 

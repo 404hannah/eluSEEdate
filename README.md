@@ -8,8 +8,8 @@
 React Native/Expo mobile application for real-time turn direction prediction using a ConvLSTM deep learning model with TensorFlow Lite inference.
 
 The current runtime uses a dual-path ConvLSTM flow:
-1. 3-channel path for wandering mode, or destination mode when intent is disabled.
-2. 6-channel path for destination mode when intent is enabled.
+1. 3-channel path for wandering mode.
+2. 6-channel path for destination mode (wayfinding pipeline).
 
 ## Overview
 
@@ -63,7 +63,8 @@ Minimalistic black & white palette for a clean, distraction-free interface.
 - **Shared voice orchestration hook** (`src/hooks/useVoiceInteraction.ts`) for prompt timing, listening transitions, and cleanup
 - **Accessibility prompt cues** with haptic buzz (`expo-haptics`) and singleton ping earcon (`assets/sounds/ping.wav`) played before TTS on MainMenu/Choice/Wayfinding
 - **Unified camera runtime** in `ActiveCameraScreen` for both wandering and destination pipelines
-- **Dual-path ConvLSTM selection** between `convlstmWithoutIntentInference` and `convlstmWithIntentInference` based on route mode + runtime flag
+- **Dual-path ConvLSTM selection** between `convlstmWithoutIntentInference` and `convlstmWithIntentInference` based on route mode
+- **Real-time destination distance tracking** that recomputes live distance on every GPS fix
 - **Live ConvLSTM turn prediction** with rolling frame buffer and low-latency updates
 - **Live YOLO obstacle detection** with bounding box overlay
 - **Priority-based spoken obstacle feedback** from YOLO detections (one object at a time, with cooldowns and danger interruption)
@@ -115,6 +116,20 @@ Runtime flow:
 2. `Choice` -> `ActiveCamera` (wandering mode)
 3. `Choice` -> `Wayfinding` -> `ActiveCamera` (destination mode with route payload)
 4. `MainMenu` -> `Logs` (debug diagnostics)
+
+## Navigation Logic
+
+Pipeline switching:
+1. `mode='wandering'` selects `convlstmWithoutIntentInference` and 3-channel preprocessing.
+2. `mode='destination'` selects `convlstmWithIntentInference` and 6-channel preprocessing.
+3. Performance overlay mirrors the active runtime with `ConvLSTM: Wandering pipeline` or `ConvLSTM: Wayfinding pipeline`.
+
+Real-time destination distance:
+1. In destination mode, `ActiveCameraScreen` starts `expo-location` tracking with `watchPositionAsync`.
+2. Every location update recalculates straight-line distance from current GPS position to destination coordinates.
+3. Overlay `Dist` is refreshed on each fix using dynamic formatting:
+  - `< 100 m` shown in meters (for example `84 m`)
+  - `>= 100 m` shown in kilometers (for example `0.62 km`)
 
 ## Project Structure
 
@@ -201,17 +216,16 @@ Runtime flow:
 ## Intent Channels
 
 Runtime channel behavior:
-1. 3-channel path (wandering, or destination with intent disabled)
+1. 3-channel path (wandering)
   - Channels 0-2 only (RGB)
   - Tight packing index: `(frameOffset + (y * width + x) * 3)`
-2. 6-channel path (destination with intent enabled)
+2. 6-channel path (destination)
   - Channels 0-2 for RGB
   - Channels 3-5 reserved for intent values
   - Packed index: `(frameOffset + (y * width + x) * 6)`
 
 Path selection is driven by:
 1. `route.params.mode`
-2. `ENABLE_INTENT_MODE` from `src/config/modelConfig.ts`
 
 ## Getting Started
 
@@ -286,6 +300,8 @@ The app displays the following metrics in the top-left corner:
 - **Inference**: Time taken by the TFLite model (in ms)
 - **Preprocess**: Time taken to prepare frames (in ms)
 - **Total**: Combined latency (in ms)
+- **ConvLSTM Pipeline**: `Wandering pipeline` or `Wayfinding pipeline` based on selected mode
+- **Destination Dist**: Live straight-line distance to target, auto-formatted (`m` under 100m, otherwise `km`)
 - **Frames/Predictions**: Count of captured frames and predictions
 
 ## Development Notes

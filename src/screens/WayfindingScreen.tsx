@@ -88,6 +88,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
   const [pendingDistance, setPendingDistance] = useState<number>(0);
 
   const hasNavigatedRef = useRef(false);
+  const destinationTransitionLockedRef = useRef(false);
 
   const {
     isListening,
@@ -154,6 +155,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
       if (loading || !userLocation) return;
 
       hasNavigatedRef.current = false;
+      destinationTransitionLockedRef.current = false;
       setPhase('ask_location');
       setPendingCoord(null);
       setPendingLabel('');
@@ -174,6 +176,8 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
   //  Helper – speak a message then loop back to ask_location phase
   // ================================================================
   const restartAskLocation = useCallback((message: string) => {
+    hasNavigatedRef.current = false;
+    destinationTransitionLockedRef.current = false;
     setPendingCoord(null);
     setPendingLabel('');
     setPendingDistance(0);
@@ -228,7 +232,9 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
 
   /** User said "yes" – validate radius, fetch directions, then navigate or reject. */
   const handleConfirmYes = useCallback(async () => {
-    if (!pendingCoord || !userLocation) return;
+    if (!pendingCoord || !userLocation || destinationTransitionLockedRef.current) return;
+
+    destinationTransitionLockedRef.current = true;
 
     await stopExpoListening();
 
@@ -247,25 +253,20 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
     try {
       const directions = await fetchWalkingDirections(userLocation, pendingCoord);
 
-      const totalSteps = directions.steps.length;
-      const totalMinutes = Math.round(directions.totalDurationSeconds / 60);
-
-      speakMessage({
-        message: `Route found. ${totalSteps} steps. About ${totalMinutes} minutes walking. Starting destination mode.`,
-        onDone: () =>
-          navigation.navigate('ActiveCamera', {
-            mode: 'destination',
-            origin: userLocation,
-            destination: pendingCoord,
-            destinationLabel: pendingLabel,
-            routeSteps: directions.steps,
-            totalDistanceMeters: directions.totalDistanceMeters,
-            totalDurationSeconds: directions.totalDurationSeconds,
-          }),
+      setVoiceStatus('Opening destination camera...');
+      navigation.navigate('ActiveCamera', {
+        mode: 'destination',
+        origin: userLocation,
+        destination: pendingCoord,
+        destinationLabel: pendingLabel,
+        routeSteps: directions.steps,
+        totalDistanceMeters: directions.totalDistanceMeters,
+        totalDurationSeconds: directions.totalDurationSeconds,
       });
     } catch (err) {
       console.error('Directions API error:', err);
       hasNavigatedRef.current = false;
+      destinationTransitionLockedRef.current = false;
       restartAskLocation(
         'Could not fetch walking directions for that destination. Please try a different location.',
       );
@@ -295,7 +296,6 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
   // ================================================================
   useFocusEffect(
     useCallback(() => {
-      hasNavigatedRef.current = false;
       let restartTimeout: ReturnType<typeof setTimeout> | null = null;
 
       const startListening = async () => {
@@ -320,7 +320,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
             if (!event.isFinal) return;
             const transcript = event.results?.[0]?.transcript ?? '';
             const lower = transcript.toLowerCase().trim();
-            if (hasNavigatedRef.current) return;
+            if (hasNavigatedRef.current || destinationTransitionLockedRef.current) return;
 
             if (lower.includes('skip')) {
               await skipSpeech();
@@ -359,7 +359,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
             }
           },
           onEnd: () => {
-            if (!hasNavigatedRef.current && readyToListen) {
+            if (!hasNavigatedRef.current && !destinationTransitionLockedRef.current && readyToListen) {
               restartTimeout = setTimeout(() => {
                 void startListening();
               }, 500);
@@ -467,6 +467,10 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
         <TouchableOpacity
           style={styles.skipButton}
           onPress={() => {
+            if (destinationTransitionLockedRef.current) {
+              return;
+            }
+
             setVoiceStatus(
               phase === 'confirming'
                 ? 'Audio skipped. Say "Yes", "No", or "Back"'
