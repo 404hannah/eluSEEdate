@@ -69,9 +69,9 @@ ConvLSTM model metadata:
 Preprocessing:
 1. seqLen: 20
 2. fps: 20
-3. channels: dynamic per runtime path
-   - 3 channels for lightweight no-intent inference
-   - 6 channels for intent-aware destination inference
+3. channels: 6 for ConvLSTM runtime in both pipelines
+   - channels 0-2: RGB
+   - channels 3-5: intent planes (zeroed for no-intent)
 4. normalize: true
 
 Runtime switch:
@@ -270,17 +270,13 @@ FrameBuffer helpers:
 6. getFramesBootstrapDoubled
 
 Tensor/channel semantics:
-1. Dynamic shape by active path:
-   - [1, 20, 3, 128, 128] for no-intent path
-   - [1, 20, 6, 128, 128] for intent-aware path
-2. 3-channel packing math (tight RGB):
-   - frameStride = height * width * 3
-   - pixel base index = frameOffset + (y * width + x) * 3
-3. 6-channel packing math (RGB + intent-safe padding):
+1. ConvLSTM shape is fixed at [1, 20, 6, 128, 128] in both wandering and destination modes.
+2. Packing math is channel-first (NCHW-style):
    - frameStride = height * width * 6
-   - RGB packed at packedBase + 0..2
-   - slots packedBase + 3..5 reserved so addIntent writes are in-bounds
-4. addIntent behavior remains unchanged and only writes intent-channel slots when enabled.
+   - channel base index = frameOffset + channel * (height * width)
+   - pixel index = channelBase + (y * width + x)
+3. no-intent path: channels 3-5 are explicitly cleared to 0 every frame.
+4. intent-aware path: channels 3-5 are populated by step intent and distance thresholds.
 
 ================================================================================
 INFERENCE SERVICES
@@ -288,7 +284,7 @@ INFERENCE SERVICES
 
 ConvLSTM without intent (convlstmWithoutIntentInference.ts):
 1. Current baseline classification path
-2. Uses 3-channel preprocessor allocation in ActiveCamera when intent path is disabled
+2. Uses 6-channel preprocessor allocation with channels 3-5 zeroed in ActiveCamera
 3. Exposes initializeModel, runPrediction, cleanupModel
 
 ConvLSTM with intent (convlstmWithIntentInference.ts):

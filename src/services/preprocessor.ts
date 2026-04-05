@@ -18,8 +18,7 @@ import {
   FRAME_HEIGHT,
   FRAME_WIDTH,
   CHANNELS,
-  DEVICE_CONFIG,
-  ENABLE_INTENT_MODE
+  DEVICE_CONFIG
 } from '../config/modelConfig';
 
 type TensorChannelCount = 3 | 6;
@@ -43,7 +42,7 @@ export interface FrameData {
   timestamp: number;        // Capture timestamp in ms
   sequenceId?: number;      // Monotonic capture sequence ID for debugging/tracing
   intent?: number;          // Intent: 0 - Front, 1 - Left, 2 - Right
-  intentDistance: number;   // Distance before intent occurs
+  intentDistance?: number;  // Distance before intent occurs
 }
 
 /**
@@ -208,6 +207,7 @@ export class VideoPreprocessor {
   private seqLen: number;
   private normalize: boolean;
   private channels: TensorChannelCount;
+  private injectIntentChannels: boolean;
   private framePlaneSize: number;
   private frameStride: number;
   private tensorBuffer: Float32Array;
@@ -218,13 +218,15 @@ export class VideoPreprocessor {
     width: number = FRAME_WIDTH,
     seqLen: number = SEQ_LEN,
     normalize: boolean = true,
-    channels: number = CHANNELS
+    channels: number = CHANNELS,
+    injectIntentChannels: boolean = false
   ) {
     this.height = height;
     this.width = width;
     this.seqLen = seqLen;
     this.normalize = normalize;
     this.channels = resolveTensorChannelCount(channels);
+    this.injectIntentChannels = this.channels === 6 && injectIntentChannels;
 
     this.framePlaneSize = this.height * this.width;
     this.frameStride = this.channels * this.framePlaneSize;
@@ -289,10 +291,10 @@ export class VideoPreprocessor {
     // Batch index 0 is filled, so offset = frameIdx * channels * height * width.
     const frameOffset = frameIdx * this.frameStride;
 
+    // For 6-channel tensors, reset intent channels each frame and optionally populate
+    // them from GPS-derived intent metadata.
+    this.prepareIntentChannels(frame, frameOffset, tensorData);
     this.resizeNormalizeAndWriteFrame(frame, frameOffset, tensorData);
-
-    // In 3-channel mode, only RGB values are packed.
-    // In 6-channel mode, RGB is packed with intent slots reserved for addIntent writes.
   }
 
   /**
@@ -307,10 +309,12 @@ export class VideoPreprocessor {
     const frameWidth = frame.width;
     const frameHeight = frame.height;
     const source = frame.data;
+    const channel0Offset = frameOffset;
+    const channel1Offset = frameOffset + this.framePlaneSize;
+    const channel2Offset = frameOffset + this.framePlaneSize * 2;
 
     const maxSrcX = frameWidth - 1;
     const maxSrcY = frameHeight - 1;
-    const channelOffset = [0, 0, 0, 0, 0, 0];
 
     for (let y = 0; y < this.height; y++) {
       const rowOffset = y * this.width;
@@ -337,66 +341,56 @@ export class VideoPreprocessor {
         const valueG = source[srcBase + 1];
         const valueB = source[srcBase + 2];
 
-        if (this.channels === 3) {
-          const rgbBase = frameOffset + pixelOffset * 3;
-
-          if (this.normalize) {
-            tensorData[rgbBase] = valueR / 255.0;
-            tensorData[rgbBase + 1] = valueG / 255.0;
-            tensorData[rgbBase + 2] = valueB / 255.0;
-          } else {
-            tensorData[rgbBase] = valueR;
-            tensorData[rgbBase + 1] = valueG;
-            tensorData[rgbBase + 2] = valueB;
-          }
-
-          continue;
-        }
-
-        const packedBase = frameOffset + pixelOffset * 6;
-
         if (this.normalize) {
-          tensorData[packedBase] = valueR / 255.0;
-          tensorData[packedBase + 1] = valueG / 255.0;
-          tensorData[packedBase + 2] = valueB / 255.0;
+          tensorData[channel0Offset + pixelOffset] = valueR / 255.0;
+          tensorData[channel1Offset + pixelOffset] = valueG / 255.0;
+          tensorData[channel2Offset + pixelOffset] = valueB / 255.0;
         } else {
-          tensorData[packedBase] = valueR;
-          tensorData[packedBase + 1] = valueG;
-          tensorData[packedBase + 2] = valueB;
-        }
-
-        if (ENABLE_INTENT_MODE) {
-          channelOffset[0] = packedBase;
-          channelOffset[1] = packedBase + 1;
-          channelOffset[2] = packedBase + 2;
-          channelOffset[3] = packedBase + 3;
-          channelOffset[4] = packedBase + 4;
-          channelOffset[5] = packedBase + 5;
-
-          this.addIntent(frame, tensorData, channelOffset, 0);
+          tensorData[channel0Offset + pixelOffset] = valueR;
+          tensorData[channel1Offset + pixelOffset] = valueG;
+          tensorData[channel2Offset + pixelOffset] = valueB;
         }
       }
     }
   }
 
-  private addIntent(
+  private prepareIntentChannels(
     frame: FrameData,
-    tensorData: Float32Array,
-    channelOffset: number[],
-    pixelOffset: number
+    frameOffset: number,
+    tensorData: Float32Array
   ): void {
-    // Obtain intent
-    const intentClass = frame.intent || 0; // Default to front
-    const intentDistance = frame.intentDistance || 0; // Default to 0
+    if (this.channels !== 6) {
+      return;
+    }
 
-    // Check if intent would occur within the next few meters (<5)
-    if (intentDistance <= 5) {
-      // Fill the pixel's specified intent channel of intent (1)
-      tensorData[channelOffset[intentClass + 3] + pixelOffset] = 1;
-    } else {
-      // Fill the pixel's front channel of intent (1)
-      tensorData[channelOffset[3] + pixelOffset] = 1;
-    }    
+    const intentBaseOffset = frameOffset + this.framePlaneSize * 3;
+    const intentRegionEnd = intentBaseOffset + this.framePlaneSize * 3;
+
+    // Always clear intent planes first so no-intent mode stays strictly zeroed and
+    // with-intent mode does not leak stale values from previous frames.
+    tensorData.fill(0, intentBaseOffset, intentRegionEnd);
+
+    if (!this.injectIntentChannels) {
+      return;
+    }
+
+    const intentPlaneOffset = this.resolveIntentPlaneOffset(frame, frameOffset);
+    tensorData.fill(1, intentPlaneOffset, intentPlaneOffset + this.framePlaneSize);
+  }
+
+  private resolveIntentPlaneOffset(frame: FrameData, frameOffset: number): number {
+    const intentDistance =
+      typeof frame.intentDistance === 'number' && Number.isFinite(frame.intentDistance)
+        ? frame.intentDistance
+        : Number.POSITIVE_INFINITY;
+    const intentClass = frame.intent;
+
+    if (intentDistance <= 5 && (intentClass === 0 || intentClass === 1 || intentClass === 2)) {
+      return frameOffset + this.framePlaneSize * (intentClass + 3);
+    }
+
+    // Default intent plane is "front".
+    return frameOffset + this.framePlaneSize * 3;
   }
 
   /**

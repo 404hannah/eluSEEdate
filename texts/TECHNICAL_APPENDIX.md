@@ -140,8 +140,8 @@ Overlay pipeline label:
 2. mode=destination -> "Wayfinding pipeline"
 
 Preprocessor channel allocation:
-1. wandering path -> channels=3
-2. destination path -> channels=6
+1. wandering path -> channels=6 with intent planes zeroed
+2. destination path -> channels=6 with GPS-driven intent-plane injection
 
 ### 4.2 Camera Setup and Capture
 
@@ -170,31 +170,30 @@ Hardening changes in current source:
 
 ### 4.3 Frame Buffer and ConvLSTM Input
 
-Preprocessor output shape (dynamic):
-1. [1, 20, 3, 128, 128] when lightweight path is active
-2. [1, 20, 6, 128, 128] when intent-aware path is active
+Preprocessor output shape:
+1. [1, 20, 6, 128, 128] for both wandering and destination pipelines
 
 Channel semantics:
 1. Channels 0-2: RGB
-2. Channels 3-5: intent channels (only present in 6-channel path)
+2. Channels 3-5: intent channels
 
 Current truth:
-1. In 3-channel path, RGB is tightly packed and no intent slots are allocated.
-2. In 6-channel path, RGB is written into positions 0-2 and positions 3-5 stay reserved for addIntent writes.
-3. In destination mode, ActiveCamera writes per-frame intent metadata:
+1. ConvLSTM preprocessing always allocates six channels.
+2. RGB data is written in channel-first layout into channels 0-2.
+3. Intent channels 3-5 are cleared to zero for every frame before optional writes.
+4. In wandering mode (no-intent pipeline), channels 3-5 remain zero by design.
+5. In destination mode (intent pipeline), ActiveCamera writes per-frame intent metadata:
 	- intent from maneuverToIntent(currentStep.maneuver)
 	- intentDistance from routeProgress.distanceToStepEnd
-4. Preprocessor addIntent writes intent channels per pixel:
+	and preprocessor fills intent channels by plane:
 	- if intentDistance <= 5 meters, set channel (3 + intentClass) to 1
 	- otherwise, set Front intent channel (channel 3) to 1
 
 Packing math used by preprocessor:
-1. 3-channel path
-	- frameStride = height * width * 3
-	- pixel base index = frameOffset + (y * width + x) * 3
-2. 6-channel path
+1. 6-channel channel-first path
 	- frameStride = height * width * 6
-	- pixel base index = frameOffset + (y * width + x) * 6
+	- channel base index = frameOffset + channel * (height * width)
+	- pixel index = channelBase + (y * width + x)
 
 Buffer behavior:
 1. Early inference supported once minimum buffered frames are available.
@@ -211,7 +210,9 @@ Current ActiveCamera diagnostics:
 	- tensor readiness and preprocessing time
 	- predicted label, confidence, and top probability ranking
 	- timing summary (preprocess, inference, total latency, and FPS)
-4. UI overlay surfaces the same runtime intent by showing:
+4. Wandering mode emits CONVLSTM-NOINTENT-TRACE channel snapshots on a fixed interval,
+	including sampled per-channel means/max values and a warning if intent channels are non-zero.
+5. UI overlay surfaces the same runtime intent by showing:
 	- Audio: Ready | Speaking | Error
 	- Last Announced: most recent spoken object label
 
