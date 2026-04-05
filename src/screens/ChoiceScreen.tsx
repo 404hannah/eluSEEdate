@@ -15,6 +15,7 @@ import {
   TouchableOpacity,
   StatusBar,
   Dimensions,
+  InteractionManager,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -81,13 +82,24 @@ export default function ChoiceScreen({ navigation }: ChoiceScreenProps) {
     useCallback(() => {
       hasNavigatedRef.current = false;
 
-      speakThenListen({
-        message: 'Choose your mode, Wandering or Destination. If you want to return to the main menu say back. You may also say skip.',
-        statusWhileSpeaking: 'Speaking instructions...',
-        statusWhileListening: 'Say "Wandering", "Destination", "Back", or "Skip"',
+      let isActive = true;
+      const startTask = InteractionManager.runAfterInteractions(() => {
+        void stopAllVoiceActivity().finally(() => {
+          if (!isActive) {
+            return;
+          }
+
+          speakThenListen({
+            message: 'Choose your mode, Wandering or Destination. If you want to return to the main menu say back.',
+            statusWhileSpeaking: 'Speaking instructions...',
+            statusWhileListening: 'Say "Wandering", "Destination", "Back", or "Skip"',
+          });
+        });
       });
 
       return () => {
+        isActive = false;
+        startTask.cancel();
         void stopAllVoiceActivity();
       };
     }, [speakThenListen, stopAllVoiceActivity])

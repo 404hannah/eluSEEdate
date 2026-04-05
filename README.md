@@ -23,7 +23,8 @@ Audio feedback is powered by **ObjectSpeechService**, which converts YOLO detect
 Voice command prompts in MainMenu, Choice, and Wayfinding are now coordinated by a shared hook (`useVoiceInteraction`) with:
 1. Reusable TTS -> listening transitions.
 2. `Skip` voice command and `Skip Audio` button support.
-3. Listening transition accessibility cues (haptic buzz + short ping earcon).
+3. Standardized `[AUDIO-DEBUG]` lifecycle logging for TTS, earcon playback, and listener states.
+4. Singleton earcon playback (`assets/sounds/ping.wav`) immediately before each menu/wayfinding TTS prompt.
 
 **Turn Prediction Model**: Prototype 10 (ConvLSTM with Global Average Pooling)
 **Obstacle Detection**: YOLOv12 with TFLite optimization
@@ -60,7 +61,7 @@ Minimalistic black & white palette for a clean, distraction-free interface.
 - **Mode selection flow** (`Wandering`, `Destination`, `Back`, `Skip`) with speech prompts
 - **Wayfinding flow** for destination geocoding + spoken confirmation (`Yes`, `No`, `Back`, `Skip`)
 - **Shared voice orchestration hook** (`src/hooks/useVoiceInteraction.ts`) for prompt timing, listening transitions, and cleanup
-- **Accessibility listening cues** with haptic buzz (`expo-haptics`) and ping earcon (`assets/sounds/ping.wav`)
+- **Accessibility prompt cues** with haptic buzz (`expo-haptics`) and singleton ping earcon (`assets/sounds/ping.wav`) played before TTS on MainMenu/Choice/Wayfinding
 - **Unified camera runtime** in `ActiveCameraScreen` for both wandering and destination pipelines
 - **Dual-path ConvLSTM selection** between `convlstmWithoutIntentInference` and `convlstmWithIntentInference` based on route mode + runtime flag
 - **Live ConvLSTM turn prediction** with rolling frame buffer and low-latency updates
@@ -114,7 +115,7 @@ Runtime flow:
 │       ├── convlstm.onnx            # ONNX model (backup)
 │       └── yolo.tflite              # YOLOv12 TFLite model
 │   └── sounds/
-│       └── ping.wav                 # Earcon played when app transitions to listening
+│       └── ping.wav                 # Earcon played before menu/wayfinding TTS prompts
 ├── texts/
 │   ├── TECHNICAL_APPENDIX.md        # Source-code-truth architecture reference
 │   ├── STANDALONE_APK_BUILD.txt     # EAS standalone APK guide
@@ -243,7 +244,21 @@ npx eas build --platform android --profile production
 Voice UX notes:
 1. `Skip` can be spoken (or tapped as `Skip Audio`) in MainMenu, Choice, and Wayfinding.
 2. Skipping immediately stops current prompt playback and advances to active listening state.
-3. Every transition to listening emits a short haptic buzz and ping earcon.
+3. MainMenu, Choice, and Wayfinding now play `ping.wav` immediately before each TTS prompt.
+4. ActiveCamera spoken obstacle announcements (YOLO/ConvLSTM) intentionally do not play earcons to keep navigation audio quieter.
+5. `[AUDIO-DEBUG]` logs include `TTS Start`, `TTS Finished`, `Earcon Triggered`, and `Voice Listener Status` entries.
+
+## Audio Behavior By Screen
+
+Menu and destination setup screens:
+1. MainMenu, Choice, and Wayfinding use `useVoiceInteraction`.
+2. A singleton ping earcon is played before each TTS prompt.
+3. Voice lifecycle events are logged with `[AUDIO-DEBUG]` and appear in both IDE console and `LogsScreen`.
+
+Navigation camera screen:
+1. ActiveCamera uses `ObjectSpeechService` for obstacle alerts.
+2. No ping earcon is played for YOLO/ConvLSTM announcements.
+3. This avoids unnecessary audio clutter while walking.
 
 **Status Indicator**: A green dot means the app is actively capturing; "Demo Mode" label appears when using simulated predictions.
 

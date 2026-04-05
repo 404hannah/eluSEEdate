@@ -202,8 +202,9 @@ SHARED VOICE INTERACTION HOOK (src/hooks/useVoiceInteraction.ts)
 
 Purpose:
 1. Unify TTS + STT control across MainMenu, Choice, and Wayfinding.
-2. Provide centralized timer/listener cleanup to reduce leak risk.
-3. Support skipSpeech flow and listening transition accessibility cues.
+2. Provide centralized timer/listener cleanup with ownership guards to reduce cross-screen race conditions.
+3. Support skipSpeech flow, pre-TTS earcon playback, and listening readiness haptics.
+4. Emit standardized audio lifecycle logs with [AUDIO-DEBUG] prefix.
 
 Core state returned by hook:
 1. isListening
@@ -224,7 +225,18 @@ Core control methods:
 Listening cue dependencies:
 1. expo-haptics (impactAsync)
 2. expo-av (Audio.Sound replayAsync)
-3. assets/sounds/ping.wav
+3. assets/sounds/ping.wav (singleton preload)
+
+Earcon behavior:
+1. Ping plays immediately before TTS prompts in MainMenu, Choice, and Wayfinding.
+2. Ping is intentionally not used by ActiveCamera object announcements (YOLO/ConvLSTM).
+
+AUDIO-DEBUG log category:
+1. [AUDIO-DEBUG] TTS Start: <phrase>
+2. [AUDIO-DEBUG] TTS Finished: <phrase>
+3. [AUDIO-DEBUG] Earcon Triggered: ping.wav
+4. [AUDIO-DEBUG] Voice Listener Status: Active/Inactive/Error
+5. Logs are visible in both IDE console and LogsScreen.
 
 ================================================================================
 PREPROCESSOR (src/services/preprocessor.ts)

@@ -78,7 +78,7 @@ console.debug = (...args) => captureLog('debug', ...args);
 export default function LogsScreen() {
   const navigation = useNavigation();
   const [logs, setLogs] = useState<LogEntry[]>([...logStorage]);
-  const [filter, setFilter] = useState<'all' | 'yolo' | 'convlstm' | 'errors'>('all');
+  const [filter, setFilter] = useState<'all' | 'yolo' | 'convlstm' | 'audio' | 'errors'>('all');
   const [autoScroll, setAutoScroll] = useState(true);
   const scrollViewRef = useRef<ScrollView>(null);
 
@@ -112,6 +112,12 @@ export default function LogsScreen() {
           log.message.toLowerCase().includes('convlstm') ||
           log.message.toLowerCase().includes('prediction') ||
           log.message.toLowerCase().includes('intent')
+        );
+      case 'audio':
+        return logs.filter(log =>
+          log.message.toLowerCase().includes('[audio-debug]') ||
+          log.message.toLowerCase().includes('audio-trace') ||
+          log.message.toLowerCase().includes('speech')
         );
       case 'errors':
         return logs.filter(log => log.level === 'error' || log.level === 'warn');
@@ -179,6 +185,12 @@ export default function LogsScreen() {
           onPress={() => setFilter('convlstm')}
         >
           <Text style={styles.filterButtonText}>ConvLSTM</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.filterButton, filter === 'audio' && styles.filterButtonActive]}
+          onPress={() => setFilter('audio')}
+        >
+          <Text style={styles.filterButtonText}>Audio</Text>
         </TouchableOpacity>
         <TouchableOpacity 
           style={[styles.filterButton, filter === 'errors' && styles.filterButtonActive]}

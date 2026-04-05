@@ -4,7 +4,7 @@
 
 Project: EluSEEdate - Turn Direction Prediction Mobile App
 Version: 1.0.5
-Updated: April 2026 (voice-first accessibility update)
+Updated: April 2026 (voice-first accessibility + audio debug update)
 Platform: Android (primary), iOS (secondary)
 
 ================================================================================
@@ -112,13 +112,23 @@ react-native-vosk: ^2.1.7
   - Native module, available in development builds (not pure Expo Go path)
 
 expo-haptics: ~15.0.8
-  - WHY: Accessibility cue for listening transitions
+  - WHY: Accessibility cue for listening readiness
   - Emits brief tactile confirmation when app starts listening
 
 expo-av: ~16.0.8
-  - WHY: Earcon playback for listening transitions
-  - Plays assets/sounds/ping.wav together with haptic cue
+  - WHY: Earcon playback for assistive prompts
+  - Plays assets/sounds/ping.wav immediately before TTS prompts in MainMenu/Choice/Wayfinding
+  - Uses singleton sound loading in shared voice hook to reduce replay lag
   - Best-effort playback; voice flow remains active if audio cue fails
+
+AUDIO DEBUG CATEGORY:
+  - Prefix: [AUDIO-DEBUG]
+  - Required lifecycle logs:
+    1. [AUDIO-DEBUG] TTS Start: <phrase>
+    2. [AUDIO-DEBUG] TTS Finished: <phrase>
+    3. [AUDIO-DEBUG] Earcon Triggered: ping.wav
+    4. [AUDIO-DEBUG] Voice Listener Status: Active/Inactive/Error
+  - Output surfaces: IDE console + in-app LogsScreen
 
 ================================================================================
                               STORAGE
