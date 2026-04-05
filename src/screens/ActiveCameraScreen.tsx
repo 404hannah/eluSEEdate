@@ -125,6 +125,7 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
   const modeLabel = mode === 'destination' ? 'Destination' : 'Wandering';
   const useIntentPipeline = mode === 'destination' && ENABLE_INTENT_MODE;
   const convlstmService = useIntentPipeline ? convlstmWithIntent : convlstmWithoutIntent;
+  const preprocessorChannels: 3 | 6 = useIntentPipeline ? 6 : 3;
 
   const destinationLabel = route.params.destinationLabel;
   const routeStepCount = route.params.routeSteps?.length ?? 0;
@@ -154,7 +155,9 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
   const frameBufferRef = useRef<FrameBuffer>(new FrameBuffer(REALISTIC_CAPTURE_FPS));
   
   // Preprocessor instance
-  const preprocessorRef = useRef<VideoPreprocessor>(new VideoPreprocessor());
+  const preprocessorRef = useRef<VideoPreprocessor>(
+    new VideoPreprocessor(FRAME_HEIGHT, FRAME_WIDTH, SEQ_LEN, true, preprocessorChannels)
+  );
   
   // Prediction state
   const [currentPrediction, setCurrentPrediction] = useState<PredictionResult | null>(null);
@@ -290,6 +293,14 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
     isPictureSizeConfiguredRef.current = false;
     hasConfiguredPictureSizeRef.current = false;
     isConfiguringPictureSizeRef.current = false;
+
+    preprocessorRef.current = new VideoPreprocessor(
+      FRAME_HEIGHT,
+      FRAME_WIDTH,
+      SEQ_LEN,
+      true,
+      preprocessorChannels
+    );
     
     const initModels = async () => {
       setDebugStatus('Loading models...');
@@ -328,8 +339,12 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
         clearTimeout(captureIntervalRef.current);
         captureIntervalRef.current = null;
       }
+
+      void convlstmService.cleanupModel().catch((error: any) => {
+        console.warn('[ActiveCamera] Failed to cleanup ConvLSTM model:', error?.message || error);
+      });
     };
-  }, [convlstmService]);
+  }, [convlstmService, preprocessorChannels]);
   
   useEffect(() => {
     isModelLoadedRef.current = isModelLoaded;

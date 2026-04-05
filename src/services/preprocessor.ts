@@ -22,6 +22,16 @@ import {
   ENABLE_INTENT_MODE
 } from '../config/modelConfig';
 
+type TensorChannelCount = 3 | 6;
+
+const resolveTensorChannelCount = (channels: number): TensorChannelCount => {
+  if (channels === 3 || channels === 6) {
+    return channels;
+  }
+
+  throw new Error('VideoPreprocessor channels must be 3 or 6');
+};
+
 /**
  * Frame data structure
  * Holds raw pixel data from camera capture
@@ -197,6 +207,7 @@ export class VideoPreprocessor {
   private width: number;
   private seqLen: number;
   private normalize: boolean;
+  private channels: TensorChannelCount;
   private framePlaneSize: number;
   private frameStride: number;
   private tensorBuffer: Float32Array;
@@ -206,19 +217,21 @@ export class VideoPreprocessor {
     height: number = FRAME_HEIGHT,
     width: number = FRAME_WIDTH,
     seqLen: number = SEQ_LEN,
-    normalize: boolean = true
+    normalize: boolean = true,
+    channels: number = CHANNELS
   ) {
     this.height = height;
     this.width = width;
     this.seqLen = seqLen;
     this.normalize = normalize;
+    this.channels = resolveTensorChannelCount(channels);
 
     this.framePlaneSize = this.height * this.width;
-    this.frameStride = CHANNELS * this.framePlaneSize;
+    this.frameStride = this.channels * this.framePlaneSize;
 
     // Reused backing buffer: [1, seqLen, channels, height, width]
     this.tensorBuffer = new Float32Array(this.seqLen * this.frameStride);
-    this.outputShape = [1, this.seqLen, CHANNELS, this.height, this.width];
+    this.outputShape = [1, this.seqLen, this.channels, this.height, this.width];
   }
 
   /**
@@ -278,8 +291,8 @@ export class VideoPreprocessor {
 
     this.resizeNormalizeAndWriteFrame(frame, frameOffset, tensorData);
 
-    // Intent channels (3, 4, 5) are intentionally left untouched.
-    // The persistent Float32Array starts as zeros and RGB writes only touch channels 0-2.
+    // In 3-channel mode, only RGB values are packed.
+    // In 6-channel mode, RGB is packed with intent slots reserved for addIntent writes.
   }
 
   /**
@@ -295,17 +308,9 @@ export class VideoPreprocessor {
     const frameHeight = frame.height;
     const source = frame.data;
 
-    const channelOffset = [];
-    for (let i = 0; i < CHANNELS; i++) {
-      channelOffset[i] = frameOffset + this.framePlaneSize * i;
-    }
-
-    // const channel0Offset = frameOffset;
-    // const channel1Offset = frameOffset + this.framePlaneSize;
-    // const channel2Offset = frameOffset + this.framePlaneSize * 2;
-
     const maxSrcX = frameWidth - 1;
     const maxSrcY = frameHeight - 1;
+    const channelOffset = [0, 0, 0, 0, 0, 0];
 
     for (let y = 0; y < this.height; y++) {
       const rowOffset = y * this.width;
@@ -332,19 +337,43 @@ export class VideoPreprocessor {
         const valueG = source[srcBase + 1];
         const valueB = source[srcBase + 2];
 
-        if (this.normalize) {
-          tensorData[channelOffset[0] + pixelOffset] = valueR / 255.0;
-          tensorData[channelOffset[1] + pixelOffset] = valueG / 255.0;
-          tensorData[channelOffset[2] + pixelOffset] = valueB / 255.0;
-        } else {
-          tensorData[channelOffset[0] + pixelOffset] = valueR;
-          tensorData[channelOffset[1] + pixelOffset] = valueG;
-          tensorData[channelOffset[2] + pixelOffset] = valueB;
+        if (this.channels === 3) {
+          const rgbBase = frameOffset + pixelOffset * 3;
+
+          if (this.normalize) {
+            tensorData[rgbBase] = valueR / 255.0;
+            tensorData[rgbBase + 1] = valueG / 255.0;
+            tensorData[rgbBase + 2] = valueB / 255.0;
+          } else {
+            tensorData[rgbBase] = valueR;
+            tensorData[rgbBase + 1] = valueG;
+            tensorData[rgbBase + 2] = valueB;
+          }
+
+          continue;
         }
-        
-        // Fill intent channels if with destination
-        if (ENABLE_INTENT_MODE){
-          this.addIntent(frame, tensorData, channelOffset, pixelOffset)
+
+        const packedBase = frameOffset + pixelOffset * 6;
+
+        if (this.normalize) {
+          tensorData[packedBase] = valueR / 255.0;
+          tensorData[packedBase + 1] = valueG / 255.0;
+          tensorData[packedBase + 2] = valueB / 255.0;
+        } else {
+          tensorData[packedBase] = valueR;
+          tensorData[packedBase + 1] = valueG;
+          tensorData[packedBase + 2] = valueB;
+        }
+
+        if (ENABLE_INTENT_MODE) {
+          channelOffset[0] = packedBase;
+          channelOffset[1] = packedBase + 1;
+          channelOffset[2] = packedBase + 2;
+          channelOffset[3] = packedBase + 3;
+          channelOffset[4] = packedBase + 4;
+          channelOffset[5] = packedBase + 5;
+
+          this.addIntent(frame, tensorData, channelOffset, 0);
         }
       }
     }

@@ -6,7 +6,7 @@
 This document defines the main runtime variables, route params, and configuration
 values used by the current app architecture.
 
-Last updated: April 3, 2026
+Last updated: April 5, 2026
 
 ================================================================================
 ARCHITECTURE SUMMARY
@@ -73,7 +73,9 @@ ConvLSTM model metadata:
 Preprocessing:
 1. seqLen: 20
 2. fps: 20
-3. channels: 6
+3. channels: dynamic per runtime path
+   - 3 channels for lightweight no-intent inference
+   - 6 channels for intent-aware destination inference
 4. normalize: true
 
 Runtime switch:
@@ -101,6 +103,7 @@ Route-driven mode state:
 2. modeLabel: display label derived from mode
 3. useIntentPipeline: boolean derived from mode + ENABLE_INTENT_MODE
 4. convlstmService: selected service module (with-intent or without-intent)
+5. preprocessorChannels: 3 | 6 selected from mode + ENABLE_INTENT_MODE
 
 Destination metadata (optional, destination mode):
 1. destinationLabel
@@ -216,9 +219,17 @@ FrameBuffer helpers:
 6. getFramesBootstrapDoubled
 
 Tensor/channel semantics:
-1. Shape: [1, 20, 6, 128, 128]
-2. Channels 0-2: RGB
-3. Channels 3-5: intent channels (currently zero-filled unless upstream injection is added)
+1. Dynamic shape by active path:
+   - [1, 20, 3, 128, 128] for no-intent path
+   - [1, 20, 6, 128, 128] for intent-aware path
+2. 3-channel packing math (tight RGB):
+   - frameStride = height * width * 3
+   - pixel base index = frameOffset + (y * width + x) * 3
+3. 6-channel packing math (RGB + intent-safe padding):
+   - frameStride = height * width * 6
+   - RGB packed at packedBase + 0..2
+   - slots packedBase + 3..5 reserved so addIntent writes are in-bounds
+4. addIntent behavior remains unchanged and only writes intent-channel slots when enabled.
 
 ================================================================================
 INFERENCE SERVICES
@@ -226,11 +237,13 @@ INFERENCE SERVICES
 
 ConvLSTM without intent (convlstmWithoutIntentInference.ts):
 1. Current baseline classification path
-2. Exposes initializeModel, runPrediction, cleanupModel
+2. Uses 3-channel preprocessor allocation in ActiveCamera when intent path is disabled
+3. Exposes initializeModel, runPrediction, cleanupModel
 
 ConvLSTM with intent (convlstmWithIntentInference.ts):
 1. Parallel service API with same interface
 2. Selected by ActiveCamera when mode='destination' and ENABLE_INTENT_MODE=true
+3. Uses 6-channel preprocessor allocation in ActiveCamera
 
 YOLO (yoloInference.ts):
 1. Exposes initializeYOLOModel, runYOLODetection, cleanupYOLOModel

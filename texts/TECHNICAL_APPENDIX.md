@@ -115,6 +115,11 @@ Selection matrix:
 2. mode=destination and ENABLE_INTENT_MODE=false -> convlstmWithoutIntentInference
 3. mode=destination and ENABLE_INTENT_MODE=true -> convlstmWithIntentInference
 
+Preprocessor channel allocation:
+1. wandering path -> channels=3
+2. destination path with ENABLE_INTENT_MODE=false -> channels=3
+3. destination path with ENABLE_INTENT_MODE=true -> channels=6
+
 ### 4.2 Camera Setup and Capture
 
 - Camera implementation: expo-camera CameraView.
@@ -136,24 +141,35 @@ Hardening changes in current source:
 2. Capture gating checks ref-backed readiness flags to avoid stale-closure gating.
 3. Structured runtime diagnostics are active in inference paths using INFERENCE-DEBUG, PRIORITY-DEBUG, and CONVLSTM-TRACE log families.
 4. Performance overlay now includes audio diagnostics: current audio state and last announced object.
+5. ActiveCamera cleanup now calls the selected ConvLSTM service cleanupModel on unmount.
 
 ### 4.3 Frame Buffer and ConvLSTM Input
 
-Preprocessor output shape:
-- [1, 20, 6, 128, 128]
+Preprocessor output shape (dynamic):
+1. [1, 20, 3, 128, 128] when lightweight path is active
+2. [1, 20, 6, 128, 128] when intent-aware path is active
 
 Channel semantics:
 1. Channels 0-2: RGB
-2. Channels 3-5: intent channels
+2. Channels 3-5: intent channels (only present in 6-channel path)
 
 Current truth:
-1. If ENABLE_INTENT_MODE is false, intent channels (3-5) remain zero-filled.
-2. If ENABLE_INTENT_MODE is true, ActiveCamera writes per-frame intent metadata:
+1. In 3-channel path, RGB is tightly packed and no intent slots are allocated.
+2. In 6-channel path, RGB is written into positions 0-2 and positions 3-5 stay reserved for addIntent writes.
+3. If ENABLE_INTENT_MODE is true, ActiveCamera writes per-frame intent metadata:
 	- intent from maneuverToIntent(currentStep.maneuver)
 	- intentDistance from routeProgress.distanceToStepEnd
-3. Preprocessor addIntent writes intent channels per pixel:
+4. Preprocessor addIntent writes intent channels per pixel:
 	- if intentDistance <= 5 meters, set channel (3 + intentClass) to 1
 	- otherwise, set Front intent channel (channel 3) to 1
+
+Packing math used by preprocessor:
+1. 3-channel path
+	- frameStride = height * width * 3
+	- pixel base index = frameOffset + (y * width + x) * 3
+2. 6-channel path
+	- frameStride = height * width * 6
+	- pixel base index = frameOffset + (y * width + x) * 6
 
 Buffer behavior:
 1. Early inference supported once minimum buffered frames are available.
