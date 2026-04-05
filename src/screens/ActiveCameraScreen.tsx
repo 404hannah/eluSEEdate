@@ -44,6 +44,7 @@ import {
   YOLOResult,
   Detection,
 } from '../services/yoloInference';
+import { Audio } from 'expo-av';
 import { ObjectSpeechService } from '../services/ObjectSpeechService';
 import BoundingBoxOverlay from '../components/BoundingBoxOverlay';
 import {
@@ -548,6 +549,17 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
    * Start/stop object speech with the screen lifecycle.
    */
   useEffect(() => {
+    void Audio.setAudioModeAsync({
+      allowsRecordingIOS: true,
+      playsInSilentModeIOS: true,
+      shouldDuckAndroid: true,
+      staysActiveInBackground: false,
+      playThroughEarpieceAndroid: false,
+    }).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[AUDIO-TRACE] ActiveCamera audio mode setup failed: ${message}`);
+    });
+
     const speechService = objectSpeechServiceRef.current;
 
     speechService.setDebugListener((snapshot) => {

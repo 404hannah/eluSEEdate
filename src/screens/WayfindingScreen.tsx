@@ -290,8 +290,8 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
   ]);
 
   /** User said "no" – discard candidate and ask again. */
-  const handleConfirmNo = useCallback(() => {
-    void stopExpoListening();
+  const handleConfirmNo = useCallback(async () => {
+    await stopExpoListening();
     restartAskLocation('Okay, say another destination.');
   }, [restartAskLocation, stopExpoListening]);
 
@@ -360,7 +360,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
               if (lower.includes('yes')) {
                 void handleConfirmYes();
               } else if (lower.includes('no')) {
-                handleConfirmNo();
+                void handleConfirmNo();
               }
             }
           },
@@ -374,7 +374,9 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
           onError: (event) => {
             // "aborted" and "no-speech" are expected during normal operation.
             if (event.error !== 'aborted' && event.error !== 'no-speech') {
-              console.error('Speech recognition error:', event.error, event.message);
+              console.error(
+                `[ERROR] Wayfinding speech recognition error: ${event.error ? String(event.error) : 'unknown'}${event.message ? ` | ${String(event.message)}` : ''}`,
+              );
             }
           },
         });
