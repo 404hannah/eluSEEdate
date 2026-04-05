@@ -70,6 +70,22 @@ Minimalistic black & white palette for a clean, distraction-free interface.
 - **Performance overlay** with capture, preprocessing, ConvLSTM, and YOLO timings
 - **Debug logs screen** for in-app runtime diagnostics
 
+## Logs & Diagnostics
+
+Open `LogsScreen` from MainMenu when you need targeted troubleshooting.
+
+How to use filtered logs:
+1. Tap the `Category` dropdown and choose the subsystem you want to inspect.
+2. Keep `Auto-scroll` enabled for live sessions, or disable it to inspect older entries.
+3. Tap `Clear` before reproducing an issue to start from a clean ring buffer.
+
+Category mapping:
+1. `All Logs` -> full stream (no filter)
+2. `YOLO` -> `[INFERENCE-DEBUG]`, `[PRIORITY-DEBUG]`
+3. `ConvLSTM` -> `[CONVLSTM-TRACE]`
+4. `Audio` -> `[AUDIO-DEBUG]`, `[AUDIO-TRACE]`
+5. `Errors` -> `console.error` and `[ERROR]`
+
 ## Spoken Obstacle Feedback Rules
 
 When multiple objects are detected in the same frame:
