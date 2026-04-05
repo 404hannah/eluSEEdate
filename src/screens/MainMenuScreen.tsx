@@ -38,6 +38,7 @@ export default function MainMenuScreen({ navigation }: MainMenuScreenProps) {
 
   const {
     isListening,
+    isSpeaking,
     readyToListen,
     voiceStatus,
     setVoiceStatus,
@@ -115,7 +116,7 @@ export default function MainMenuScreen({ navigation }: MainMenuScreenProps) {
       if (!hasSpokenGreeting) {
         hasSpokenGreeting = true;
         speakThenListen({
-          message: 'Starting EluSEEdate. You can say Start to begin the app, Exit to exit, or Skip to skip audio prompts.',
+          message: 'Starting EluSEEdate. You can say Start to begin the app, or Exit to close.',
           statusWhileSpeaking: 'Speaking instructions...',
           statusWhileListening: 'Say "Start", "Exit", or "Skip"',
         });
@@ -134,13 +135,13 @@ export default function MainMenuScreen({ navigation }: MainMenuScreenProps) {
   // Start/stop Vosk recognition when listening state is active.
   useFocusEffect(
     useCallback(() => {
-      if (!modelLoaded || !readyToListen) {
+      if (!modelLoaded) {
         return;
       }
 
       void startVoskListening({
         grammar: ['start', 'exit', 'skip', '[unk]'],
-        statusWhileListening: 'Say "Start", "Exit", or "Skip"',
+        statusWhileListening: readyToListen ? 'Say "Start", "Exit", or "Skip"' : undefined,
         onResult: (result: string) => {
           const lowerResult = result.toLowerCase();
           if (hasNavigatedRef.current) {
@@ -150,6 +151,11 @@ export default function MainMenuScreen({ navigation }: MainMenuScreenProps) {
           if (lowerResult.includes('skip')) {
             void skipSpeech();
             setVoiceStatus('Audio skipped. Say "Start" or "Exit"');
+            return;
+          }
+
+          // Keep listening through speech but ignore non-skip commands while TTS is active.
+          if (isSpeaking) {
             return;
           }
 
@@ -181,6 +187,7 @@ export default function MainMenuScreen({ navigation }: MainMenuScreenProps) {
         void stopVoskListening();
       };
     }, [
+      isSpeaking,
       modelLoaded,
       navigation,
       readyToListen,
