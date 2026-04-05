@@ -1,6 +1,6 @@
 # EluSEEDate Technical Appendix (Source-Code Truth)
 
-Prepared on: 2026-04-04
+Prepared on: 2026-04-05
 Purpose: implementation-grounded technical reference for maintenance and release hardening.
 
 ---
@@ -124,6 +124,13 @@ Selection matrix:
 - Primary decode path: decodeImageUriToPixels.
 - Fallback decode path: decodeBase64ToPixels.
 
+Destination-mode route progress wiring in current source:
+1. ActiveCamera starts live GPS tracking using expo-location watchPositionAsync when ENABLE_INTENT_MODE is enabled.
+2. ActiveCamera fetches and caches walking directions from current GPS position to route.params.destination.
+3. Step advancement is distance-driven: when distance to current step end is less than 2 meters, currentStepIndex advances.
+4. Distance checks use getGeoDistance imported from geolib/es/getDistance.
+5. routeProgress keeps both distanceRemaining and distanceToStepEnd for intent-aware frame metadata.
+
 Hardening changes in current source:
 1. Camera-ready callback is guarded by refs so one-time picture-size configuration is not repeatedly re-run.
 2. Capture gating checks ref-backed readiness flags to avoid stale-closure gating.
@@ -140,7 +147,13 @@ Channel semantics:
 2. Channels 3-5: intent channels
 
 Current truth:
-- Intent channels remain zero-filled unless explicit upstream intent injection is added.
+1. If ENABLE_INTENT_MODE is false, intent channels (3-5) remain zero-filled.
+2. If ENABLE_INTENT_MODE is true, ActiveCamera writes per-frame intent metadata:
+	- intent from maneuverToIntent(currentStep.maneuver)
+	- intentDistance from routeProgress.distanceToStepEnd
+3. Preprocessor addIntent writes intent channels per pixel:
+	- if intentDistance <= 5 meters, set channel (3 + intentClass) to 1
+	- otherwise, set Front intent channel (channel 3) to 1
 
 Buffer behavior:
 1. Early inference supported once minimum buffered frames are available.
@@ -234,6 +247,7 @@ In src/config/modelConfig.ts:
 3. Logs screen is still available for diagnostics routing.
 4. Runtime diagnostics are intentionally verbose in inference and audio paths to support field debugging.
 5. ConvLSTM currently has on-screen output (direction/confidence) and debug logs; spoken obstacle feedback is driven by YOLO detections through ObjectSpeechService.
+6. ActiveCamera currently performs in-screen route distance checks using geolib/es/getDistance for step progression.
 
 ---
 
@@ -243,6 +257,28 @@ In src/config/modelConfig.ts:
 2. Keep model input format comments synchronized with actual tensor write order in yoloInference.
 3. Re-run npx expo-doctor, npx tsc --noEmit, and npx expo lint before each release candidate and before EAS preview/production builds.
 4. Maintain changelog entries for each semantic version bump.
+
+---
+
+## 9. Troubleshooting Toolkit Results (2026-04-05)
+
+Validation run performed on the current branch head after merge.
+
+1. Expo Doctor
+	- Command: npx expo-doctor
+	- Result: 17/17 checks passed. No issues detected.
+
+2. TypeScript No-Emit
+	- Command: npx tsc --noEmit
+	- Result: Completed with no type errors.
+
+3. Expo Lint
+	- Command: npx expo lint
+	- Result: Completed with no lint errors or warnings.
+
+Issue summary from this troubleshooting pass:
+1. No current blocking or non-blocking issues were reported by the three toolkits.
+2. No runtime source-code changes were required for Live GPS flow or preprocessor intent-channel behavior during this pass.
 
 ---
 
