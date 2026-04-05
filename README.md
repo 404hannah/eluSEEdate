@@ -20,6 +20,11 @@ This app uses two AI models working in parallel:
 
 Audio feedback is powered by **ObjectSpeechService**, which converts YOLO detections into spoken obstacle prompts with priority and cooldown controls.
 
+Voice command prompts in MainMenu, Choice, and Wayfinding are now coordinated by a shared hook (`useVoiceInteraction`) with:
+1. Reusable TTS -> listening transitions.
+2. `Skip` voice command and `Skip Audio` button support.
+3. Listening transition accessibility cues (haptic buzz + short ping earcon).
+
 **Turn Prediction Model**: Prototype 10 (ConvLSTM with Global Average Pooling)
 **Obstacle Detection**: YOLOv12 with TFLite optimization
 **Inference Engine**: TensorFlow Lite via `react-native-fast-tflite`
@@ -51,9 +56,11 @@ Minimalistic black & white palette for a clean, distraction-free interface.
 
 ## Features
 
-- **Voice-first main menu** with Vosk commands (`Start`, `Exit`)
-- **Mode selection flow** (`Wandering`, `Destination`, `Back`) with speech prompts
-- **Wayfinding flow** for destination geocoding + spoken confirmation
+- **Voice-first main menu** with Vosk commands (`Start`, `Exit`, `Skip`)
+- **Mode selection flow** (`Wandering`, `Destination`, `Back`, `Skip`) with speech prompts
+- **Wayfinding flow** for destination geocoding + spoken confirmation (`Yes`, `No`, `Back`, `Skip`)
+- **Shared voice orchestration hook** (`src/hooks/useVoiceInteraction.ts`) for prompt timing, listening transitions, and cleanup
+- **Accessibility listening cues** with haptic buzz (`expo-haptics`) and ping earcon (`assets/sounds/ping.wav`)
 - **Unified camera runtime** in `ActiveCameraScreen` for both wandering and destination pipelines
 - **Dual-path ConvLSTM selection** between `convlstmWithoutIntentInference` and `convlstmWithIntentInference` based on route mode + runtime flag
 - **Live ConvLSTM turn prediction** with rolling frame buffer and low-latency updates
@@ -102,10 +109,12 @@ Runtime flow:
 ├── babel.config.js                  # Babel config
 ├── eas.json                         # EAS Build configuration
 ├── assets/
-│   └── model/
+│   ├── model/
 │       ├── convlstm.tflite          # ConvLSTM TFLite model file
 │       ├── convlstm.onnx            # ONNX model (backup)
 │       └── yolo.tflite              # YOLOv12 TFLite model
+│   └── sounds/
+│       └── ping.wav                 # Earcon played when app transitions to listening
 ├── texts/
 │   ├── TECHNICAL_APPENDIX.md        # Source-code-truth architecture reference
 │   ├── STANDALONE_APK_BUILD.txt     # EAS standalone APK guide
@@ -119,19 +128,21 @@ Runtime flow:
     ├── navigation/
     │   └── types.ts                 # Navigation type definitions
     ├── screens/
-  │   ├── MainMenuScreen.tsx       # Voice-first entry screen
-  │   ├── ChoiceScreen.tsx         # Mode selection (Wandering/Destination)
-  │   ├── WayfindingScreen.tsx     # Destination speech/geocoding flow
-  │   ├── ActiveCameraScreen.tsx   # Unified camera + inference runtime
-  │   └── LogsScreen.tsx           # Runtime log viewer
+    │   ├── MainMenuScreen.tsx       # Voice-first entry screen
+    │   ├── ChoiceScreen.tsx         # Mode selection (Wandering/Destination)
+    │   ├── WayfindingScreen.tsx     # Destination speech/geocoding flow
+    │   ├── ActiveCameraScreen.tsx   # Unified camera + inference runtime
+    │   └── LogsScreen.tsx           # Runtime log viewer
+    ├── hooks/
+    │   └── useVoiceInteraction.ts   # Shared TTS/STT state machine + skip/cue helpers
     ├── services/
     │   ├── preprocessor.ts          # Frame preprocessing (TypeScript)
     │   ├── convlstmWithoutIntentInference.ts  # ConvLSTM inference (no intent)
     │   ├── convlstmWithIntentInference.ts     # ConvLSTM inference (intent-aware path)
-  │   ├── yoloInference.ts         # YOLO object detection inference
-  │   ├── geocodingService.ts      # Destination geocoding
-  │   ├── directionsService.ts     # Walking route fetcher
-  │   └── ObjectSpeechService.ts   # Spoken obstacle announcements
+    │   ├── yoloInference.ts         # YOLO object detection inference
+    │   ├── geocodingService.ts      # Destination geocoding
+    │   ├── directionsService.ts     # Walking route fetcher
+    │   └── ObjectSpeechService.ts   # Spoken obstacle announcements
     └── utils/
         └── imageUtils.ts            # Image decoding utilities
 ```
@@ -228,6 +239,11 @@ npx eas build --platform android --profile production
    - Run predictions using the ConvLSTM model
    - Display the predicted direction at the bottom
    - Show performance metrics at the top-left
+
+Voice UX notes:
+1. `Skip` can be spoken (or tapped as `Skip Audio`) in MainMenu, Choice, and Wayfinding.
+2. Skipping immediately stops current prompt playback and advances to active listening state.
+3. Every transition to listening emits a short haptic buzz and ping earcon.
 
 **Status Indicator**: A green dot means the app is actively capturing; "Demo Mode" label appears when using simulated predictions.
 

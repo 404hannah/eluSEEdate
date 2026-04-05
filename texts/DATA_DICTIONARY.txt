@@ -168,6 +168,7 @@ Main state:
 5. pendingDistance
 6. readyToListen
 7. voiceStatus
+8. isListening (from shared voice hook)
 
 Navigation payload to ActiveCamera:
 1. mode: 'destination'
@@ -192,7 +193,38 @@ Voice grammar:
 1. wandering
 2. destination
 3. back
-4. [unk]
+4. skip
+5. [unk]
+
+================================================================================
+SHARED VOICE INTERACTION HOOK (src/hooks/useVoiceInteraction.ts)
+================================================================================
+
+Purpose:
+1. Unify TTS + STT control across MainMenu, Choice, and Wayfinding.
+2. Provide centralized timer/listener cleanup to reduce leak risk.
+3. Support skipSpeech flow and listening transition accessibility cues.
+
+Core state returned by hook:
+1. isListening
+2. isSpeaking
+3. readyToListen
+4. voiceStatus
+5. setVoiceStatus
+
+Core control methods:
+1. speakMessage
+2. speakThenListen
+3. transitionToListening
+4. skipSpeech
+5. startVoskListening / stopVoskListening
+6. startExpoListening / stopExpoListening
+7. stopAllVoiceActivity
+
+Listening cue dependencies:
+1. expo-haptics (impactAsync)
+2. expo-av (Audio.Sound replayAsync)
+3. assets/sounds/ping.wav
 
 ================================================================================
 PREPROCESSOR (src/services/preprocessor.ts)

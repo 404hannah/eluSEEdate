@@ -10,11 +10,12 @@
  *  3. STT listens for a place name (free-form via expo-speech-recognition).
  *  4. Geocode the spoken text → get an address (Nominatim geocoding service).
  *  5. TTS reads it back: "Did you mean <address>? Say yes to confirm, no to try again,
- *     or back to return."
- *  6. STT listens for "yes" / "no" / "back".
+ *     back to return, or skip to interrupt audio."
+ *  6. STT listens for "yes" / "no" / "back" / "skip".
  *     - yes  → validate 10 km radius → navigate to Destination (IntentScreen).
  *     - no   → clear & loop back to step 2.
  *     - back → return to ChoiceScreen.
+ *     - skip → stop current prompt and keep listening.
  *  7. If out of bounds (> 10 km), TTS informs the user and loops back to step 2.
 
  */
@@ -26,16 +27,16 @@ import {
   StyleSheet,
   StatusBar,
   ActivityIndicator,
+  TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
-import * as Speech from 'expo-speech';
-import { ExpoSpeechRecognitionModule } from 'expo-speech-recognition';
 import { RootStackParamList } from '../navigation/types';
 import { geocodeForward } from '../services/geocodingService';
 import { fetchWalkingDirections } from '../services/directionsService';
+import { useVoiceInteraction } from '../hooks/useVoiceInteraction';
 
 // ---------- constants ----------
 const MAX_RADIUS_KM = 10;
@@ -86,11 +87,24 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
   const [pendingLabel, setPendingLabel] = useState<string>('');
   const [pendingDistance, setPendingDistance] = useState<number>(0);
 
-  // ---- Voice state ----
-  const [isListening, setIsListening] = useState(false);
-  const [voiceStatus, setVoiceStatus] = useState('Initializing...');
-  const [readyToListen, setReadyToListen] = useState(false);
   const hasNavigatedRef = useRef(false);
+
+  const {
+    isListening,
+    readyToListen,
+    voiceStatus,
+    setVoiceStatus,
+    speakMessage,
+    speakThenListen,
+    skipSpeech,
+    startExpoListening,
+    stopExpoListening,
+    stopAllVoiceActivity,
+  } = useVoiceInteraction({
+    initialVoiceStatus: 'Initializing...',
+    defaultLanguage: 'en-US',
+    listeningDelayMs: 1000,
+  });
 
   // ---- Request GPS permission & get current position ----
   useEffect(() => {
@@ -105,7 +119,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
           return;
         }
 
-        Speech.speak('Getting your location. Please wait.', { language: 'en-US' });
+        speakMessage({ message: 'Getting your location. Please wait.' });
 
         const loc = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.High,
@@ -124,7 +138,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
           const msg = 'Unable to get your location';
           setErrorMsg(msg);
           setLoading(false);
-          Speech.speak(msg, { language: 'en-US' });
+          speakMessage({ message: msg });
         }
       }
     })();
@@ -132,36 +146,28 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [speakMessage]);
 
   // ---- TTS greeting after GPS ready ----
   useFocusEffect(
     useCallback(() => {
       if (loading || !userLocation) return;
-      let readyTimer: ReturnType<typeof setTimeout> | null = null;
 
-      setReadyToListen(false);
       hasNavigatedRef.current = false;
       setPhase('ask_location');
       setPendingCoord(null);
       setPendingLabel('');
 
-      Speech.speak(
-        'Choose your location. Say the name of your destination. Or say back to return.',
-        {
-          language: 'en-US',
-          onDone: () => {
-            readyTimer = setTimeout(() => setReadyToListen(true), 1000);
-          },
-        },
-      );
+      speakThenListen({
+        message: 'Choose your location. Say the name of your destination. Or say back to return. You may also say skip.',
+        statusWhileSpeaking: 'Speaking instructions...',
+        statusWhileListening: 'Say a place name, "Back", or "Skip"',
+      });
 
       return () => {
-        Speech.stop();
-        setReadyToListen(false);
-        if (readyTimer) clearTimeout(readyTimer);
+        void stopAllVoiceActivity();
       };
-    }, [loading, userLocation]),
+    }, [loading, speakThenListen, stopAllVoiceActivity, userLocation]),
   );
 
   // ================================================================
@@ -172,22 +178,19 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
     setPendingLabel('');
     setPendingDistance(0);
     setPhase('ask_location');
-    setReadyToListen(false);
-
-    Speech.speak(message, {
-      language: 'en-US',
-      onDone: () => {
-        setTimeout(() => setReadyToListen(true), 1000);
-      },
+    speakThenListen({
+      message,
+      statusWhileSpeaking: 'Speaking instructions...',
+      statusWhileListening: 'Say a place name, "Back", or "Skip"',
     });
-  }, []);
+  }, [speakThenListen]);
 
   // ================================================================
   //  Geocode a spoken place name, read it back and enter confirming
   // ================================================================
   const geocodePlace = useCallback(async (placeName: string) => {
     try {
-      Speech.speak(`Looking up ${placeName}.`, { language: 'en-US' });
+      speakMessage({ message: `Looking up ${placeName}.` });
 
       const result = await geocodeForward(placeName);
       if (!result) {
@@ -207,22 +210,17 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
 
       // Read back for confirmation
       setPhase('confirming');
-      setReadyToListen(false);
 
-      Speech.speak(
-        `Did you mean ${label}? It is ${dist.toFixed(1)} kilometres away. Say yes to confirm, no to try again, or back to return.`,
-        {
-          language: 'en-US',
-          onDone: () => {
-            setTimeout(() => setReadyToListen(true), 1000);
-          },
-        },
-      );
+      speakThenListen({
+        message: `Did you mean ${label}? It is ${dist.toFixed(1)} kilometres away. Say yes to confirm, no to try again, or back to return. You may also say skip.`,
+        statusWhileSpeaking: 'Speaking instructions...',
+        statusWhileListening: 'Say "Yes", "No", "Back", or "Skip"',
+      });
     } catch (err) {
       console.error('Geocoding error:', err);
       restartAskLocation('I could not find that place. Please say another destination.');
     }
-  }, [restartAskLocation, userLocation]);
+  }, [restartAskLocation, speakMessage, speakThenListen, userLocation]);
 
   // ================================================================
   //  Confirmation handlers
@@ -232,8 +230,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
   const handleConfirmYes = useCallback(async () => {
     if (!pendingCoord || !userLocation) return;
 
-    ExpoSpeechRecognitionModule.abort();
-    setIsListening(false);
+    await stopExpoListening();
 
     if (pendingDistance > MAX_RADIUS_KM) {
       restartAskLocation(
@@ -244,9 +241,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
 
     // Fetch walking directions from origin → destination
     hasNavigatedRef.current = true;
-    Speech.speak('Destination confirmed. Fetching walking directions. Please wait.', {
-      language: 'en-US',
-    });
+    speakMessage({ message: 'Destination confirmed. Fetching walking directions. Please wait.' });
     setVoiceStatus('Fetching route...');
 
     try {
@@ -255,22 +250,19 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
       const totalSteps = directions.steps.length;
       const totalMinutes = Math.round(directions.totalDurationSeconds / 60);
 
-      Speech.speak(
-        `Route found. ${totalSteps} steps. About ${totalMinutes} minutes walking. Starting destination mode.`,
-        {
-          language: 'en-US',
-          onDone: () =>
-            navigation.navigate('ActiveCamera', {
-              mode: 'destination',
-              origin: userLocation,
-              destination: pendingCoord,
-              destinationLabel: pendingLabel,
-              routeSteps: directions.steps,
-              totalDistanceMeters: directions.totalDistanceMeters,
-              totalDurationSeconds: directions.totalDurationSeconds,
-            }),
-        },
-      );
+      speakMessage({
+        message: `Route found. ${totalSteps} steps. About ${totalMinutes} minutes walking. Starting destination mode.`,
+        onDone: () =>
+          navigation.navigate('ActiveCamera', {
+            mode: 'destination',
+            origin: userLocation,
+            destination: pendingCoord,
+            destinationLabel: pendingLabel,
+            routeSteps: directions.steps,
+            totalDistanceMeters: directions.totalDistanceMeters,
+            totalDurationSeconds: directions.totalDurationSeconds,
+          }),
+      });
     } catch (err) {
       console.error('Directions API error:', err);
       hasNavigatedRef.current = false;
@@ -278,14 +270,23 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
         'Could not fetch walking directions for that destination. Please try a different location.',
       );
     }
-  }, [navigation, pendingCoord, pendingDistance, pendingLabel, restartAskLocation, userLocation]);
+  }, [
+    navigation,
+    pendingCoord,
+    pendingDistance,
+    pendingLabel,
+    restartAskLocation,
+    setVoiceStatus,
+    speakMessage,
+    stopExpoListening,
+    userLocation,
+  ]);
 
   /** User said "no" – discard candidate and ask again. */
   const handleConfirmNo = useCallback(() => {
-    ExpoSpeechRecognitionModule.abort();
-    setIsListening(false);
+    void stopExpoListening();
     restartAskLocation('Okay, say another destination.');
-  }, [restartAskLocation]);
+  }, [restartAskLocation, stopExpoListening]);
 
   // ================================================================
   //  Voice recognition – switches behaviour based on current phase
@@ -295,116 +296,105 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
   useFocusEffect(
     useCallback(() => {
       hasNavigatedRef.current = false;
-      let timeout: ReturnType<typeof setTimeout> | null = null;
       let restartTimeout: ReturnType<typeof setTimeout> | null = null;
 
       const startListening = async () => {
         if (!readyToListen) return;
 
-        try {
-          const perms = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-          if (!perms.granted) {
-            setVoiceStatus('Voice permission denied');
-            return;
-          }
-
-          ExpoSpeechRecognitionModule.start({
+        await startExpoListening({
+          statusWhileListening:
+            phase === 'confirming'
+              ? 'Say "Yes", "No", "Back", or "Skip"'
+              : 'Say a place name, "Back", or "Skip"',
+          startOptions: {
             lang: 'en-US',
             interimResults: false,
             continuous: false,
             ...(phase === 'confirming' && {
-              contextualStrings: ['yes', 'no', 'back'],
+              contextualStrings: ['yes', 'no', 'back', 'skip'],
               androidIntentOptions: { EXTRA_LANGUAGE_MODEL: 'web_search' },
-              iosTaskHint: 'confirmation' as const,
+              iosTaskHint: 'confirmation',
             }),
-          });
+          },
+          onResult: async (event) => {
+            if (!event.isFinal) return;
+            const transcript = event.results?.[0]?.transcript ?? '';
+            const lower = transcript.toLowerCase().trim();
+            if (hasNavigatedRef.current) return;
 
-          setIsListening(true);
-          setVoiceStatus(
-            phase === 'confirming'
-              ? 'Say "Yes", "No", or "Back"'
-              : 'Say a place name or "Back"',
-          );
-        } catch (error: any) {
-          console.error('Speech recognition start failed:', error);
-          setVoiceStatus('Voice command disabled');
-          setIsListening(false);
-        }
+            if (lower.includes('skip')) {
+              await skipSpeech();
+              setVoiceStatus(
+                phase === 'confirming'
+                  ? 'Audio skipped. Say "Yes", "No", or "Back"'
+                  : 'Audio skipped. Say a place name or "Back"',
+              );
+              return;
+            }
+
+            // ---- "back" is always honoured ----
+            if (lower.includes('back')) {
+              hasNavigatedRef.current = true;
+              await stopExpoListening();
+              speakMessage({
+                message: 'Going back',
+                onDone: () => navigation.navigate('Choice'),
+              });
+              return;
+            }
+
+            if (phase === 'ask_location') {
+              // Treat utterance as a place name
+              if (lower.length > 1) {
+                await stopExpoListening();
+                setVoiceStatus('Looking up location...');
+                await geocodePlace(lower);
+              }
+            } else if (phase === 'confirming') {
+              if (lower.includes('yes')) {
+                void handleConfirmYes();
+              } else if (lower.includes('no')) {
+                handleConfirmNo();
+              }
+            }
+          },
+          onEnd: () => {
+            if (!hasNavigatedRef.current && readyToListen) {
+              restartTimeout = setTimeout(() => {
+                void startListening();
+              }, 500);
+            }
+          },
+          onError: (event) => {
+            // "aborted" and "no-speech" are expected during normal operation.
+            if (event.error !== 'aborted' && event.error !== 'no-speech') {
+              console.error('Speech recognition error:', event.error, event.message);
+            }
+          },
+        });
       };
 
-      const resultListener = ExpoSpeechRecognitionModule.addListener(
-        'result',
-        async (event) => {
-          if (!event.isFinal) return;
-          const transcript = event.results[0]?.transcript ?? '';
-          const lower = transcript.toLowerCase().trim();
-          if (hasNavigatedRef.current) return;
-
-          // ---- "back" is always honoured ----
-          if (lower.includes('back')) {
-            hasNavigatedRef.current = true;
-            ExpoSpeechRecognitionModule.abort();
-            setIsListening(false);
-            Speech.speak('Going back', {
-              language: 'en-US',
-              onDone: () => navigation.navigate('Choice'),
-            });
-            return;
-          }
-
-          if (phase === 'ask_location') {
-            // Treat utterance as a place name
-            if (lower.length > 1) {
-              ExpoSpeechRecognitionModule.abort();
-              setIsListening(false);
-              setVoiceStatus('Looking up location...');
-              await geocodePlace(lower);
-            }
-          } else if (phase === 'confirming') {
-            if (lower.includes('yes')) {
-              handleConfirmYes();
-            } else if (lower.includes('no')) {
-              handleConfirmNo();
-            }
-          }
-        },
-      );
-
-      // Auto-restart listening when recognition ends (e.g. silence timeout)
-      const endListener = ExpoSpeechRecognitionModule.addListener('end', () => {
-        setIsListening(false);
-        if (!hasNavigatedRef.current && readyToListen) {
-          restartTimeout = setTimeout(() => {
-            void startListening();
-          }, 500);
-        }
-      });
-
-      const errorListener = ExpoSpeechRecognitionModule.addListener(
-        'error',
-        (event) => {
-          // "aborted" and "no-speech" are expected during normal operation
-          if (event.error !== 'aborted' && event.error !== 'no-speech') {
-            console.error('Speech recognition error:', event.error, event.message);
-          }
-          setIsListening(false);
-        },
-      );
-
       if (readyToListen) {
-        timeout = setTimeout(startListening, 0);
+        void startListening();
       }
 
       return () => {
-        resultListener.remove();
-        endListener.remove();
-        errorListener.remove();
-        ExpoSpeechRecognitionModule.abort();
-        setIsListening(false);
-        if (timeout) clearTimeout(timeout);
+        void stopExpoListening();
         if (restartTimeout) clearTimeout(restartTimeout);
       };
-    }, [readyToListen, phase, navigation, geocodePlace, handleConfirmYes, handleConfirmNo]),
+    }, [
+      geocodePlace,
+      handleConfirmNo,
+      handleConfirmYes,
+      navigation,
+      phase,
+      readyToListen,
+      setVoiceStatus,
+      skipSpeech,
+      speakMessage,
+      startExpoListening,
+      stopExpoListening,
+    ]),
   );
 
   // ================================================================
@@ -474,6 +464,20 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
           />
           <Text style={styles.voiceStatusText}>{voiceStatus}</Text>
         </View>
+        <TouchableOpacity
+          style={styles.skipButton}
+          onPress={() => {
+            setVoiceStatus(
+              phase === 'confirming'
+                ? 'Audio skipped. Say "Yes", "No", or "Back"'
+                : 'Audio skipped. Say a place name or "Back"',
+            );
+            void skipSpeech();
+          }}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.skipButtonText}>Skip Audio</Text>
+        </TouchableOpacity>
         <Text style={styles.hintText}>Say Back to return</Text>
       </View>
     </SafeAreaView>
@@ -572,5 +576,19 @@ const styles = StyleSheet.create({
   voiceStatusText: {
     color: '#888888',
     fontSize: 12,
+  },
+  skipButton: {
+    marginTop: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#555',
+    backgroundColor: '#111',
+  },
+  skipButtonText: {
+    fontSize: 13,
+    color: '#cccccc',
+    letterSpacing: 1,
   },
 });

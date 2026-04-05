@@ -10,6 +10,7 @@ Purpose: implementation-grounded technical reference for maintenance and release
 This appendix describes the code as it currently runs in the repository. It reflects active routes, runtime behavior, and data flow in:
 - App.tsx
 - src/navigation/types.ts
+- src/hooks/useVoiceInteraction.ts
 - src/screens/MainMenuScreen.tsx
 - src/screens/ChoiceScreen.tsx
 - src/screens/WayfindingScreen.tsx
@@ -76,15 +77,16 @@ Flow C (Diagnostics):
 ### 3.1 MainMenu and Choice
 
 - MainMenu and Choice use react-native-vosk for command-style grammar.
-- Choice supports Wandering, Destination, and Back commands.
-- Choice now removes any previous Vosk result listener before attaching a new listener callback.
+- MainMenu supports Start, Exit, and Skip commands.
+- Choice supports Wandering, Destination, Back, and Skip commands.
+- Both screens render a Skip Audio button that maps to the same skipSpeech path as the Skip voice command.
 
 ### 3.2 WayfindingScreen
 
 Wayfinding is voice-first and uses:
 - expo-location for user origin
-- expo-speech for TTS prompts
 - expo-speech-recognition for free-form destination and confirmation responses
+- shared hook speech controls for TTS playback, listening-state transitions, and cleanup
 
 High-level sequence:
 1. Request location permission and resolve current location.
@@ -97,6 +99,24 @@ High-level sequence:
 
 Hardening behavior:
 - Auto-restart voice-listening timeout is tracked and cleared during cleanup to avoid stale delayed restarts.
+- Skip command/button can immediately interrupt prompts and move directly to listening state.
+
+### 3.3 Shared Voice Interaction Hook
+
+src/hooks/useVoiceInteraction.ts now centralizes prompt/listening state for MainMenu, Choice, and Wayfinding.
+
+Current hook contract provides:
+1. speakMessage: one-shot TTS.
+2. speakThenListen: prompt followed by delayed transition to ready listening state.
+3. skipSpeech: immediate Speech.stop plus state advance to listening.
+4. startVoskListening / stopVoskListening for command grammar loops.
+5. startExpoListening / stopExpoListening for free-form destination capture.
+6. stopAllVoiceActivity for cleanup during blur/unmount.
+
+Accessibility listening cue behavior:
+1. Every transition to listening emits haptic feedback using expo-haptics.
+2. A short earcon is played from assets/sounds/ping.wav via expo-av.
+3. Cue emission is best-effort and non-fatal (voice flow continues even if cue playback fails).
 
 ---
 
@@ -264,6 +284,7 @@ In src/config/modelConfig.ts:
 4. Runtime diagnostics are intentionally verbose in inference and audio paths to support field debugging.
 5. ConvLSTM currently has on-screen output (direction/confidence) and debug logs; spoken obstacle feedback is driven by YOLO detections through ObjectSpeechService.
 6. ActiveCamera currently performs in-screen route distance checks using geolib/es/getDistance for step progression.
+7. Voice-first navigation screens now share one hook-level cleanup path to reduce listener/timer leak risk.
 
 ---
 
@@ -279,6 +300,7 @@ In src/config/modelConfig.ts:
 ## 9. Troubleshooting Toolkit Results (2026-04-05)
 
 Validation run performed on the current branch head after merge.
+This run includes the shared voice-hook refactor, Skip command/button behavior, and listening cue integration.
 
 1. Expo Doctor
 	- Command: npx expo-doctor

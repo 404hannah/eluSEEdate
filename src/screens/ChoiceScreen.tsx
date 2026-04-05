@@ -2,12 +2,12 @@
  * Choice Screen
  * 
  * Allows users to choose between Wandering (NoIntent) and Destination (Intent) modes
- * Supports voice commands: "Wandering", "Destination", "Back"
+ * Supports voice commands: "Wandering", "Destination", "Back", "Skip"
  * 
  * Design: Minimalistic black & white (matches MainMenu)
  */
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -20,8 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation/types';
-import * as Vosk from 'react-native-vosk';
-import * as Speech from 'expo-speech';
+import { useVoiceInteraction } from '../hooks/useVoiceInteraction';
 
 type ChoiceScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Choice'>;
@@ -30,133 +29,138 @@ type ChoiceScreenProps = {
 const { width } = Dimensions.get('window');
 
 export default function ChoiceScreen({ navigation }: ChoiceScreenProps) {
-  const [isListening, setIsListening] = useState(false);
-  const [voiceStatus, setVoiceStatus] = useState('Initializing...');
-  const [readyToListen, setReadyToListen] = useState(false);
-  const resultListenerRef = useRef<any>(null);
   const hasNavigatedRef = useRef(false);
+
+  const {
+    isListening,
+    readyToListen,
+    voiceStatus,
+    setVoiceStatus,
+    speakMessage,
+    speakThenListen,
+    skipSpeech,
+    startVoskListening,
+    stopVoskListening,
+    stopAllVoiceActivity,
+  } = useVoiceInteraction({
+    initialVoiceStatus: 'Initializing...',
+    defaultLanguage: 'en-US',
+    listeningDelayMs: 1000,
+  });
 
 
   const handleWanderingPress = () => {
-    Speech.speak('Starting wandering mode', {
-      language: 'en-US',
+    hasNavigatedRef.current = true;
+    void stopVoskListening();
+    speakMessage({
+      message: 'Starting wandering mode',
       onDone: () => navigation.navigate('ActiveCamera', { mode: 'wandering' }),
     });
   };
 
   const handleDestinationPress = () => {
-    Speech.speak('Opening wayfinding', {
-      language: 'en-US',
+    hasNavigatedRef.current = true;
+    void stopVoskListening();
+    speakMessage({
+      message: 'Opening wayfinding',
       onDone: () => navigation.navigate('Wayfinding'),
     });
   };
 
   const handleBackPress = () => {
-    Speech.speak('Going back', { language: 'en-US' });
-    navigation.navigate('MainMenu');
+    hasNavigatedRef.current = true;
+    void stopVoskListening();
+    speakMessage({
+      message: 'Going back',
+      onDone: () => navigation.navigate('MainMenu'),
+    });
   };
 
   // TTS greeting, then enable listening after it finishes + delay
   useFocusEffect(
     useCallback(() => {
-      let readyTimer: ReturnType<typeof setTimeout> | null = null;
-      setReadyToListen(false);
-      Speech.speak(
-        'Choose your mode, Wandering or Destination. If you want to return to the main menu say back.',
-        {
-          language: 'en-US',
-          onDone: () => {
-            readyTimer = setTimeout(() => {
-              setReadyToListen(true);
-            }, 1000);
-          },
-        }
-      );
+      hasNavigatedRef.current = false;
+
+      speakThenListen({
+        message: 'Choose your mode, Wandering or Destination. If you want to return to the main menu say back. You may also say skip.',
+        statusWhileSpeaking: 'Speaking instructions...',
+        statusWhileListening: 'Say "Wandering", "Destination", "Back", or "Skip"',
+      });
 
       return () => {
-        Speech.stop();
-        setReadyToListen(false);
-        if (readyTimer) clearTimeout(readyTimer);
+        void stopAllVoiceActivity();
       };
-    }, [])
+    }, [speakThenListen, stopAllVoiceActivity])
   );
 
   // Start/stop voice recognition when screen is focused and ready
   useFocusEffect(
     useCallback(() => {
-      hasNavigatedRef.current = false;
-      let listeningTimeout: ReturnType<typeof setTimeout> | null = null;
-
-      const startListening = async () => {
-        if (!readyToListen) return;
-        try {
-          await Vosk.start({ grammar: ['wandering', 'destination', 'back', '[unk]'] });
-          setIsListening(true);
-          setVoiceStatus('Say "Wandering", "Destination", or "Back"');
-
-          if (resultListenerRef.current) {
-            resultListenerRef.current.remove();
-            resultListenerRef.current = null;
-          }
-
-          resultListenerRef.current = Vosk.onResult((result: string) => {
-            const lowerResult = result.toLowerCase();
-            if (!hasNavigatedRef.current) {
-              if (lowerResult.includes('wandering')) {
-                hasNavigatedRef.current = true;
-                setVoiceStatus('Starting wandering mode...');
-                Vosk.stop();
-                setIsListening(false);
-                Speech.speak('Starting wandering mode', {
-                  language: 'en-US',
-                  onDone: () => navigation.navigate('ActiveCamera', { mode: 'wandering' }),
-                });
-              } else if (lowerResult.includes('destination')) {
-                hasNavigatedRef.current = true;
-                setVoiceStatus('Opening wayfinding...');
-                Vosk.stop();
-                setIsListening(false);
-                Speech.speak('Opening wayfinding', {
-                  language: 'en-US',
-                  onDone: () => navigation.navigate('Wayfinding'),
-                });
-              } else if (lowerResult.includes('back')) {
-                hasNavigatedRef.current = true;
-                setVoiceStatus('Going back...');
-                Vosk.stop();
-                setIsListening(false);
-                Speech.speak('Going back', {
-                  language: 'en-US',
-                  onDone: () => navigation.navigate('MainMenu'),
-                });
-              }
-            }
-          });
-        } catch (error: any) {
-          console.error('Failed to start voice recognition:', error);
-          if (error?.message?.includes('permission') || error?.message?.includes('Permission')) {
-            setVoiceStatus('Microphone permission denied');
-          } else {
-            setVoiceStatus('Voice command disabled');
-          }
-          setIsListening(false);
-        }
-      };
-
-      if (readyToListen) {
-        listeningTimeout = setTimeout(startListening, 0);
+      if (!readyToListen) {
+        return;
       }
 
+      void startVoskListening({
+        grammar: ['wandering', 'destination', 'back', 'skip', '[unk]'],
+        statusWhileListening: 'Say "Wandering", "Destination", "Back", or "Skip"',
+        onResult: (result: string) => {
+          const lowerResult = result.toLowerCase();
+          if (hasNavigatedRef.current) {
+            return;
+          }
+
+          if (lowerResult.includes('skip')) {
+            void skipSpeech();
+            setVoiceStatus('Audio skipped. Say "Wandering", "Destination", or "Back"');
+            return;
+          }
+
+          if (lowerResult.includes('wandering')) {
+            hasNavigatedRef.current = true;
+            setVoiceStatus('Starting wandering mode...');
+            void stopVoskListening();
+            speakMessage({
+              message: 'Starting wandering mode',
+              onDone: () => navigation.navigate('ActiveCamera', { mode: 'wandering' }),
+            });
+            return;
+          }
+
+          if (lowerResult.includes('destination')) {
+            hasNavigatedRef.current = true;
+            setVoiceStatus('Opening wayfinding...');
+            void stopVoskListening();
+            speakMessage({
+              message: 'Opening wayfinding',
+              onDone: () => navigation.navigate('Wayfinding'),
+            });
+            return;
+          }
+
+          if (lowerResult.includes('back')) {
+            hasNavigatedRef.current = true;
+            setVoiceStatus('Going back...');
+            void stopVoskListening();
+            speakMessage({
+              message: 'Going back',
+              onDone: () => navigation.navigate('MainMenu'),
+            });
+          }
+        },
+      });
+
       return () => {
-        if (resultListenerRef.current) {
-          resultListenerRef.current.remove();
-          resultListenerRef.current = null;
-        }
-        Vosk.stop();
-        setIsListening(false);
-        if (listeningTimeout) clearTimeout(listeningTimeout);
+        void stopVoskListening();
       };
-    }, [navigation, readyToListen])
+    }, [
+      navigation,
+      readyToListen,
+      setVoiceStatus,
+      skipSpeech,
+      speakMessage,
+      startVoskListening,
+      stopVoskListening,
+    ])
   );
 
   return (
@@ -199,6 +203,17 @@ export default function ChoiceScreen({ navigation }: ChoiceScreenProps) {
           <View style={[styles.voiceIndicator, isListening && styles.voiceIndicatorActive]} />
           <Text style={styles.voiceStatusText}>{voiceStatus}</Text>
         </View>
+
+        <TouchableOpacity
+          style={styles.skipButton}
+          onPress={() => {
+            setVoiceStatus('Audio skipped. Say "Wandering", "Destination", or "Back"');
+            void skipSpeech();
+          }}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.skipButtonText}>Skip Audio</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Footer */}
@@ -262,6 +277,20 @@ const styles = StyleSheet.create({
   voiceStatusText: {
     fontSize: 12,
     color: '#666666',
+  },
+  skipButton: {
+    marginTop: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#555',
+    backgroundColor: '#111',
+  },
+  skipButtonText: {
+    fontSize: 13,
+    color: '#cccccc',
+    letterSpacing: 1,
   },
   footerSection: {
     flex: 1,
