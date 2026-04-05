@@ -54,6 +54,9 @@ import {
   ENABLE_INTENT_MODE,
 } from '../config/modelConfig';
 import { decodeBase64ToPixels, decodeImageUriToPixels } from '../utils/imageUtils';
+import { fetchWalkingDirections, maneuverToIntent, DirectionsResult } from '../services/directionsService';
+import * as Location from 'expo-location';
+import getGeoDistance from 'geolib/es/getDistance';
 
 type ActiveCameraScreenProps = NativeStackScreenProps<RootStackParamList, 'ActiveCamera'>;
 
@@ -127,6 +130,15 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
   const routeStepCount = route.params.routeSteps?.length ?? 0;
   const totalDistanceMeters = route.params.totalDistanceMeters;
 
+  // Wayfinding state (live GPS + directions)
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null); // GPS coordinates
+  const [directionsCache, setDirectionsCache] = useState<DirectionsResult | null>(null); // Full route from the Map API
+  const [currentStepIndex, setCurrentStepIndex] = useState<number>(0); // Step or part index in the route
+  const [routeProgress, setRouteProgress] = useState({
+    distanceRemaining: 0,
+    distanceToStepEnd: 0,
+  });
+  
   // Camera permission state
   const [permission, requestPermission] = useCameraPermissions();
   
@@ -305,7 +317,7 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
     
     initModels();
     
-    // Cleanup on unmount â€” use refs only, no state updates
+    // Cleanup on unmount — use refs only, no state updates
     return () => {
       isCapturingRef.current = false;
       isCameraReadyRef.current = false;
@@ -318,7 +330,7 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
       }
     };
   }, [convlstmService]);
-
+  
   useEffect(() => {
     isModelLoadedRef.current = isModelLoaded;
   }, [isModelLoaded]);
@@ -326,6 +338,107 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
   useEffect(() => {
     isYOLOModelLoadedRef.current = isYOLOModelLoaded;
   }, [isYOLOModelLoaded]);
+
+  /**
+   * Request location permission and start GPS tracking if in intent mode
+   */
+  useEffect(() => {
+    if (!ENABLE_INTENT_MODE) {
+      return;
+    }
+
+    let subscription: Location.LocationSubscription | null = null;
+
+    const startTracking = async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        console.warn('Location permission denied');
+        return;
+      }
+
+      subscription = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          distanceInterval: 2,             // Updates every 2 meters
+          timeInterval: 2000,              // Updates every 2 seconds
+        },
+        (location) => {
+          setUserLocation({
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+          });
+        }
+      );
+    };
+
+    startTracking();
+
+    return () => {
+      if (subscription) {
+        subscription.remove();
+        console.log("GPS tracking stopped.");
+      }
+    };
+  }, []);
+
+  // Directions cache
+  useEffect(() => {
+    if (mode === 'destination' && userLocation && route.params.destination) {
+      const destination = route.params.destination; // { latitude, longitude }
+      const fetchAndCacheDirections = async () => {
+        try {
+          const directions = await fetchWalkingDirections(userLocation, destination);
+          setDirectionsCache(directions);
+          setCurrentStepIndex(0); // Start at first step
+          console.log('Directions cached:', directions.steps.length, 'steps');
+        } catch (error) {
+          console.warn('Failed to fetch directions:', error);
+        }
+      };
+      fetchAndCacheDirections();
+    }
+  }, [mode, userLocation, route.params.destination]);
+
+  useEffect(() => {
+    if (!directionsCache || !userLocation || !ENABLE_INTENT_MODE) return;
+    
+    const steps = directionsCache.steps;
+    if (currentStepIndex >= steps.length) return;
+    
+    const checkAndAdvanceStep = () => {
+      const currentStep = steps[currentStepIndex];
+      const distanceToEnd = getGeoDistance(userLocation, currentStep.endLocation);
+      
+      if (distanceToEnd < 2) { // Within 2 meters, update to the next step
+        setCurrentStepIndex(prev => Math.min(prev + 1, steps.length - 1));
+        console.log(`[Route] Advanced to step ${currentStepIndex + 1}`);
+      }
+    };
+    
+    checkAndAdvanceStep();
+  }, [userLocation, directionsCache, currentStepIndex]);
+
+  /**
+   * Calculate distances remaining in the current step of the route and the whole route 
+   */
+  useEffect(() => {
+    if (!directionsCache || !userLocation) return;
+    
+    // Calculate remaining distance
+    let remainingDist = 0;
+    for (let i = currentStepIndex; i < directionsCache.steps.length; i++) {
+      remainingDist += directionsCache.steps[i].distanceMeters;
+    }
+    
+    // Distance to current step end
+    const currentStep = directionsCache.steps[currentStepIndex];
+    const distToEnd = getGeoDistance(userLocation, currentStep.endLocation);
+    
+    setRouteProgress({
+      distanceRemaining: remainingDist,
+      distanceToStepEnd: distToEnd,
+    });
+  }, [userLocation, directionsCache, currentStepIndex]);
 
   /**
    * Start/stop object speech with the screen lifecycle.
@@ -467,12 +580,26 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
           const decoded = await decodeImageUriToPixels(photo.uri, FRAME_WIDTH, FRAME_HEIGHT);
           const sequenceId = ++captureSequenceRef.current;
           
+          let intent = -1;
+          let intentDistance = 0;
+        
+          if (ENABLE_INTENT_MODE && directionsCache && userLocation && routeProgress) {
+            // Set intent for current step
+            const currentStep = directionsCache.steps[currentStepIndex];
+            if (currentStep) {
+              intent = maneuverToIntent(currentStep.maneuver);
+              intentDistance = routeProgress.distanceToStepEnd;
+            }
+          }
+
           frameData = {
             data: decoded.data,
             width: decoded.width,
             height: decoded.height,
             timestamp: Date.now(),
             sequenceId,
+            intent,
+            intentDistance
           };
         } catch (decodeError: any) {
           console.warn('[ActiveCamera] Failed to decode image:', decodeError?.message);
@@ -484,12 +611,26 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
         const decoded = await decodeBase64ToPixels(photo.base64, FRAME_WIDTH, FRAME_HEIGHT);
         const sequenceId = ++captureSequenceRef.current;
 
+        let intent = -1;
+        let intentDistance = 0;
+      
+        if (ENABLE_INTENT_MODE && directionsCache && userLocation && routeProgress) {
+          // Set intent for current step
+          const currentStep = directionsCache.steps[currentStepIndex];
+          if (currentStep) {
+            intent = maneuverToIntent(currentStep.maneuver);
+            intentDistance = routeProgress.distanceToStepEnd;
+          }
+        }
+
         frameData = {
           data: decoded.data,
           width: decoded.width,
           height: decoded.height,
           timestamp: Date.now(),
           sequenceId,
+          intent,
+          intentDistance
         };
       } else {
         console.warn('[ActiveCamera] No image URI returned by camera');

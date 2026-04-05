@@ -137,6 +137,25 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+/** 
+ * Convert to three classes of intent (0-2) 
+*/
+export function maneuverToIntent(maneuver: WalkingManeuver): number {
+  switch (maneuver) {
+    case 'turn-left':
+    case 'turn-slight-left':
+    case 'turn-sharp-left':
+      return 1; // Left
+    case 'turn-right':
+    case 'turn-slight-right':
+    case 'turn-sharp-right':
+      return 2; // Right
+    case 'straight':
+    default:
+      return 0; // Front
+  }
+}
+
 // ----------------------------------------------------------------
 // Main function
 // ----------------------------------------------------------------

@@ -443,7 +443,9 @@ class YOLOModelManager {
         data: new Uint8Array(128 * 128 * 4),
         width: 128,
         height: 128,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        intent: -1,
+        intentDistance: 0
       };
       
       await this.runInference(dummyFrame);
