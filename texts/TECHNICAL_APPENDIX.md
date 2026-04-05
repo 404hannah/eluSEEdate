@@ -100,7 +100,7 @@ High-level sequence:
 Hardening behavior:
 - Auto-restart voice-listening timeout is tracked and cleared during cleanup to avoid stale delayed restarts.
 - Skip command/button can immediately interrupt prompts and move directly to listening state.
-- Destination confirmation now sets a transition lock so Skip/Back/listener auto-restart cannot interrupt the committed handoff.
+- Destination confirmation now sets a transition lock only after explicit Yes confirmation passes validation and route fetch starts, so confirmation listening remains available.
 - On successful directions fetch, Wayfinding now navigates immediately to ActiveCamera (destination mode) instead of waiting on a trailing TTS onDone callback.
 
 ### 3.3 Shared Voice Interaction Hook
@@ -114,6 +114,11 @@ Current hook contract provides:
 4. startVoskListening / stopVoskListening for command grammar loops.
 5. startExpoListening / stopExpoListening for free-form destination capture.
 6. stopAllVoiceActivity for cleanup during blur/unmount.
+
+Handoff reliability behavior:
+1. speakThenListen wires native Speech onDone to the listening transition path.
+2. A fallback timeout estimates prompt duration with `700 + (message.length * 50)` ms (clamped to 1500-20000 ms), plus configured delay, and forces listening if native onDone is swallowed.
+3. The fallback timeout is cleared automatically when native onDone, onError, skipSpeech, or cleanup runs.
 
 Accessibility listening cue behavior:
 1. Every transition to listening emits haptic feedback using expo-haptics.
@@ -212,7 +217,9 @@ Current ActiveCamera diagnostics:
 	- timing summary (preprocess, inference, total latency, and FPS)
 4. Wandering mode emits CONVLSTM-NOINTENT-TRACE channel snapshots on a fixed interval,
 	including sampled per-channel means/max values and a warning if intent channels are non-zero.
-5. UI overlay surfaces the same runtime intent by showing:
+5. ConvLSTM no-intent inference now validates tensor rank, shape, and flattened length
+	before model.run, and includes softmax safety guards for non-finite logits.
+6. UI overlay surfaces the same runtime intent by showing:
 	- Audio: Ready | Speaking | Error
 	- Last Announced: most recent spoken object label
 
@@ -231,7 +238,7 @@ Current behavior:
 
 Hardening updates applied:
 1. Removed temporary high-volume debug logging from per-frame inference path.
-2. Removed commented-out legacy tensor write blocks.
+2. Kept explicit BCHW/BHWC reference comments in preprocessing code; active write path remains BHWC for current runtime.
 3. Enabled non-transposed tensor branch assignment in layout detection logic.
 
 ### 5.1 ObjectSpeech Runtime (Audio Obstacle Feedback)
@@ -278,7 +285,7 @@ Class name mapping for TTS:
 In src/config/modelConfig.ts:
 1. ConvLSTM preprocessing constants and model metadata are centralized.
 2. Runtime switch MODEL_CONFIG.runtime.enableIntentMode remains available for configuration-level experimentation.
-3. ENABLE_INTENT_MODE is exported and currently consumed by preprocessor-level intent-channel logic, while ActiveCamera pipeline selection is mode-driven.
+3. ENABLE_INTENT_MODE is exported but is not currently consumed by ActiveCamera or preprocessor runtime flow; pipeline selection is mode-driven and intent-plane injection is passed explicitly from ActiveCamera to VideoPreprocessor.
 
 ---
 
@@ -304,9 +311,9 @@ In src/config/modelConfig.ts:
 
 ---
 
-## 9. Troubleshooting Toolkit Results (2026-04-05, Destination Transition + Live Overlay Distance/Pipeline Sync)
+## 9. Troubleshooting Toolkit Results (2026-04-05, Current Runtime Verification)
 
-Validation run performed after fixing destination mode transition reliability and synchronizing ActiveCamera pipeline label + live destination distance behavior with runtime mode.
+Validation run performed after reconfirming ConvLSTM 6-channel preprocessing behavior for both pipelines and refreshing runtime documentation.
 
 1. Expo Doctor
 	- Command: npx expo-doctor
@@ -321,10 +328,10 @@ Validation run performed after fixing destination mode transition reliability an
 	- Result: Completed with no lint errors or warnings.
 
 Issue summary from this troubleshooting pass:
-1. Blocking runtime issue fixed in Wayfinding destination flow by removing the route-success dependency on trailing TTS completion.
-2. Added a destination transition lock to prevent Skip/Back/listener auto-restart from hijacking the handoff after confirmation.
-3. ActiveCamera overlay now reports pipeline label from route mode and updates destination distance on each location fix with dynamic unit formatting.
-4. No static analysis or configuration issues were reported by the three toolkits after applying the fix.
+1. Technical appendix now matches current 6-channel ConvLSTM preprocessing behavior in both wandering and destination modes.
+2. Documentation now reflects no-intent channel-zero diagnostics and no-intent service shape/logit guardrails.
+3. Runtime switch notes now reflect current implementation (mode-driven pipeline and constructor-driven intent injection).
+4. No static analysis or configuration issues were reported by the three toolkits after this verification run.
 
 ---
 

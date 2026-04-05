@@ -25,6 +25,7 @@ Voice command prompts in MainMenu, Choice, and Wayfinding are now coordinated by
 2. `Skip` voice command and `Skip Audio` button support.
 3. Standardized `[AUDIO-DEBUG]` lifecycle logging for TTS, earcon playback, and listener states.
 4. Singleton earcon playback (`assets/sounds/ping.wav`) immediately before each menu/wayfinding TTS prompt.
+5. A native-callback fallback timeout in `speakThenListen` that forces listening handoff if `Speech.onDone` is swallowed on-device.
 
 **Turn Prediction Model**: Prototype 10 (ConvLSTM with Global Average Pooling)
 **Obstacle Detection**: YOLOv12 with TFLite optimization
@@ -277,6 +278,7 @@ Voice UX notes:
 3. MainMenu, Choice, and Wayfinding now play `ping.wav` immediately before each TTS prompt.
 4. ActiveCamera spoken obstacle announcements (YOLO/ConvLSTM) intentionally do not play earcons to keep navigation audio quieter.
 5. `[AUDIO-DEBUG]` logs include `TTS Start`, `TTS Finished`, `Earcon Triggered`, and `Voice Listener Status` entries.
+6. `useVoiceInteraction.speakThenListen` includes a duration-estimate timeout fallback so confirmation prompts still return to listening even if native `onDone` does not fire.
 
 ## Audio Behavior By Screen
 

@@ -35,6 +35,7 @@ interface VoskListeningOptions {
   statusWhileListening?: string;
   onResult: (result: string) => void;
   onErrorMessage?: string;
+  emitCueOnStart?: boolean;
 }
 
 interface ExpoListeningOptions {
@@ -50,6 +51,7 @@ interface ExpoListeningOptions {
   onResult?: (event: { isFinal?: boolean; results?: { transcript?: string }[] }) => void | Promise<void>;
   onEnd?: () => void | Promise<void>;
   onError?: (event: { error?: string; message?: string }) => void;
+  emitCueOnStart?: boolean;
 }
 
 interface UseVoiceInteractionOptions {
@@ -61,6 +63,12 @@ interface UseVoiceInteractionOptions {
 
 type ListenerWithRemove = { remove: () => void };
 type ListenerEngine = 'vosk' | 'expo';
+
+const TTS_HANDOFF_MS_PER_CHAR = 50;
+const TTS_HANDOFF_BASE_MS = 700;
+const TTS_HANDOFF_MIN_MS = 1500;
+const TTS_HANDOFF_MAX_MS = 20000;
+const TTS_TO_MIC_BUFFER_MS = 50;
 
 let voiceInteractionInstanceCounter = 0;
 let speechOwnerId: number | null = null;
@@ -90,6 +98,25 @@ function clearGlobalExpoListeners(): void {
   globalExpoListeners = [];
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  if (typeof error === 'string' && error.length > 0) {
+    return error;
+  }
+
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const candidate = (error as { message?: unknown }).message;
+    if (typeof candidate === 'string' && candidate.length > 0) {
+      return candidate;
+    }
+  }
+
+  return String(error);
+}
+
 async function getPingSoundSingleton(): Promise<Audio.Sound | null> {
   if (pingSoundSingleton) {
     return pingSoundSingleton;
@@ -104,7 +131,10 @@ async function getPingSoundSingleton(): Promise<Audio.Sound | null> {
         pingSoundSingleton = sound;
         return sound;
       })
-      .catch(() => null);
+      .catch((error: unknown) => {
+        console.warn(`[AUDIO-TRACE] Earcon preload failed: ${getErrorMessage(error)}`);
+        return null;
+      });
   }
 
   return pingSoundLoader;
@@ -122,6 +152,8 @@ export function useVoiceInteraction(options?: UseVoiceInteractionOptions) {
   const interactionIdRef = useRef(++voiceInteractionInstanceCounter);
 
   const readyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handoffFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handoffSequenceRef = useRef(0);
   const pendingListeningRef = useRef<TransitionToListeningOptions | null>(null);
   const voskResultListenerRef = useRef<ListenerWithRemove | null>(null);
   const expoListenersRef = useRef<ListenerWithRemove[]>([]);
@@ -134,6 +166,16 @@ export function useVoiceInteraction(options?: UseVoiceInteractionOptions) {
       clearTimeout(readyTimerRef.current);
       readyTimerRef.current = null;
     }
+
+    if (handoffFallbackTimerRef.current) {
+      clearTimeout(handoffFallbackTimerRef.current);
+      handoffFallbackTimerRef.current = null;
+    }
+  }, []);
+
+  const estimateSpeechDurationMs = useCallback((message: string): number => {
+    const estimated = TTS_HANDOFF_BASE_MS + (message.trim().length * TTS_HANDOFF_MS_PER_CHAR);
+    return Math.max(TTS_HANDOFF_MIN_MS, Math.min(TTS_HANDOFF_MAX_MS, estimated));
   }, []);
 
   const playTtsEarcon = useCallback(async () => {
@@ -145,8 +187,8 @@ export function useVoiceInteraction(options?: UseVoiceInteractionOptions) {
     try {
       logAudioDebugEarconTriggered('ping.wav');
       await pingSound.replayAsync();
-    } catch {
-      // Earcon failure should not block TTS.
+    } catch (error: unknown) {
+      console.warn(`[AUDIO-TRACE] Earcon playback failed: ${getErrorMessage(error)}`);
     }
   }, []);
 
@@ -238,7 +280,7 @@ export function useVoiceInteraction(options?: UseVoiceInteractionOptions) {
       setVoiceStatus(listeningOptions.statusWhileListening);
     }
 
-    if (listeningOptions?.emitCue !== false) {
+    if (listeningOptions?.emitCue === true) {
       await emitListeningCue();
     }
 
@@ -324,6 +366,7 @@ export function useVoiceInteraction(options?: UseVoiceInteractionOptions) {
               return;
             }
 
+            console.error('[ERROR] TTS playback callback error (expo-speech onError)');
             speechOwnerId = null;
             setIsSpeaking(false);
 
@@ -332,11 +375,12 @@ export function useVoiceInteraction(options?: UseVoiceInteractionOptions) {
             }
           },
         });
-      } catch {
+      } catch (error: unknown) {
         if (speechOwnerId === interactionIdRef.current) {
           speechOwnerId = null;
         }
 
+        console.error(`[ERROR] TTS initialization failed: ${getErrorMessage(error)}`);
         setIsSpeaking(false);
 
         if (speakOptions.onError) {
@@ -352,51 +396,109 @@ export function useVoiceInteraction(options?: UseVoiceInteractionOptions) {
     const listeningOptions: TransitionToListeningOptions = {
       statusWhileListening: speakOptions.statusWhileListening,
       onListeningReady: speakOptions.onListeningReady,
-      emitCue: true,
+      emitCue: false,
+    };
+    const handoffSequence = ++handoffSequenceRef.current;
+    const delayMs = Math.max(0, speakOptions.delayMs ?? defaultListeningDelayMs);
+    const handoffDelayMs = delayMs + TTS_TO_MIC_BUFFER_MS;
+    const estimatedSpeechMs = estimateSpeechDurationMs(speakOptions.message);
+    let handoffCompleted = false;
+
+    const completeHandoff = (source: 'onDone' | 'onError' | 'fallback') => {
+      if (handoffCompleted || handoffSequenceRef.current !== handoffSequence) {
+        return;
+      }
+
+      handoffCompleted = true;
+
+      if (source === 'onDone') {
+        clearReadyTimer();
+        readyTimerRef.current = setTimeout(() => {
+          if (handoffSequenceRef.current !== handoffSequence) {
+            return;
+          }
+
+          void transitionToListening(pendingListeningRef.current ?? listeningOptions);
+        }, handoffDelayMs);
+        return;
+      }
+
+      clearReadyTimer();
+
+      void (async () => {
+        if (source === 'fallback' && speechOwnerId === interactionIdRef.current) {
+          try {
+            await Speech.stop();
+          } catch (error: unknown) {
+            console.warn(`[AUDIO-TRACE] Fallback Speech.stop failed: ${getErrorMessage(error)}`);
+          }
+        }
+
+        readyTimerRef.current = setTimeout(() => {
+          if (handoffSequenceRef.current !== handoffSequence) {
+            return;
+          }
+
+          void transitionToListening(pendingListeningRef.current ?? listeningOptions);
+        }, TTS_TO_MIC_BUFFER_MS);
+      })();
     };
 
     pendingListeningRef.current = listeningOptions;
+    clearReadyTimer();
+    handoffFallbackTimerRef.current = setTimeout(() => {
+      if (handoffSequenceRef.current !== handoffSequence || handoffCompleted) {
+        return;
+      }
+
+      console.warn('[AUDIO-TRACE] TTS onDone fallback triggered; forcing listening handoff');
+      completeHandoff('fallback');
+    }, estimatedSpeechMs + delayMs);
 
     speakMessage({
       message: speakOptions.message,
       language: speakOptions.language,
       statusWhileSpeaking: speakOptions.statusWhileSpeaking,
       onDone: () => {
-        const delayMs = Math.max(0, speakOptions.delayMs ?? defaultListeningDelayMs);
-        clearReadyTimer();
-        readyTimerRef.current = setTimeout(() => {
-          void transitionToListening(pendingListeningRef.current ?? listeningOptions);
-        }, delayMs);
+        completeHandoff('onDone');
 
         if (speakOptions.onDone) {
           speakOptions.onDone();
         }
       },
       onError: () => {
-        void transitionToListening(pendingListeningRef.current ?? listeningOptions);
+        completeHandoff('onError');
         if (speakOptions.onError) {
           speakOptions.onError();
         }
       },
     });
-  }, [clearReadyTimer, defaultListeningDelayMs, speakMessage, transitionToListening]);
+  }, [clearReadyTimer, defaultListeningDelayMs, estimateSpeechDurationMs, speakMessage, transitionToListening]);
 
   const skipSpeech = useCallback(async () => {
     clearReadyTimer();
+    let interruptedSpeech = false;
 
     if (speechOwnerId === interactionIdRef.current) {
       try {
         await Speech.stop();
+        interruptedSpeech = true;
       } catch {
         // Ignore stop failures during user skip.
       }
+    }
+
+    if (interruptedSpeech) {
+      await new Promise<void>((resolve) => {
+        setTimeout(() => resolve(), TTS_TO_MIC_BUFFER_MS);
+      });
     }
 
     const pendingListening = pendingListeningRef.current;
     await transitionToListening(
       pendingListening ?? {
         statusWhileListening: voiceStatus,
-        emitCue: true,
+        emitCue: false,
       }
     );
   }, [clearReadyTimer, transitionToListening, voiceStatus]);
@@ -442,6 +544,10 @@ export function useVoiceInteraction(options?: UseVoiceInteractionOptions) {
         setVoiceStatus(listeningOptions.statusWhileListening);
       }
 
+      if (listeningOptions.emitCueOnStart !== false) {
+        await emitListeningCue();
+      }
+
       return true;
     } catch (error: any) {
       if (voskOwnerId === interactionIdRef.current) {
@@ -451,6 +557,7 @@ export function useVoiceInteraction(options?: UseVoiceInteractionOptions) {
       activeListenerEngineRef.current = null;
       isVoskListeningRef.current = false;
       setIsListening(false);
+      console.error(`[ERROR] Vosk start failed: ${error?.message ? String(error.message) : String(error)}`);
       logAudioDebugVoiceListenerStatus(
         'Error',
         `Vosk${error?.message ? `: ${String(error.message)}` : ''}`,
@@ -466,7 +573,7 @@ export function useVoiceInteraction(options?: UseVoiceInteractionOptions) {
 
       return false;
     }
-  }, [stopVoskListening]);
+  }, [emitListeningCue, stopVoskListening]);
 
   const startExpoListening = useCallback(async (listeningOptions: ExpoListeningOptions) => {
     await stopExpoListening();
@@ -487,6 +594,7 @@ export function useVoiceInteraction(options?: UseVoiceInteractionOptions) {
       const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
       if (!permission.granted) {
         expoOwnerId = null;
+        console.error('[ERROR] ExpoSpeechRecognition permission denied');
         logAudioDebugVoiceListenerStatus('Error', 'ExpoSpeechRecognition: Permission denied');
         setVoiceStatus('Microphone permission denied');
         return false;
@@ -527,6 +635,10 @@ export function useVoiceInteraction(options?: UseVoiceInteractionOptions) {
           return;
         }
 
+        console.error(
+          `[ERROR] ExpoSpeechRecognition runtime error: ${event.error ? String(event.error) : 'unknown'}${event.message ? ` | ${String(event.message)}` : ''}`,
+        );
+
         expoOwnerId = null;
         clearGlobalExpoListeners();
         activeListenerEngineRef.current = null;
@@ -565,6 +677,10 @@ export function useVoiceInteraction(options?: UseVoiceInteractionOptions) {
         setVoiceStatus(listeningOptions.statusWhileListening);
       }
 
+      if (listeningOptions.emitCueOnStart !== false) {
+        await emitListeningCue();
+      }
+
       return true;
     } catch (error: any) {
       if (expoOwnerId === interactionIdRef.current) {
@@ -576,6 +692,7 @@ export function useVoiceInteraction(options?: UseVoiceInteractionOptions) {
       await stopExpoListening();
       setIsListening(false);
       setVoiceStatus('Voice command disabled');
+      console.error(`[ERROR] ExpoSpeechRecognition start failed: ${error?.message ? String(error.message) : String(error)}`);
 
       logAudioDebugVoiceListenerStatus(
         'Error',
@@ -584,7 +701,7 @@ export function useVoiceInteraction(options?: UseVoiceInteractionOptions) {
 
       return false;
     }
-  }, [defaultLanguage, stopExpoListening]);
+  }, [defaultLanguage, emitListeningCue, stopExpoListening]);
 
   const stopAllVoiceActivity = useCallback(async () => {
     clearReadyTimer();
@@ -607,6 +724,16 @@ export function useVoiceInteraction(options?: UseVoiceInteractionOptions) {
   }, [clearReadyTimer, stopExpoListening, stopVoskListening]);
 
   useEffect(() => {
+    void Audio.setAudioModeAsync({
+      allowsRecordingIOS: true,
+      playsInSilentModeIOS: true,
+      shouldDuckAndroid: true,
+      staysActiveInBackground: false,
+      playThroughEarpieceAndroid: false,
+    }).catch((error: unknown) => {
+      console.error(`[ERROR] Failed to configure voice audio mode: ${getErrorMessage(error)}`);
+    });
+
     void getPingSoundSingleton();
 
     return () => {

@@ -232,21 +232,27 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
 
   /** User said "yes" – validate radius, fetch directions, then navigate or reject. */
   const handleConfirmYes = useCallback(async () => {
-    if (!pendingCoord || !userLocation || destinationTransitionLockedRef.current) return;
+    if (!pendingCoord || !userLocation || destinationTransitionLockedRef.current || hasNavigatedRef.current) {
+      return;
+    }
 
-    destinationTransitionLockedRef.current = true;
+    // Guard against duplicate "yes" results while we stop the current listener.
+    hasNavigatedRef.current = true;
 
     await stopExpoListening();
 
     if (pendingDistance > MAX_RADIUS_KM) {
+      hasNavigatedRef.current = false;
       restartAskLocation(
         `That location is ${pendingDistance.toFixed(1)} kilometres away. Out of bounds. The maximum walking radius is ${MAX_RADIUS_KM} kilometres. Please choose a closer destination.`,
       );
       return;
     }
 
+    // Lock handoff only after explicit confirmation and route-fetch transition begins.
+    destinationTransitionLockedRef.current = true;
+
     // Fetch walking directions from origin → destination
-    hasNavigatedRef.current = true;
     speakMessage({ message: 'Destination confirmed. Fetching walking directions. Please wait.' });
     setVoiceStatus('Fetching route...');
 
@@ -284,8 +290,8 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
   ]);
 
   /** User said "no" – discard candidate and ask again. */
-  const handleConfirmNo = useCallback(() => {
-    void stopExpoListening();
+  const handleConfirmNo = useCallback(async () => {
+    await stopExpoListening();
     restartAskLocation('Okay, say another destination.');
   }, [restartAskLocation, stopExpoListening]);
 
@@ -354,7 +360,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
               if (lower.includes('yes')) {
                 void handleConfirmYes();
               } else if (lower.includes('no')) {
-                handleConfirmNo();
+                void handleConfirmNo();
               }
             }
           },
@@ -368,7 +374,9 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
           onError: (event) => {
             // "aborted" and "no-speech" are expected during normal operation.
             if (event.error !== 'aborted' && event.error !== 'no-speech') {
-              console.error('Speech recognition error:', event.error, event.message);
+              console.error(
+                `[ERROR] Wayfinding speech recognition error: ${event.error ? String(event.error) : 'unknown'}${event.message ? ` | ${String(event.message)}` : ''}`,
+              );
             }
           },
         });
