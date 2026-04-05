@@ -131,13 +131,69 @@ const formatDistanceForOverlay = (meters: number | null | undefined): string => 
   return `${(meters / 1000).toFixed(2)} km`;
 };
 
+const NO_INTENT_CHANNEL_LOG_INTERVAL = 10;
+const NO_INTENT_CHANNEL_SAMPLE_STRIDE = 64;
+
+const summarizeFirstFrameTensorChannels = (
+  tensorData: Float32Array,
+  shape: number[]
+): { summary: string; maxIntentAbs: number } => {
+  if (!Array.isArray(shape) || shape.length !== 5) {
+    return { summary: 'invalid-shape', maxIntentAbs: Number.NaN };
+  }
+
+  const channels = shape[2];
+  const height = shape[3];
+  const width = shape[4];
+  const framePlaneSize = height * width;
+
+  if (!Number.isFinite(channels) || !Number.isFinite(height) || !Number.isFinite(width) || framePlaneSize <= 0) {
+    return { summary: 'invalid-dimensions', maxIntentAbs: Number.NaN };
+  }
+
+  const channelsToInspect = Math.min(channels, 6);
+  const sampleStride = Math.max(1, Math.min(NO_INTENT_CHANNEL_SAMPLE_STRIDE, framePlaneSize));
+  const summaries: string[] = [];
+  let maxIntentAbs = 0;
+
+  for (let channel = 0; channel < channelsToInspect; channel += 1) {
+    const baseOffset = channel * framePlaneSize;
+    let sampleSum = 0;
+    let sampleCount = 0;
+    let channelAbsMax = 0;
+
+    for (let pixelOffset = 0; pixelOffset < framePlaneSize; pixelOffset += sampleStride) {
+      const value = tensorData[baseOffset + pixelOffset] ?? 0;
+      const absValue = Math.abs(value);
+      sampleSum += value;
+      sampleCount += 1;
+
+      if (absValue > channelAbsMax) {
+        channelAbsMax = absValue;
+      }
+    }
+
+    if (channel >= 3 && channelAbsMax > maxIntentAbs) {
+      maxIntentAbs = channelAbsMax;
+    }
+
+    const mean = sampleCount > 0 ? sampleSum / sampleCount : 0;
+    summaries.push(`c${channel}=mean:${mean.toFixed(5)},amax:${channelAbsMax.toFixed(5)}`);
+  }
+
+  return {
+    summary: summaries.join(' | '),
+    maxIntentAbs,
+  };
+};
+
 export default function ActiveCameraScreen({ navigation, route }: ActiveCameraScreenProps) {
   const mode = route.params.mode;
   const modeLabel = mode === 'destination' ? 'Destination' : 'Wandering';
   const useIntentPipeline = mode === 'destination';
   const activePipelineName = mode === 'destination' ? 'Wayfinding pipeline' : 'Wandering pipeline';
   const convlstmService = useIntentPipeline ? convlstmWithIntent : convlstmWithoutIntent;
-  const preprocessorChannels: 3 | 6 = useIntentPipeline ? 6 : 3;
+  const convlstmChannels = 6;
 
   const destinationCoordinates = route.params.destination;
   const destinationLabel = route.params.destinationLabel;
@@ -170,7 +226,7 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
   
   // Preprocessor instance
   const preprocessorRef = useRef<VideoPreprocessor>(
-    new VideoPreprocessor(FRAME_HEIGHT, FRAME_WIDTH, SEQ_LEN, true, preprocessorChannels)
+    new VideoPreprocessor(FRAME_HEIGHT, FRAME_WIDTH, SEQ_LEN, true, convlstmChannels, useIntentPipeline)
   );
   
   // Prediction state
@@ -313,7 +369,8 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
       FRAME_WIDTH,
       SEQ_LEN,
       true,
-      preprocessorChannels
+      convlstmChannels,
+      useIntentPipeline
     );
     
     const initModels = async () => {
@@ -358,7 +415,7 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
         console.warn('[ActiveCamera] Failed to cleanup ConvLSTM model:', error?.message || error);
       });
     };
-  }, [convlstmService, preprocessorChannels]);
+  }, [convlstmService, useIntentPipeline]);
   
   useEffect(() => {
     isModelLoadedRef.current = isModelLoaded;
@@ -791,8 +848,20 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
       const preprocessor = preprocessorRef.current;
       const tensor = preprocessor.preprocessFrameSequence(frames);
       console.log(
-        `[CONVLSTM-TRACE] Tensor Ready | Frames Used: ${frames.length} | Shape: [1, ${SEQ_LEN}, ${preprocessorChannels}, ${FRAME_HEIGHT}, ${FRAME_WIDTH}] | Preprocess: ${tensor.processingTimeMs.toFixed(1)} ms.`
+        `[CONVLSTM-TRACE] Tensor Ready | Frames Used: ${frames.length} | Shape: [1, ${SEQ_LEN}, ${tensor.shape[2]}, ${FRAME_HEIGHT}, ${FRAME_WIDTH}] | Preprocess: ${tensor.processingTimeMs.toFixed(1)} ms.`
       );
+
+      if (!useIntentPipeline && predictionCountRef.current % NO_INTENT_CHANNEL_LOG_INTERVAL === 0) {
+        const channelSnapshot = summarizeFirstFrameTensorChannels(tensor.data, tensor.shape);
+
+        console.log(`[CONVLSTM-NOINTENT-TRACE] Channel Snapshot | ${channelSnapshot.summary}`);
+
+        if (Number.isFinite(channelSnapshot.maxIntentAbs) && channelSnapshot.maxIntentAbs > 1e-6) {
+          console.warn(
+            `[CONVLSTM-NOINTENT-TRACE] Non-zero intent channels detected in wandering mode (max abs=${channelSnapshot.maxIntentAbs.toFixed(6)}).`
+          );
+        }
+      }
       
       // Run prediction
       const { prediction, metrics: newMetrics } = await convlstmService.runPrediction(tensor);

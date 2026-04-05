@@ -17,6 +17,14 @@ let loadTensorflowModel: any = null;
 // Track if we're in demo mode (Expo Go) or real mode (dev build)
 let isDemoMode = true;
 
+const EXPECTED_CONVLSTM_INPUT_SHAPE = [1, 20, 6, 128, 128] as const;
+const EXPECTED_CONVLSTM_INPUT_ELEMENTS =
+  EXPECTED_CONVLSTM_INPUT_SHAPE[0] *
+  EXPECTED_CONVLSTM_INPUT_SHAPE[1] *
+  EXPECTED_CONVLSTM_INPUT_SHAPE[2] *
+  EXPECTED_CONVLSTM_INPUT_SHAPE[3] *
+  EXPECTED_CONVLSTM_INPUT_SHAPE[4];
+
 // Try to load TFLite (will fail in Expo Go, work in dev build)
 try {
   // react-native-fast-tflite must be loaded dynamically at runtime.
@@ -139,6 +147,36 @@ class TFLiteModelManager {
   }
 
   /**
+   * Validate ConvLSTM input tensor shape before inference.
+   * Prevents silent regressions when preprocessing layout changes.
+   */
+  private validateInputTensor(tensor: ProcessedTensor): void {
+    const rawShape = Array.isArray(tensor.shape) ? tensor.shape : [];
+
+    if (rawShape.length !== EXPECTED_CONVLSTM_INPUT_SHAPE.length) {
+      throw new Error(
+        `Invalid ConvLSTM input rank: expected ${EXPECTED_CONVLSTM_INPUT_SHAPE.length}, got ${rawShape.length}`
+      );
+    }
+
+    const normalizedShape = rawShape.map((value) => Number(value));
+
+    for (let index = 0; index < EXPECTED_CONVLSTM_INPUT_SHAPE.length; index += 1) {
+      if (normalizedShape[index] !== EXPECTED_CONVLSTM_INPUT_SHAPE[index]) {
+        throw new Error(
+          `Invalid ConvLSTM input shape: expected [${EXPECTED_CONVLSTM_INPUT_SHAPE.join(', ')}], got [${normalizedShape.join(', ')}]`
+        );
+      }
+    }
+
+    if (tensor.data.length !== EXPECTED_CONVLSTM_INPUT_ELEMENTS) {
+      throw new Error(
+        `Invalid ConvLSTM input length: expected ${EXPECTED_CONVLSTM_INPUT_ELEMENTS}, got ${tensor.data.length}`
+      );
+    }
+  }
+
+  /**
    * Run inference on preprocessed tensor
    * 
    * @param tensor - Preprocessed frame sequence tensor
@@ -152,12 +190,20 @@ class TFLiteModelManager {
         throw new Error('ConvLSTM model is not loaded');
       }
 
+      this.validateInputTensor(tensor);
+
       // Run model inference
       // Input: Float32Array with shape [1, 20, 6, 128, 128]
       const outputTensor = await this.model.run([tensor.data]);
 
       // Get output (should be [1, 3] for 3 classes)
       const output = Array.from(outputTensor[0] as ArrayLike<number>);
+
+      if (output.length !== CLASS_NAMES.length) {
+        console.warn(
+          `[ConvLSTM-TFLite] Unexpected output size: expected ${CLASS_NAMES.length}, got ${output.length}`
+        );
+      }
       
       const inferenceTimeMs = performance.now() - startTime;
 
@@ -201,9 +247,22 @@ class TFLiteModelManager {
    * Softmax activation function
    */
   private softmax(logits: number[]): number[] {
-    const maxLogit = Math.max(...logits);
-    const expValues = logits.map(x => Math.exp(x - maxLogit));
+    const sanitizedLogits = logits.map((value) => (Number.isFinite(value) ? value : 0));
+
+    if (sanitizedLogits.some((value, index) => value !== logits[index])) {
+      console.warn('[ConvLSTM-TFLite] Non-finite logits detected; replaced with 0');
+    }
+
+    const maxLogit = Math.max(...sanitizedLogits);
+    const expValues = sanitizedLogits.map(x => Math.exp(x - maxLogit));
     const sumExp = expValues.reduce((a, b) => a + b, 0);
+
+    if (!Number.isFinite(sumExp) || sumExp <= 0) {
+      const uniform = 1 / Math.max(1, expValues.length);
+      console.warn('[ConvLSTM-TFLite] Invalid softmax denominator; returning uniform probabilities');
+      return expValues.map(() => uniform);
+    }
+
     return expValues.map(x => x / sumExp);
   }
 
