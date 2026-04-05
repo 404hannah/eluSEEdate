@@ -18,19 +18,32 @@ import {
   FRAME_HEIGHT,
   FRAME_WIDTH,
   CHANNELS,
-  DEVICE_CONFIG
+  DEVICE_CONFIG,
+  ENABLE_INTENT_MODE
 } from '../config/modelConfig';
+
+type TensorChannelCount = 3 | 6;
+
+const resolveTensorChannelCount = (channels: number): TensorChannelCount => {
+  if (channels === 3 || channels === 6) {
+    return channels;
+  }
+
+  throw new Error('VideoPreprocessor channels must be 3 or 6');
+};
 
 /**
  * Frame data structure
  * Holds raw pixel data from camera capture
  */
 export interface FrameData {
-  data: Uint8Array;      // Raw pixel data (RGBA format from camera)
-  width: number;         // Original frame width
-  height: number;        // Original frame height
-  timestamp: number;     // Capture timestamp in ms
-  sequenceId?: number;   // Monotonic capture sequence ID for debugging/tracing
+  data: Uint8Array;         // Raw pixel data (RGBA format from camera)
+  width: number;            // Original frame width
+  height: number;           // Original frame height
+  timestamp: number;        // Capture timestamp in ms
+  sequenceId?: number;      // Monotonic capture sequence ID for debugging/tracing
+  intent?: number;          // Intent: 0 - Front, 1 - Left, 2 - Right
+  intentDistance: number;   // Distance before intent occurs
 }
 
 /**
@@ -194,6 +207,7 @@ export class VideoPreprocessor {
   private width: number;
   private seqLen: number;
   private normalize: boolean;
+  private channels: TensorChannelCount;
   private framePlaneSize: number;
   private frameStride: number;
   private tensorBuffer: Float32Array;
@@ -203,19 +217,21 @@ export class VideoPreprocessor {
     height: number = FRAME_HEIGHT,
     width: number = FRAME_WIDTH,
     seqLen: number = SEQ_LEN,
-    normalize: boolean = true
+    normalize: boolean = true,
+    channels: number = CHANNELS
   ) {
     this.height = height;
     this.width = width;
     this.seqLen = seqLen;
     this.normalize = normalize;
+    this.channels = resolveTensorChannelCount(channels);
 
     this.framePlaneSize = this.height * this.width;
-    this.frameStride = CHANNELS * this.framePlaneSize;
+    this.frameStride = this.channels * this.framePlaneSize;
 
     // Reused backing buffer: [1, seqLen, channels, height, width]
     this.tensorBuffer = new Float32Array(this.seqLen * this.frameStride);
-    this.outputShape = [1, this.seqLen, CHANNELS, this.height, this.width];
+    this.outputShape = [1, this.seqLen, this.channels, this.height, this.width];
   }
 
   /**
@@ -275,8 +291,8 @@ export class VideoPreprocessor {
 
     this.resizeNormalizeAndWriteFrame(frame, frameOffset, tensorData);
 
-    // Intent channels (3, 4, 5) are intentionally left untouched.
-    // The persistent Float32Array starts as zeros and RGB writes only touch channels 0-2.
+    // In 3-channel mode, only RGB values are packed.
+    // In 6-channel mode, RGB is packed with intent slots reserved for addIntent writes.
   }
 
   /**
@@ -292,11 +308,9 @@ export class VideoPreprocessor {
     const frameHeight = frame.height;
     const source = frame.data;
 
-    const channel0Offset = frameOffset;
-    const channel1Offset = frameOffset + this.framePlaneSize;
-    const channel2Offset = frameOffset + this.framePlaneSize * 2;
     const maxSrcX = frameWidth - 1;
     const maxSrcY = frameHeight - 1;
+    const channelOffset = [0, 0, 0, 0, 0, 0];
 
     for (let y = 0; y < this.height; y++) {
       const rowOffset = y * this.width;
@@ -323,17 +337,66 @@ export class VideoPreprocessor {
         const valueG = source[srcBase + 1];
         const valueB = source[srcBase + 2];
 
+        if (this.channels === 3) {
+          const rgbBase = frameOffset + pixelOffset * 3;
+
+          if (this.normalize) {
+            tensorData[rgbBase] = valueR / 255.0;
+            tensorData[rgbBase + 1] = valueG / 255.0;
+            tensorData[rgbBase + 2] = valueB / 255.0;
+          } else {
+            tensorData[rgbBase] = valueR;
+            tensorData[rgbBase + 1] = valueG;
+            tensorData[rgbBase + 2] = valueB;
+          }
+
+          continue;
+        }
+
+        const packedBase = frameOffset + pixelOffset * 6;
+
         if (this.normalize) {
-          tensorData[channel0Offset + pixelOffset] = valueR / 255.0;
-          tensorData[channel1Offset + pixelOffset] = valueG / 255.0;
-          tensorData[channel2Offset + pixelOffset] = valueB / 255.0;
+          tensorData[packedBase] = valueR / 255.0;
+          tensorData[packedBase + 1] = valueG / 255.0;
+          tensorData[packedBase + 2] = valueB / 255.0;
         } else {
-          tensorData[channel0Offset + pixelOffset] = valueR;
-          tensorData[channel1Offset + pixelOffset] = valueG;
-          tensorData[channel2Offset + pixelOffset] = valueB;
+          tensorData[packedBase] = valueR;
+          tensorData[packedBase + 1] = valueG;
+          tensorData[packedBase + 2] = valueB;
+        }
+
+        if (ENABLE_INTENT_MODE) {
+          channelOffset[0] = packedBase;
+          channelOffset[1] = packedBase + 1;
+          channelOffset[2] = packedBase + 2;
+          channelOffset[3] = packedBase + 3;
+          channelOffset[4] = packedBase + 4;
+          channelOffset[5] = packedBase + 5;
+
+          this.addIntent(frame, tensorData, channelOffset, 0);
         }
       }
     }
+  }
+
+  private addIntent(
+    frame: FrameData,
+    tensorData: Float32Array,
+    channelOffset: number[],
+    pixelOffset: number
+  ): void {
+    // Obtain intent
+    const intentClass = frame.intent || 0; // Default to front
+    const intentDistance = frame.intentDistance || 0; // Default to 0
+
+    // Check if intent would occur within the next few meters (<5)
+    if (intentDistance <= 5) {
+      // Fill the pixel's specified intent channel of intent (1)
+      tensorData[channelOffset[intentClass + 3] + pixelOffset] = 1;
+    } else {
+      // Fill the pixel's front channel of intent (1)
+      tensorData[channelOffset[3] + pixelOffset] = 1;
+    }    
   }
 
   /**

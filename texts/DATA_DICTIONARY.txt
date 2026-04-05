@@ -6,7 +6,7 @@
 This document defines the main runtime variables, route params, and configuration
 values used by the current app architecture.
 
-Last updated: April 3, 2026
+Last updated: April 5, 2026
 
 ================================================================================
 ARCHITECTURE SUMMARY
@@ -73,7 +73,9 @@ ConvLSTM model metadata:
 Preprocessing:
 1. seqLen: 20
 2. fps: 20
-3. channels: 6
+3. channels: dynamic per runtime path
+   - 3 channels for lightweight no-intent inference
+   - 6 channels for intent-aware destination inference
 4. normalize: true
 
 Runtime switch:
@@ -101,6 +103,7 @@ Route-driven mode state:
 2. modeLabel: display label derived from mode
 3. useIntentPipeline: boolean derived from mode + ENABLE_INTENT_MODE
 4. convlstmService: selected service module (with-intent or without-intent)
+5. preprocessorChannels: 3 | 6 selected from mode + ENABLE_INTENT_MODE
 
 Destination metadata (optional, destination mode):
 1. destinationLabel
@@ -165,6 +168,7 @@ Main state:
 5. pendingDistance
 6. readyToListen
 7. voiceStatus
+8. isListening (from shared voice hook)
 
 Navigation payload to ActiveCamera:
 1. mode: 'destination'
@@ -189,7 +193,57 @@ Voice grammar:
 1. wandering
 2. destination
 3. back
-4. [unk]
+4. skip
+5. [unk]
+
+================================================================================
+SHARED VOICE INTERACTION HOOK (src/hooks/useVoiceInteraction.ts)
+================================================================================
+
+Purpose:
+1. Unify TTS + STT control across MainMenu, Choice, and Wayfinding.
+2. Provide centralized timer/listener cleanup with ownership guards to reduce cross-screen race conditions.
+3. Support skipSpeech flow, pre-TTS earcon playback, and listening readiness haptics.
+4. Emit standardized audio lifecycle logs with [AUDIO-DEBUG] prefix.
+
+Core state returned by hook:
+1. isListening
+2. isSpeaking
+3. readyToListen
+4. voiceStatus
+5. setVoiceStatus
+
+Core control methods:
+1. speakMessage
+2. speakThenListen
+3. transitionToListening
+4. skipSpeech
+5. startVoskListening / stopVoskListening
+6. startExpoListening / stopExpoListening
+7. stopAllVoiceActivity
+
+Listening cue dependencies:
+1. expo-haptics (impactAsync)
+2. expo-av (Audio.Sound replayAsync)
+3. assets/sounds/ping.wav (singleton preload)
+
+Earcon behavior:
+1. Ping plays immediately before TTS prompts in MainMenu, Choice, and Wayfinding.
+2. Ping is intentionally not used by ActiveCamera object announcements (YOLO/ConvLSTM).
+
+AUDIO-DEBUG log category:
+1. [AUDIO-DEBUG] TTS Start: <phrase>
+2. [AUDIO-DEBUG] TTS Finished: <phrase>
+3. [AUDIO-DEBUG] Earcon Triggered: ping.wav
+4. [AUDIO-DEBUG] Voice Listener Status: Active/Inactive/Error
+5. Logs are visible in both IDE console and LogsScreen.
+
+LogsScreen category dropdown mapping (src/screens/LogsScreen.tsx):
+1. All Logs: no filter applied
+2. YOLO: [INFERENCE-DEBUG] and [PRIORITY-DEBUG]
+3. ConvLSTM: [CONVLSTM-TRACE]
+4. Audio: [AUDIO-DEBUG] and [AUDIO-TRACE]
+5. Errors: console.error entries and any message containing [ERROR]
 
 ================================================================================
 PREPROCESSOR (src/services/preprocessor.ts)
@@ -216,9 +270,17 @@ FrameBuffer helpers:
 6. getFramesBootstrapDoubled
 
 Tensor/channel semantics:
-1. Shape: [1, 20, 6, 128, 128]
-2. Channels 0-2: RGB
-3. Channels 3-5: intent channels (currently zero-filled unless upstream injection is added)
+1. Dynamic shape by active path:
+   - [1, 20, 3, 128, 128] for no-intent path
+   - [1, 20, 6, 128, 128] for intent-aware path
+2. 3-channel packing math (tight RGB):
+   - frameStride = height * width * 3
+   - pixel base index = frameOffset + (y * width + x) * 3
+3. 6-channel packing math (RGB + intent-safe padding):
+   - frameStride = height * width * 6
+   - RGB packed at packedBase + 0..2
+   - slots packedBase + 3..5 reserved so addIntent writes are in-bounds
+4. addIntent behavior remains unchanged and only writes intent-channel slots when enabled.
 
 ================================================================================
 INFERENCE SERVICES
@@ -226,11 +288,13 @@ INFERENCE SERVICES
 
 ConvLSTM without intent (convlstmWithoutIntentInference.ts):
 1. Current baseline classification path
-2. Exposes initializeModel, runPrediction, cleanupModel
+2. Uses 3-channel preprocessor allocation in ActiveCamera when intent path is disabled
+3. Exposes initializeModel, runPrediction, cleanupModel
 
 ConvLSTM with intent (convlstmWithIntentInference.ts):
 1. Parallel service API with same interface
 2. Selected by ActiveCamera when mode='destination' and ENABLE_INTENT_MODE=true
+3. Uses 6-channel preprocessor allocation in ActiveCamera
 
 YOLO (yoloInference.ts):
 1. Exposes initializeYOLOModel, runYOLODetection, cleanupYOLOModel

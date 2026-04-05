@@ -21,7 +21,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation/types';
 import * as Vosk from 'react-native-vosk';
-import * as Speech from 'expo-speech';
+import { useVoiceInteraction } from '../hooks/useVoiceInteraction';
 
 // Module-level flag to ensure TTS only speaks once per app session
 let hasSpokenGreeting = false;
@@ -33,52 +33,46 @@ type MainMenuScreenProps = {
 const { width } = Dimensions.get('window');
 
 export default function MainMenuScreen({ navigation }: MainMenuScreenProps) {
-  const [isListening, setIsListening] = useState(false);
-  const [voiceStatus, setVoiceStatus] = useState('Initializing...');
   const [modelLoaded, setModelLoaded] = useState(false);
-  const [readyToListen, setReadyToListen] = useState(false); // New state
-  const resultListenerRef = useRef<any>(null);
   const hasNavigatedRef = useRef(false);
+
+  const {
+    isListening,
+    readyToListen,
+    voiceStatus,
+    setVoiceStatus,
+    speakMessage,
+    speakThenListen,
+    transitionToListening,
+    skipSpeech,
+    startVoskListening,
+    stopVoskListening,
+    stopAllVoiceActivity,
+  } = useVoiceInteraction({
+    initialVoiceStatus: 'Initializing...',
+    defaultLanguage: 'en-US',
+    listeningDelayMs: 1000,
+  });
 
 
   const handleStartPress = () => {
-    Speech.speak('Starting', { language: 'en-US' });
-    navigation.navigate('Choice');
+    hasNavigatedRef.current = true;
+    void stopVoskListening();
+    speakMessage({
+      message: 'Starting',
+      onDone: () => navigation.navigate('Choice'),
+    });
   };
 
   const handleExitPress = () => {
-    Speech.speak('Exiting', { language: 'en-US' });
+    hasNavigatedRef.current = true;
+    void stopVoskListening();
+    speakMessage({ message: 'Exiting' });
     // For mobile apps, exiting is not always supported, but we can try:
     if (Platform.OS === 'android') {
       BackHandler.exitApp();
     }
   };
-
-  // Speak startup greeting once per app session, then start listening after a delay
-  useEffect(() => {
-    let readyTimer: ReturnType<typeof setTimeout> | null = null;
-
-    if (!hasSpokenGreeting) {
-      hasSpokenGreeting = true;
-      Speech.speak(
-        'Starting EluSEEdate. You can say Start to begin the app or Exit to exit the app.',
-        {
-          language: 'en-US',
-          onDone: () => {
-            readyTimer = setTimeout(() => {
-              setReadyToListen(true);
-            }, 1000); // 1 second delay after TTS
-          },
-        }
-      );
-    } else {
-      setReadyToListen(true);
-    }
-
-    return () => {
-      if (readyTimer) clearTimeout(readyTimer);
-    };
-  }, []);
 
   // Load Vosk model on component mount
   useEffect(() => {
@@ -105,69 +99,97 @@ export default function MainMenuScreen({ navigation }: MainMenuScreenProps) {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [setVoiceStatus]);
 
-  // Start/stop voice recognition when screen is focused/unfocused
+  // Speak startup greeting once per app session, then prepare listening state.
   useFocusEffect(
     useCallback(() => {
       hasNavigatedRef.current = false;
-      let listeningTimeout: ReturnType<typeof setTimeout> | null = null;
 
-      const startListening = async () => {
-        if (!modelLoaded || !readyToListen) return;
-        try {
-          await Vosk.start({ grammar: ['start', 'exit', '[unk]'] });
-          setIsListening(true);
-          setVoiceStatus('Say "Start" to begin');
-          resultListenerRef.current = Vosk.onResult((result: string) => {
-            const lowerResult = result.toLowerCase();
-            if (!hasNavigatedRef.current) {
-              if (lowerResult.includes('start')) {
-                hasNavigatedRef.current = true;
-                setVoiceStatus('Starting...');
-                Speech.speak('Starting', { language: 'en-US' });
-                Vosk.stop();
-                setIsListening(false);
-                navigation.navigate('Choice');
-              } else if (lowerResult.includes('exit')) {
-                hasNavigatedRef.current = true;
-                setVoiceStatus('Exiting...');
-                Speech.speak('Exiting', { language: 'en-US' });
-                Vosk.stop();
-                setIsListening(false);
-                if (Platform.OS === 'android') {
-                  BackHandler.exitApp();
-                }
-              }
-            }
-          });
-        } catch (error: any) {
-          console.error('Failed to start voice recognition:', error);
-          if (error?.message?.includes('permission') || error?.message?.includes('Permission')) {
-            setVoiceStatus('Microphone permission denied');
-          } else {
-            setVoiceStatus('Voice command disabled');
-          }
-          setIsListening(false);
-        }
-      };
-
-      // Only start listening if readyToListen is true
-      if (readyToListen) {
-        listeningTimeout = setTimeout(startListening, 0);
+      if (!modelLoaded) {
+        return () => {
+          void stopAllVoiceActivity();
+        };
       }
+
+      if (!hasSpokenGreeting) {
+        hasSpokenGreeting = true;
+        speakThenListen({
+          message: 'Starting EluSEEdate. You can say Start to begin the app, Exit to exit, or Skip to skip audio prompts.',
+          statusWhileSpeaking: 'Speaking instructions...',
+          statusWhileListening: 'Say "Start", "Exit", or "Skip"',
+        });
+      } else {
+        void transitionToListening({
+          statusWhileListening: 'Say "Start", "Exit", or "Skip"',
+        });
+      }
+
+      return () => {
+        void stopAllVoiceActivity();
+      };
+    }, [modelLoaded, speakThenListen, stopAllVoiceActivity, transitionToListening])
+  );
+
+  // Start/stop Vosk recognition when listening state is active.
+  useFocusEffect(
+    useCallback(() => {
+      if (!modelLoaded || !readyToListen) {
+        return;
+      }
+
+      void startVoskListening({
+        grammar: ['start', 'exit', 'skip', '[unk]'],
+        statusWhileListening: 'Say "Start", "Exit", or "Skip"',
+        onResult: (result: string) => {
+          const lowerResult = result.toLowerCase();
+          if (hasNavigatedRef.current) {
+            return;
+          }
+
+          if (lowerResult.includes('skip')) {
+            void skipSpeech();
+            setVoiceStatus('Audio skipped. Say "Start" or "Exit"');
+            return;
+          }
+
+          if (lowerResult.includes('start')) {
+            hasNavigatedRef.current = true;
+            setVoiceStatus('Starting...');
+            void stopVoskListening();
+            speakMessage({
+              message: 'Starting',
+              onDone: () => navigation.navigate('Choice'),
+            });
+            return;
+          }
+
+          if (lowerResult.includes('exit')) {
+            hasNavigatedRef.current = true;
+            setVoiceStatus('Exiting...');
+            void stopVoskListening();
+            speakMessage({ message: 'Exiting' });
+            if (Platform.OS === 'android') {
+              BackHandler.exitApp();
+            }
+          }
+        },
+      });
 
       // Cleanup when screen loses focus
       return () => {
-        if (resultListenerRef.current) {
-          resultListenerRef.current.remove();
-          resultListenerRef.current = null;
-        }
-        Vosk.stop();
-        setIsListening(false);
-        if (listeningTimeout) clearTimeout(listeningTimeout);
+        void stopVoskListening();
       };
-    }, [modelLoaded, navigation, readyToListen])
+    }, [
+      modelLoaded,
+      navigation,
+      readyToListen,
+      setVoiceStatus,
+      skipSpeech,
+      speakMessage,
+      startVoskListening,
+      stopVoskListening,
+    ])
   );
 
   return (
@@ -202,6 +224,17 @@ export default function MainMenuScreen({ navigation }: MainMenuScreenProps) {
           <View style={[styles.voiceIndicator, isListening && styles.voiceIndicatorActive]} />
           <Text style={styles.voiceStatusText}>{voiceStatus}</Text>
         </View>
+
+        <TouchableOpacity
+          style={styles.skipButton}
+          onPress={() => {
+            setVoiceStatus('Audio skipped. Say "Start" or "Exit"');
+            void skipSpeech();
+          }}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.skipButtonText}>Skip Audio</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Footer Section */}
@@ -318,5 +351,20 @@ const styles = StyleSheet.create({
   },
   debugButtonText: {
     fontSize: 14,
-    color: '#888888',  },
+    color: '#888888',
+  },
+  skipButton: {
+    marginTop: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#555',
+    backgroundColor: '#111',
+  },
+  skipButtonText: {
+    fontSize: 13,
+    color: '#cccccc',
+    letterSpacing: 1,
+  },
 });

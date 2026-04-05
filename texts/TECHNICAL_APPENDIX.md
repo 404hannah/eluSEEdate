@@ -1,6 +1,6 @@
 # EluSEEDate Technical Appendix (Source-Code Truth)
 
-Prepared on: 2026-04-04
+Prepared on: 2026-04-05
 Purpose: implementation-grounded technical reference for maintenance and release hardening.
 
 ---
@@ -10,6 +10,7 @@ Purpose: implementation-grounded technical reference for maintenance and release
 This appendix describes the code as it currently runs in the repository. It reflects active routes, runtime behavior, and data flow in:
 - App.tsx
 - src/navigation/types.ts
+- src/hooks/useVoiceInteraction.ts
 - src/screens/MainMenuScreen.tsx
 - src/screens/ChoiceScreen.tsx
 - src/screens/WayfindingScreen.tsx
@@ -76,15 +77,16 @@ Flow C (Diagnostics):
 ### 3.1 MainMenu and Choice
 
 - MainMenu and Choice use react-native-vosk for command-style grammar.
-- Choice supports Wandering, Destination, and Back commands.
-- Choice now removes any previous Vosk result listener before attaching a new listener callback.
+- MainMenu supports Start, Exit, and Skip commands.
+- Choice supports Wandering, Destination, Back, and Skip commands.
+- Both screens render a Skip Audio button that maps to the same skipSpeech path as the Skip voice command.
 
 ### 3.2 WayfindingScreen
 
 Wayfinding is voice-first and uses:
 - expo-location for user origin
-- expo-speech for TTS prompts
 - expo-speech-recognition for free-form destination and confirmation responses
+- shared hook speech controls for TTS playback, listening-state transitions, and cleanup
 
 High-level sequence:
 1. Request location permission and resolve current location.
@@ -97,6 +99,24 @@ High-level sequence:
 
 Hardening behavior:
 - Auto-restart voice-listening timeout is tracked and cleared during cleanup to avoid stale delayed restarts.
+- Skip command/button can immediately interrupt prompts and move directly to listening state.
+
+### 3.3 Shared Voice Interaction Hook
+
+src/hooks/useVoiceInteraction.ts now centralizes prompt/listening state for MainMenu, Choice, and Wayfinding.
+
+Current hook contract provides:
+1. speakMessage: one-shot TTS.
+2. speakThenListen: prompt followed by delayed transition to ready listening state.
+3. skipSpeech: immediate Speech.stop plus state advance to listening.
+4. startVoskListening / stopVoskListening for command grammar loops.
+5. startExpoListening / stopExpoListening for free-form destination capture.
+6. stopAllVoiceActivity for cleanup during blur/unmount.
+
+Accessibility listening cue behavior:
+1. Every transition to listening emits haptic feedback using expo-haptics.
+2. A short earcon is played from assets/sounds/ping.wav via expo-av.
+3. Cue emission is best-effort and non-fatal (voice flow continues even if cue playback fails).
 
 ---
 
@@ -115,6 +135,11 @@ Selection matrix:
 2. mode=destination and ENABLE_INTENT_MODE=false -> convlstmWithoutIntentInference
 3. mode=destination and ENABLE_INTENT_MODE=true -> convlstmWithIntentInference
 
+Preprocessor channel allocation:
+1. wandering path -> channels=3
+2. destination path with ENABLE_INTENT_MODE=false -> channels=3
+3. destination path with ENABLE_INTENT_MODE=true -> channels=6
+
 ### 4.2 Camera Setup and Capture
 
 - Camera implementation: expo-camera CameraView.
@@ -124,23 +149,47 @@ Selection matrix:
 - Primary decode path: decodeImageUriToPixels.
 - Fallback decode path: decodeBase64ToPixels.
 
+Destination-mode route progress wiring in current source:
+1. ActiveCamera starts live GPS tracking using expo-location watchPositionAsync when ENABLE_INTENT_MODE is enabled.
+2. ActiveCamera fetches and caches walking directions from current GPS position to route.params.destination.
+3. Step advancement is distance-driven: when distance to current step end is less than 2 meters, currentStepIndex advances.
+4. Distance checks use getGeoDistance imported from geolib/es/getDistance.
+5. routeProgress keeps both distanceRemaining and distanceToStepEnd for intent-aware frame metadata.
+
 Hardening changes in current source:
 1. Camera-ready callback is guarded by refs so one-time picture-size configuration is not repeatedly re-run.
 2. Capture gating checks ref-backed readiness flags to avoid stale-closure gating.
 3. Structured runtime diagnostics are active in inference paths using INFERENCE-DEBUG, PRIORITY-DEBUG, and CONVLSTM-TRACE log families.
 4. Performance overlay now includes audio diagnostics: current audio state and last announced object.
+5. ActiveCamera cleanup now calls the selected ConvLSTM service cleanupModel on unmount.
 
 ### 4.3 Frame Buffer and ConvLSTM Input
 
-Preprocessor output shape:
-- [1, 20, 6, 128, 128]
+Preprocessor output shape (dynamic):
+1. [1, 20, 3, 128, 128] when lightweight path is active
+2. [1, 20, 6, 128, 128] when intent-aware path is active
 
 Channel semantics:
 1. Channels 0-2: RGB
-2. Channels 3-5: intent channels
+2. Channels 3-5: intent channels (only present in 6-channel path)
 
 Current truth:
-- Intent channels remain zero-filled unless explicit upstream intent injection is added.
+1. In 3-channel path, RGB is tightly packed and no intent slots are allocated.
+2. In 6-channel path, RGB is written into positions 0-2 and positions 3-5 stay reserved for addIntent writes.
+3. If ENABLE_INTENT_MODE is true, ActiveCamera writes per-frame intent metadata:
+	- intent from maneuverToIntent(currentStep.maneuver)
+	- intentDistance from routeProgress.distanceToStepEnd
+4. Preprocessor addIntent writes intent channels per pixel:
+	- if intentDistance <= 5 meters, set channel (3 + intentClass) to 1
+	- otherwise, set Front intent channel (channel 3) to 1
+
+Packing math used by preprocessor:
+1. 3-channel path
+	- frameStride = height * width * 3
+	- pixel base index = frameOffset + (y * width + x) * 3
+2. 6-channel path
+	- frameStride = height * width * 6
+	- pixel base index = frameOffset + (y * width + x) * 6
 
 Buffer behavior:
 1. Early inference supported once minimum buffered frames are available.
@@ -234,6 +283,8 @@ In src/config/modelConfig.ts:
 3. Logs screen is still available for diagnostics routing.
 4. Runtime diagnostics are intentionally verbose in inference and audio paths to support field debugging.
 5. ConvLSTM currently has on-screen output (direction/confidence) and debug logs; spoken obstacle feedback is driven by YOLO detections through ObjectSpeechService.
+6. ActiveCamera currently performs in-screen route distance checks using geolib/es/getDistance for step progression.
+7. Voice-first navigation screens now share one hook-level cleanup path to reduce listener/timer leak risk.
 
 ---
 
@@ -243,6 +294,29 @@ In src/config/modelConfig.ts:
 2. Keep model input format comments synchronized with actual tensor write order in yoloInference.
 3. Re-run npx expo-doctor, npx tsc --noEmit, and npx expo lint before each release candidate and before EAS preview/production builds.
 4. Maintain changelog entries for each semantic version bump.
+
+---
+
+## 9. Troubleshooting Toolkit Results (2026-04-05)
+
+Validation run performed on the current branch head after merge.
+This run includes the shared voice-hook refactor, Skip command/button behavior, and listening cue integration.
+
+1. Expo Doctor
+	- Command: npx expo-doctor
+	- Result: 17/17 checks passed. No issues detected.
+
+2. TypeScript No-Emit
+	- Command: npx tsc --noEmit
+	- Result: Completed with no type errors.
+
+3. Expo Lint
+	- Command: npx expo lint
+	- Result: Completed with no lint errors or warnings.
+
+Issue summary from this troubleshooting pass:
+1. No current blocking or non-blocking issues were reported by the three toolkits.
+2. No runtime source-code changes were required for Live GPS flow or preprocessor intent-channel behavior during this pass.
 
 ---
 

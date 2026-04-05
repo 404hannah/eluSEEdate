@@ -7,6 +7,10 @@
 
 React Native/Expo mobile application for real-time turn direction prediction using a ConvLSTM deep learning model with TensorFlow Lite inference.
 
+The current runtime uses a dual-path ConvLSTM flow:
+1. 3-channel path for wandering mode, or destination mode when intent is disabled.
+2. 6-channel path for destination mode when intent is enabled.
+
 ## Overview
 
 This app uses two AI models working in parallel:
@@ -15,6 +19,12 @@ This app uses two AI models working in parallel:
 2. **YOLOv12** for real-time obstacle detection - identifies nearby objects (people, cars, bicycles, etc.) and displays bounding boxes on the camera view
 
 Audio feedback is powered by **ObjectSpeechService**, which converts YOLO detections into spoken obstacle prompts with priority and cooldown controls.
+
+Voice command prompts in MainMenu, Choice, and Wayfinding are now coordinated by a shared hook (`useVoiceInteraction`) with:
+1. Reusable TTS -> listening transitions.
+2. `Skip` voice command and `Skip Audio` button support.
+3. Standardized `[AUDIO-DEBUG]` lifecycle logging for TTS, earcon playback, and listener states.
+4. Singleton earcon playback (`assets/sounds/ping.wav`) immediately before each menu/wayfinding TTS prompt.
 
 **Turn Prediction Model**: Prototype 10 (ConvLSTM with Global Average Pooling)
 **Obstacle Detection**: YOLOv12 with TFLite optimization
@@ -47,15 +57,34 @@ Minimalistic black & white palette for a clean, distraction-free interface.
 
 ## Features
 
-- **Voice-first main menu** with Vosk commands (`Start`, `Exit`)
-- **Mode selection flow** (`Wandering`, `Destination`, `Back`) with speech prompts
-- **Wayfinding flow** for destination geocoding + spoken confirmation
+- **Voice-first main menu** with Vosk commands (`Start`, `Exit`, `Skip`)
+- **Mode selection flow** (`Wandering`, `Destination`, `Back`, `Skip`) with speech prompts
+- **Wayfinding flow** for destination geocoding + spoken confirmation (`Yes`, `No`, `Back`, `Skip`)
+- **Shared voice orchestration hook** (`src/hooks/useVoiceInteraction.ts`) for prompt timing, listening transitions, and cleanup
+- **Accessibility prompt cues** with haptic buzz (`expo-haptics`) and singleton ping earcon (`assets/sounds/ping.wav`) played before TTS on MainMenu/Choice/Wayfinding
 - **Unified camera runtime** in `ActiveCameraScreen` for both wandering and destination pipelines
+- **Dual-path ConvLSTM selection** between `convlstmWithoutIntentInference` and `convlstmWithIntentInference` based on route mode + runtime flag
 - **Live ConvLSTM turn prediction** with rolling frame buffer and low-latency updates
 - **Live YOLO obstacle detection** with bounding box overlay
 - **Priority-based spoken obstacle feedback** from YOLO detections (one object at a time, with cooldowns and danger interruption)
 - **Performance overlay** with capture, preprocessing, ConvLSTM, and YOLO timings
 - **Debug logs screen** for in-app runtime diagnostics
+
+## Logs & Diagnostics
+
+Open `LogsScreen` from MainMenu when you need targeted troubleshooting.
+
+How to use filtered logs:
+1. Tap the `Category` dropdown and choose the subsystem you want to inspect.
+2. Keep `Auto-scroll` enabled for live sessions, or disable it to inspect older entries.
+3. Tap `Clear` before reproducing an issue to start from a clean ring buffer.
+
+Category mapping:
+1. `All Logs` -> full stream (no filter)
+2. `YOLO` -> `[INFERENCE-DEBUG]`, `[PRIORITY-DEBUG]`
+3. `ConvLSTM` -> `[CONVLSTM-TRACE]`
+4. `Audio` -> `[AUDIO-DEBUG]`, `[AUDIO-TRACE]`
+5. `Errors` -> `console.error` and `[ERROR]`
 
 ## Spoken Obstacle Feedback Rules
 
@@ -97,10 +126,12 @@ Runtime flow:
 ├── babel.config.js                  # Babel config
 ├── eas.json                         # EAS Build configuration
 ├── assets/
-│   └── model/
+│   ├── model/
 │       ├── convlstm.tflite          # ConvLSTM TFLite model file
 │       ├── convlstm.onnx            # ONNX model (backup)
 │       └── yolo.tflite              # YOLOv12 TFLite model
+│   └── sounds/
+│       └── ping.wav                 # Earcon played before menu/wayfinding TTS prompts
 ├── texts/
 │   ├── TECHNICAL_APPENDIX.md        # Source-code-truth architecture reference
 │   ├── STANDALONE_APK_BUILD.txt     # EAS standalone APK guide
@@ -114,19 +145,21 @@ Runtime flow:
     ├── navigation/
     │   └── types.ts                 # Navigation type definitions
     ├── screens/
-  │   ├── MainMenuScreen.tsx       # Voice-first entry screen
-  │   ├── ChoiceScreen.tsx         # Mode selection (Wandering/Destination)
-  │   ├── WayfindingScreen.tsx     # Destination speech/geocoding flow
-  │   ├── ActiveCameraScreen.tsx   # Unified camera + inference runtime
-  │   └── LogsScreen.tsx           # Runtime log viewer
+    │   ├── MainMenuScreen.tsx       # Voice-first entry screen
+    │   ├── ChoiceScreen.tsx         # Mode selection (Wandering/Destination)
+    │   ├── WayfindingScreen.tsx     # Destination speech/geocoding flow
+    │   ├── ActiveCameraScreen.tsx   # Unified camera + inference runtime
+    │   └── LogsScreen.tsx           # Runtime log viewer
+    ├── hooks/
+    │   └── useVoiceInteraction.ts   # Shared TTS/STT state machine + skip/cue helpers
     ├── services/
     │   ├── preprocessor.ts          # Frame preprocessing (TypeScript)
     │   ├── convlstmWithoutIntentInference.ts  # ConvLSTM inference (no intent)
-    │   ├── convlstmWithIntentInference.ts     # ConvLSTM inference (with intent, future)
-  │   ├── yoloInference.ts         # YOLO object detection inference
-  │   ├── geocodingService.ts      # Destination geocoding
-  │   ├── directionsService.ts     # Walking route fetcher
-  │   └── ObjectSpeechService.ts   # Spoken obstacle announcements
+    │   ├── convlstmWithIntentInference.ts     # ConvLSTM inference (intent-aware path)
+    │   ├── yoloInference.ts         # YOLO object detection inference
+    │   ├── geocodingService.ts      # Destination geocoding
+    │   ├── directionsService.ts     # Walking route fetcher
+    │   └── ObjectSpeechService.ts   # Spoken obstacle announcements
     └── utils/
         └── imageUtils.ts            # Image decoding utilities
 ```
@@ -137,12 +170,12 @@ Runtime flow:
 
 | Parameter | Value |
 |-----------|-------|
-| Input Shape | [1, 20, 6, 128, 128] |
+| Input Shape | Dynamic: [1, 20, 3, 128, 128] or [1, 20, 6, 128, 128] |
 | Sequence Length | 20 frames |
 | Model FPS | 20 frames/second (training) |
 | Camera FPS | ~2 frames/second (actual capture rate) |
 | Duration | 1 second of capture (20 frames @ 20 FPS) |
-| Channels | 6 (3 RGB + 3 Intent) |
+| Channels | 3 (RGB only) or 6 (RGB + Intent) |
 | Frame Size | 128 x 128 |
 | Output Classes | 3 (Front, Left, Right) |
 | Model Type | Float16 Quantized TFLite |
@@ -167,11 +200,18 @@ Runtime flow:
 
 ## Intent Channels
 
-The model expects 6 channels per frame:
-- Channels 0-2: RGB color channels [0, 1]
-- Channels 3-5: Intent channels (all zeros for 'no intent' mode)
+Runtime channel behavior:
+1. 3-channel path (wandering, or destination with intent disabled)
+  - Channels 0-2 only (RGB)
+  - Tight packing index: `(frameOffset + (y * width + x) * 3)`
+2. 6-channel path (destination with intent enabled)
+  - Channels 0-2 for RGB
+  - Channels 3-5 reserved for intent values
+  - Packed index: `(frameOffset + (y * width + x) * 6)`
 
-In this app, we always use "no intent" (all zeros for intent channels).
+Path selection is driven by:
+1. `route.params.mode`
+2. `ENABLE_INTENT_MODE` from `src/config/modelConfig.ts`
 
 ## Getting Started
 
@@ -217,6 +257,25 @@ npx eas build --platform android --profile production
    - Display the predicted direction at the bottom
    - Show performance metrics at the top-left
 
+Voice UX notes:
+1. `Skip` can be spoken (or tapped as `Skip Audio`) in MainMenu, Choice, and Wayfinding.
+2. Skipping immediately stops current prompt playback and advances to active listening state.
+3. MainMenu, Choice, and Wayfinding now play `ping.wav` immediately before each TTS prompt.
+4. ActiveCamera spoken obstacle announcements (YOLO/ConvLSTM) intentionally do not play earcons to keep navigation audio quieter.
+5. `[AUDIO-DEBUG]` logs include `TTS Start`, `TTS Finished`, `Earcon Triggered`, and `Voice Listener Status` entries.
+
+## Audio Behavior By Screen
+
+Menu and destination setup screens:
+1. MainMenu, Choice, and Wayfinding use `useVoiceInteraction`.
+2. A singleton ping earcon is played before each TTS prompt.
+3. Voice lifecycle events are logged with `[AUDIO-DEBUG]` and appear in both IDE console and `LogsScreen`.
+
+Navigation camera screen:
+1. ActiveCamera uses `ObjectSpeechService` for obstacle alerts.
+2. No ping earcon is played for YOLO/ConvLSTM announcements.
+3. This avoids unnecessary audio clutter while walking.
+
 **Status Indicator**: A green dot means the app is actively capturing; "Demo Mode" label appears when using simulated predictions.
 
 ## Performance Metrics
@@ -238,36 +297,32 @@ The app uses `react-native-fast-tflite` for on-device TensorFlow Lite inference.
 - Supports Float32 input tensors (required for ConvLSTM)
 - Is registered as an Expo plugin in `app.json`
 
-**Key Implementation Details** (see `src/services/inference.ts`):
-
-```typescript
-// Model loading (runs on app startup)
-const model = await loadTensorflowModel(
-  require('../../assets/model/convlstm.tflite')
-);
-
-// Inference (runs for each prediction)
-const output = await model.run([tensorData]); // Float32Array [1, 20, 6, 128, 128]
-// output[0] contains class probabilities [front, left, right]
-```
+**Key Implementation Files**:
+1. `src/services/convlstmWithoutIntentInference.ts`
+2. `src/services/convlstmWithIntentInference.ts`
+3. `src/services/preprocessor.ts`
+4. `src/screens/ActiveCameraScreen.tsx`
 
 **Demo Mode Fallback**: If TFLite isn't available (Expo Go), the app automatically switches to demo mode with simulated predictions. Check the status indicator on the camera screen.
 
 ### Frame Capture & Preprocessing
 
-The CameraScreen captures frames using `expo-camera`:
-- **Capture method**: `takePictureAsync` with base64 output (~200-500ms per frame)
+The ActiveCameraScreen captures frames using `expo-camera`:
+- **Capture method**: `takePictureAsync` (~200-500ms per frame)
 - **Frame processing**: Decodes JPEG to pixel data, resizes to 128x128
 - **Buffer management**: Rolling buffer of frames with padding for early predictions
-- **Preprocessing**: Normalizes to [0,1], adds intent channels (zeros), transposes to NCHW format
+- **Preprocessing**: Normalizes to [0,1], then dynamically packs either 3-channel RGB or 6-channel RGB+intent-safe layout
 
 **Preprocessing Pipeline** (see `src/services/preprocessor.ts`):
-1. Camera captures JPEG frame → base64
+1. Camera captures JPEG frame
 2. Image decoded to RGBA pixel data
-3. Resized to 128x128 using bilinear interpolation
+3. Resized to 128x128 using nearest-neighbor sampling
 4. Normalized to [0, 1] range
-5. Intent channels added (all zeros)
-6. Transposed to channels-first: [batch, seq, channels, height, width]
+5. Packed into one of two tensor layouts:
+  - [1, 20, 3, 128, 128] for lightweight path
+  - [1, 20, 6, 128, 128] for intent-aware path
+6. In 6-channel layout, intent slots are reserved for addIntent writes
+7. Output stays channels-first: [batch, seq, channels, height, width]
 
 For production optimization, consider:
 - Using `react-native-vision-camera` with frame processors for real-time 30 FPS capture
