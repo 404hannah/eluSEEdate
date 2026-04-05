@@ -11,8 +11,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   SafeAreaView,
-  Modal,
-  Pressable,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 
@@ -24,45 +22,9 @@ interface LogEntry {
   message: string;
 }
 
-type LogFilter = 'all' | 'yolo' | 'convlstm' | 'audio' | 'errors';
-
-interface LogFilterOption {
-  key: LogFilter;
-  label: string;
-  description: string;
-}
-
 let logStorage: LogEntry[] = [];
 let logIdCounter = 0;
 let logListeners: ((logs: LogEntry[]) => void)[] = [];
-
-const LOG_FILTER_OPTIONS: LogFilterOption[] = [
-  {
-    key: 'all',
-    label: 'All Logs',
-    description: 'Default view for all captured logs',
-  },
-  {
-    key: 'yolo',
-    label: 'YOLO',
-    description: '[INFERENCE-DEBUG] and [PRIORITY-DEBUG]',
-  },
-  {
-    key: 'convlstm',
-    label: 'ConvLSTM',
-    description: '[CONVLSTM-TRACE]',
-  },
-  {
-    key: 'audio',
-    label: 'Audio',
-    description: '[AUDIO-DEBUG] and [AUDIO-TRACE]',
-  },
-  {
-    key: 'errors',
-    label: 'Errors',
-    description: 'console.error entries and [ERROR] tags',
-  },
-];
 
 // Override console methods to capture logs
 const originalConsole = {
@@ -116,8 +78,7 @@ console.debug = (...args) => captureLog('debug', ...args);
 export default function LogsScreen() {
   const navigation = useNavigation();
   const [logs, setLogs] = useState<LogEntry[]>([...logStorage]);
-  const [filter, setFilter] = useState<LogFilter>('all');
-  const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'yolo' | 'convlstm' | 'audio' | 'errors'>('all');
   const [autoScroll, setAutoScroll] = useState(true);
   const scrollViewRef = useRef<ScrollView>(null);
 
@@ -142,34 +103,28 @@ export default function LogsScreen() {
   const getFilteredLogs = () => {
     switch (filter) {
       case 'yolo':
-        return logs.filter(log => {
-          const messageUpper = log.message.toUpperCase();
-          return (
-            messageUpper.includes('[INFERENCE-DEBUG]')
-            || messageUpper.includes('[PRIORITY-DEBUG]')
-          );
-        });
+        return logs.filter(log => 
+          log.message.toLowerCase().includes('yolo') ||
+          log.message.toLowerCase().includes('detection')
+        );
       case 'convlstm':
-        return logs.filter(log => log.message.toUpperCase().includes('[CONVLSTM-TRACE]'));
+        return logs.filter(log => 
+          log.message.toLowerCase().includes('convlstm') ||
+          log.message.toLowerCase().includes('prediction') ||
+          log.message.toLowerCase().includes('intent')
+        );
       case 'audio':
-        return logs.filter(log => {
-          const messageUpper = log.message.toUpperCase();
-          return (
-            messageUpper.includes('[AUDIO-DEBUG]')
-            || messageUpper.includes('[AUDIO-TRACE]')
-          );
-        });
+        return logs.filter(log =>
+          log.message.toLowerCase().includes('[audio-debug]') ||
+          log.message.toLowerCase().includes('audio-trace') ||
+          log.message.toLowerCase().includes('speech')
+        );
       case 'errors':
-        return logs.filter(log => {
-          const messageUpper = log.message.toUpperCase();
-          return log.level === 'error' || messageUpper.includes('[ERROR]');
-        });
+        return logs.filter(log => log.level === 'error' || log.level === 'warn');
       default:
         return logs;
     }
   };
-
-  const selectedFilterOption = LOG_FILTER_OPTIONS.find(option => option.key === filter) ?? LOG_FILTER_OPTIONS[0];
 
   const clearLogs = () => {
     logStorage = [];
@@ -211,55 +166,39 @@ export default function LogsScreen() {
         <View style={{ width: 60 }} />
       </View>
 
-      {/* Filter Dropdown */}
+      {/* Filter Buttons */}
       <View style={styles.filterContainer}>
-        <Text style={styles.filterLabel}>Category</Text>
-        <TouchableOpacity
-          style={styles.filterDropdownButton}
-          onPress={() => setIsFilterModalVisible(true)}
-          activeOpacity={0.8}
+        <TouchableOpacity 
+          style={[styles.filterButton, filter === 'all' && styles.filterButtonActive]}
+          onPress={() => setFilter('all')}
         >
-          <View>
-            <Text style={styles.filterDropdownTitle}>{selectedFilterOption.label}</Text>
-            <Text style={styles.filterDropdownSubtitle}>{selectedFilterOption.description}</Text>
-          </View>
-          <Text style={styles.filterDropdownChevron}>▼</Text>
+          <Text style={styles.filterButtonText}>All ({logs.length})</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.filterButton, filter === 'yolo' && styles.filterButtonActive]}
+          onPress={() => setFilter('yolo')}
+        >
+          <Text style={styles.filterButtonText}>YOLO</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.filterButton, filter === 'convlstm' && styles.filterButtonActive]}
+          onPress={() => setFilter('convlstm')}
+        >
+          <Text style={styles.filterButtonText}>ConvLSTM</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.filterButton, filter === 'audio' && styles.filterButtonActive]}
+          onPress={() => setFilter('audio')}
+        >
+          <Text style={styles.filterButtonText}>Audio</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.filterButton, filter === 'errors' && styles.filterButtonActive]}
+          onPress={() => setFilter('errors')}
+        >
+          <Text style={styles.filterButtonText}>Errors</Text>
         </TouchableOpacity>
       </View>
-
-      <Modal
-        animationType="fade"
-        transparent
-        visible={isFilterModalVisible}
-        onRequestClose={() => setIsFilterModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <Pressable
-            style={styles.modalBackdrop}
-            onPress={() => setIsFilterModalVisible(false)}
-          />
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Log Category</Text>
-            {LOG_FILTER_OPTIONS.map((option) => (
-              <TouchableOpacity
-                key={option.key}
-                style={[
-                  styles.modalOption,
-                  filter === option.key && styles.modalOptionActive,
-                ]}
-                onPress={() => {
-                  setFilter(option.key);
-                  setIsFilterModalVisible(false);
-                }}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.modalOptionLabel}>{option.label}</Text>
-                <Text style={styles.modalOptionDescription}>{option.description}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      </Modal>
 
       {/* Action Buttons */}
       <View style={styles.actionContainer}>
@@ -336,85 +275,25 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   filterContainer: {
-    paddingHorizontal: 10,
-    paddingTop: 10,
-    paddingBottom: 4,
+    flexDirection: 'row',
+    padding: 10,
+    gap: 8,
   },
-  filterLabel: {
-    color: '#b5b5b5',
-    fontSize: 12,
-    marginBottom: 6,
-    letterSpacing: 0.6,
-  },
-  filterDropdownButton: {
-    paddingVertical: 10,
+  filterButton: {
+    flex: 1,
+    paddingVertical: 8,
     paddingHorizontal: 12,
     backgroundColor: '#222',
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#333',
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
   },
-  filterDropdownTitle: {
-    color: '#ffffff',
-    fontSize: 14,
+  filterButtonActive: {
+    backgroundColor: '#0a7ea4',
+  },
+  filterButtonText: {
+    color: '#fff',
+    fontSize: 12,
     fontWeight: '600',
-  },
-  filterDropdownSubtitle: {
-    color: '#9b9b9b',
-    fontSize: 11,
-    marginTop: 2,
-  },
-  filterDropdownChevron: {
-    color: '#d0d0d0',
-    fontSize: 13,
-  },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 18,
-  },
-  modalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-  },
-  modalCard: {
-    backgroundColor: '#111111',
-    borderWidth: 1,
-    borderColor: '#2e2e2e',
-    borderRadius: 12,
-    padding: 12,
-  },
-  modalTitle: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 10,
-  },
-  modalOption: {
-    backgroundColor: '#1b1b1b',
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#2c2c2c',
-  },
-  modalOptionActive: {
-    borderColor: '#0a7ea4',
-    backgroundColor: '#123845',
-  },
-  modalOptionLabel: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  modalOptionDescription: {
-    color: '#9f9f9f',
-    fontSize: 11,
-    marginTop: 2,
   },
   actionContainer: {
     flexDirection: 'row',

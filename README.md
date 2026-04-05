@@ -70,23 +70,6 @@ Minimalistic black & white palette for a clean, distraction-free interface.
 - **Performance overlay** with capture, preprocessing, ConvLSTM, and YOLO timings
 - **Debug logs screen** for in-app runtime diagnostics
 
-## Developer Tools
-
-Use `LogsScreen` from MainMenu to inspect runtime output captured from `console.log`, `console.info`, `console.warn`, `console.debug`, and `console.error`.
-
-Filtered logging workflow:
-1. Open the `Category` dropdown at the top of LogsScreen.
-2. Pick one of the filter groups to reduce noise.
-3. Keep `Auto-scroll` on during live sessions, or disable it for manual inspection.
-4. Use `Clear Logs` before reproducing a bug so the trace starts clean.
-
-Category mapping:
-1. `All Logs` - full stream (default)
-2. `YOLO` - `[INFERENCE-DEBUG]` and `[PRIORITY-DEBUG]`
-3. `ConvLSTM` - `[CONVLSTM-TRACE]`
-4. `Audio` - `[AUDIO-DEBUG]` and `[AUDIO-TRACE]`
-5. `Errors` - `console.error` entries and `[ERROR]` tags
-
 ## Spoken Obstacle Feedback Rules
 
 When multiple objects are detected in the same frame:

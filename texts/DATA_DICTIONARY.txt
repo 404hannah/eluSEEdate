@@ -238,13 +238,6 @@ AUDIO-DEBUG log category:
 4. [AUDIO-DEBUG] Voice Listener Status: Active/Inactive/Error
 5. Logs are visible in both IDE console and LogsScreen.
 
-LogsScreen category dropdown mapping (src/screens/LogsScreen.tsx):
-1. All Logs: no filter (full captured stream)
-2. YOLO: [INFERENCE-DEBUG] and [PRIORITY-DEBUG]
-3. ConvLSTM: [CONVLSTM-TRACE]
-4. Audio: [AUDIO-DEBUG] and [AUDIO-TRACE]
-5. Errors: console.error level entries and [ERROR] tagged messages
-
 ================================================================================
 PREPROCESSOR (src/services/preprocessor.ts)
 ================================================================================

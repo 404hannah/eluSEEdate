@@ -91,7 +91,6 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
 
   const {
     isListening,
-    isSpeaking,
     readyToListen,
     voiceStatus,
     setVoiceStatus,
@@ -160,7 +159,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
       setPendingLabel('');
 
       speakThenListen({
-        message: 'Choose your location. Say the name of your destination. Or say back to return.',
+        message: 'Choose your location. Say the name of your destination. Or say back to return. You may also say skip.',
         statusWhileSpeaking: 'Speaking instructions...',
         statusWhileListening: 'Say a place name, "Back", or "Skip"',
       });
@@ -213,7 +212,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
       setPhase('confirming');
 
       speakThenListen({
-        message: `Did you mean ${label}? It is ${dist.toFixed(1)} kilometres away. Say yes to confirm, no to try again, or back to return.`,
+        message: `Did you mean ${label}? It is ${dist.toFixed(1)} kilometres away. Say yes to confirm, no to try again, or back to return. You may also say skip.`,
         statusWhileSpeaking: 'Speaking instructions...',
         statusWhileListening: 'Say "Yes", "No", "Back", or "Skip"',
       });
@@ -300,14 +299,13 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
       let restartTimeout: ReturnType<typeof setTimeout> | null = null;
 
       const startListening = async () => {
-        if (!readyToListen && !isSpeaking) return;
+        if (!readyToListen) return;
 
         await startExpoListening({
-          statusWhileListening: readyToListen
-            ? (phase === 'confirming'
+          statusWhileListening:
+            phase === 'confirming'
               ? 'Say "Yes", "No", "Back", or "Skip"'
-              : 'Say a place name, "Back", or "Skip"')
-            : undefined,
+              : 'Say a place name, "Back", or "Skip"',
           startOptions: {
             lang: 'en-US',
             interimResults: false,
@@ -331,11 +329,6 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
                   ? 'Audio skipped. Say "Yes", "No", or "Back"'
                   : 'Audio skipped. Say a place name or "Back"',
               );
-              return;
-            }
-
-            // Keep listening while speaking so Skip can interrupt, but defer other commands.
-            if (isSpeaking) {
               return;
             }
 
@@ -366,7 +359,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
             }
           },
           onEnd: () => {
-            if (!hasNavigatedRef.current && (readyToListen || isSpeaking)) {
+            if (!hasNavigatedRef.current && readyToListen) {
               restartTimeout = setTimeout(() => {
                 void startListening();
               }, 500);
@@ -381,7 +374,7 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
         });
       };
 
-      if (readyToListen || isSpeaking) {
+      if (readyToListen) {
         void startListening();
       }
 
@@ -393,7 +386,6 @@ export default function WayfindingScreen({ navigation }: WayfindingScreenProps) 
       geocodePlace,
       handleConfirmNo,
       handleConfirmYes,
-      isSpeaking,
       navigation,
       phase,
       readyToListen,

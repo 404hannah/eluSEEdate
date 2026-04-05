@@ -381,32 +381,12 @@ export function useVoiceInteraction(options?: UseVoiceInteractionOptions) {
     });
   }, [clearReadyTimer, defaultListeningDelayMs, speakMessage, transitionToListening]);
 
-  const stopSpeechAndClearQueue = useCallback(async (reason: 'skip' | 'cleanup') => {
-    if (speechOwnerId !== interactionIdRef.current) {
-      return false;
-    }
-
-    try {
-      console.log(`[AUDIO-DEBUG] TTS Interrupt: ${reason}`);
-      await Promise.resolve(Speech.stop());
-      // A second stop call helps flush queued utterances on some engines.
-      await Promise.resolve(Speech.stop());
-    } catch {
-      // Ignore stop failures during interruption.
-    }
-
-    speechOwnerId = null;
-    setIsSpeaking(false);
-    return true;
-  }, []);
-
   const skipSpeech = useCallback(async () => {
     clearReadyTimer();
 
-    const interrupted = await stopSpeechAndClearQueue('skip');
-    if (!interrupted) {
+    if (speechOwnerId === interactionIdRef.current) {
       try {
-        await Promise.resolve(Speech.stop());
+        await Speech.stop();
       } catch {
         // Ignore stop failures during user skip.
       }
@@ -419,7 +399,7 @@ export function useVoiceInteraction(options?: UseVoiceInteractionOptions) {
         emitCue: true,
       }
     );
-  }, [clearReadyTimer, stopSpeechAndClearQueue, transitionToListening, voiceStatus]);
+  }, [clearReadyTimer, transitionToListening, voiceStatus]);
 
   const startVoskListening = useCallback(async (listeningOptions: VoskListeningOptions) => {
     await stopVoskListening();
@@ -616,7 +596,7 @@ export function useVoiceInteraction(options?: UseVoiceInteractionOptions) {
     await Promise.allSettled([
       stopVoskListening(),
       stopExpoListening(),
-      ownsSpeech ? stopSpeechAndClearQueue('cleanup') : Promise.resolve(),
+      ownsSpeech ? Speech.stop() : Promise.resolve(),
     ]);
 
     if (ownsSpeech) {
@@ -624,7 +604,7 @@ export function useVoiceInteraction(options?: UseVoiceInteractionOptions) {
     }
 
     setIsSpeaking(false);
-  }, [clearReadyTimer, stopExpoListening, stopSpeechAndClearQueue, stopVoskListening]);
+  }, [clearReadyTimer, stopExpoListening, stopVoskListening]);
 
   useEffect(() => {
     void getPingSoundSingleton();

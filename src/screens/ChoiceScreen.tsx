@@ -34,7 +34,6 @@ export default function ChoiceScreen({ navigation }: ChoiceScreenProps) {
 
   const {
     isListening,
-    isSpeaking,
     readyToListen,
     voiceStatus,
     setVoiceStatus,
@@ -109,9 +108,13 @@ export default function ChoiceScreen({ navigation }: ChoiceScreenProps) {
   // Start/stop voice recognition when screen is focused and ready
   useFocusEffect(
     useCallback(() => {
+      if (!readyToListen) {
+        return;
+      }
+
       void startVoskListening({
         grammar: ['wandering', 'destination', 'back', 'skip', '[unk]'],
-        statusWhileListening: readyToListen ? 'Say "Wandering", "Destination", "Back", or "Skip"' : undefined,
+        statusWhileListening: 'Say "Wandering", "Destination", "Back", or "Skip"',
         onResult: (result: string) => {
           const lowerResult = result.toLowerCase();
           if (hasNavigatedRef.current) {
@@ -121,11 +124,6 @@ export default function ChoiceScreen({ navigation }: ChoiceScreenProps) {
           if (lowerResult.includes('skip')) {
             void skipSpeech();
             setVoiceStatus('Audio skipped. Say "Wandering", "Destination", or "Back"');
-            return;
-          }
-
-          // Keep listening through speech but ignore non-skip commands while TTS is active.
-          if (isSpeaking) {
             return;
           }
 
@@ -167,7 +165,6 @@ export default function ChoiceScreen({ navigation }: ChoiceScreenProps) {
         void stopVoskListening();
       };
     }, [
-      isSpeaking,
       navigation,
       readyToListen,
       setVoiceStatus,
