@@ -22,13 +22,9 @@ Removed duplicate screens:
 Unified behavior is selected via route param:
 1. mode: 'wandering' | 'destination'
 
-Global pipeline switch:
-1. ENABLE_INTENT_MODE (src/config/modelConfig.ts)
-
 Behavior matrix:
 1. mode='wandering' -> lightweight ConvLSTM path
-2. mode='destination' + ENABLE_INTENT_MODE=false -> lightweight ConvLSTM path
-3. mode='destination' + ENABLE_INTENT_MODE=true -> intent-aware ConvLSTM path
+2. mode='destination' -> wayfinding (intent-aware) ConvLSTM path
 
 ================================================================================
 NAVIGATION CONTRACT (src/navigation/types.ts)
@@ -80,8 +76,8 @@ Preprocessing:
 
 Runtime switch:
 1. MODEL_CONFIG.runtime.enableIntentMode: boolean
-2. ENABLE_INTENT_MODE: exported alias used by ActiveCameraScreen
-3. Purpose: globally allow/disable intent-aware destination pipeline
+2. ENABLE_INTENT_MODE: exported alias available for config-level experiments
+3. ActiveCamera pipeline selection is mode-driven in current runtime
 
 Convenience exports:
 1. SEQ_LEN
@@ -101,14 +97,18 @@ ACTIVE CAMERA SCREEN (src/screens/ActiveCameraScreen.tsx)
 Route-driven mode state:
 1. mode: 'wandering' | 'destination' (from route params)
 2. modeLabel: display label derived from mode
-3. useIntentPipeline: boolean derived from mode + ENABLE_INTENT_MODE
+3. useIntentPipeline: boolean derived from mode
 4. convlstmService: selected service module (with-intent or without-intent)
-5. preprocessorChannels: 3 | 6 selected from mode + ENABLE_INTENT_MODE
+5. preprocessorChannels: 3 | 6 selected from mode
+6. activePipelineName: 'Wandering pipeline' | 'Wayfinding pipeline' (overlay label)
 
 Destination metadata (optional, destination mode):
 1. destinationLabel
 2. routeStepCount
 3. totalDistanceMeters
+4. currentDistance: live straight-line distance from GPS to destination (meters)
+5. routeProgress.distanceRemaining: route-step-based remaining distance cache (meters)
+6. routeProgress.distanceToStepEnd: distance to current step end for intent-distance channel (meters)
 
 Camera/runtime state:
 1. permission
@@ -293,7 +293,7 @@ ConvLSTM without intent (convlstmWithoutIntentInference.ts):
 
 ConvLSTM with intent (convlstmWithIntentInference.ts):
 1. Parallel service API with same interface
-2. Selected by ActiveCamera when mode='destination' and ENABLE_INTENT_MODE=true
+2. Selected by ActiveCamera when mode='destination'
 3. Uses 6-channel preprocessor allocation in ActiveCamera
 
 YOLO (yoloInference.ts):
@@ -306,7 +306,7 @@ KEY NOTES
 
 1. ActiveCamera is now the single camera runtime entry point.
 2. Route parameter mode is mandatory and controls screen behavior.
-3. Global ENABLE_INTENT_MODE controls whether destination mode uses intent pipeline.
+3. Route mode currently controls whether destination uses wayfinding (intent-aware) pipeline.
 4. Legacy Wandering/Destination/Camera routes were removed from RootStackParamList.
 5. Update this file whenever route params or config toggles change.
 

@@ -6,7 +6,7 @@
  * - Uses simplified capture approach compatible with Expo Go
  * - Supports two modes via route params:
  *   1) wandering: lightweight pipeline
- *   2) destination: intent-capable pipeline (if enabled globally)
+ *   2) destination: wayfinding pipeline
  * - Shows predicted direction at bottom
  * - Shows inference/latency metrics at top-left
  *
@@ -51,7 +51,6 @@ import {
   FRAME_WIDTH,
   FRAME_HEIGHT,
   CLASS_NAMES,
-  ENABLE_INTENT_MODE,
 } from '../config/modelConfig';
 import { decodeBase64ToPixels, decodeImageUriToPixels } from '../utils/imageUtils';
 import { fetchWalkingDirections, maneuverToIntent, DirectionsResult } from '../services/directionsService';
@@ -120,13 +119,27 @@ const formatConvLSTMTopProbabilities = (probabilities: number[]): string => {
     .join(' | ');
 };
 
+const formatDistanceForOverlay = (meters: number | null | undefined): string => {
+  if (typeof meters !== 'number' || !Number.isFinite(meters) || meters < 0) {
+    return '0 m';
+  }
+
+  if (meters < 100) {
+    return `${Math.round(meters)} m`;
+  }
+
+  return `${(meters / 1000).toFixed(2)} km`;
+};
+
 export default function ActiveCameraScreen({ navigation, route }: ActiveCameraScreenProps) {
   const mode = route.params.mode;
   const modeLabel = mode === 'destination' ? 'Destination' : 'Wandering';
-  const useIntentPipeline = mode === 'destination' && ENABLE_INTENT_MODE;
+  const useIntentPipeline = mode === 'destination';
+  const activePipelineName = mode === 'destination' ? 'Wayfinding pipeline' : 'Wandering pipeline';
   const convlstmService = useIntentPipeline ? convlstmWithIntent : convlstmWithoutIntent;
   const preprocessorChannels: 3 | 6 = useIntentPipeline ? 6 : 3;
 
+  const destinationCoordinates = route.params.destination;
   const destinationLabel = route.params.destinationLabel;
   const routeStepCount = route.params.routeSteps?.length ?? 0;
   const totalDistanceMeters = route.params.totalDistanceMeters;
@@ -139,6 +152,7 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
     distanceRemaining: 0,
     distanceToStepEnd: 0,
   });
+  const [currentDistance, setCurrentDistance] = useState<number | null>(totalDistanceMeters ?? null);
   
   // Camera permission state
   const [permission, requestPermission] = useCameraPermissions();
@@ -355,10 +369,10 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
   }, [isYOLOModelLoaded]);
 
   /**
-   * Request location permission and start GPS tracking if in intent mode
+   * Request location permission and start GPS tracking in destination mode
    */
   useEffect(() => {
-    if (!ENABLE_INTENT_MODE) {
+    if (mode !== 'destination' || !destinationCoordinates) {
       return;
     }
 
@@ -394,28 +408,46 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
         console.log("GPS tracking stopped.");
       }
     };
-  }, []);
+  }, [destinationCoordinates, mode]);
 
   // Directions cache
   useEffect(() => {
-    if (mode === 'destination' && userLocation && route.params.destination) {
-      const destination = route.params.destination; // { latitude, longitude }
-      const fetchAndCacheDirections = async () => {
-        try {
-          const directions = await fetchWalkingDirections(userLocation, destination);
-          setDirectionsCache(directions);
-          setCurrentStepIndex(0); // Start at first step
-          console.log('Directions cached:', directions.steps.length, 'steps');
-        } catch (error) {
-          console.warn('Failed to fetch directions:', error);
-        }
-      };
-      fetchAndCacheDirections();
+    if (mode !== 'destination' || !userLocation || !destinationCoordinates || directionsCache) {
+      return;
     }
-  }, [mode, userLocation, route.params.destination]);
+
+    const fetchAndCacheDirections = async () => {
+      try {
+        const directions = await fetchWalkingDirections(userLocation, destinationCoordinates);
+        setDirectionsCache(directions);
+        setCurrentStepIndex(0); // Start at first step
+        console.log('Directions cached:', directions.steps.length, 'steps');
+      } catch (error) {
+        console.warn('Failed to fetch directions:', error);
+      }
+    };
+
+    void fetchAndCacheDirections();
+  }, [destinationCoordinates, directionsCache, mode, userLocation]);
+
+  /**
+   * Recalculate live straight-line distance to destination on every location update.
+   */
+  useEffect(() => {
+    if (mode !== 'destination' || !userLocation || !destinationCoordinates) {
+      if (mode !== 'destination') {
+        setCurrentDistance(null);
+      }
+
+      return;
+    }
+
+    const liveDistance = getGeoDistance(userLocation, destinationCoordinates);
+    setCurrentDistance(liveDistance);
+  }, [destinationCoordinates, mode, userLocation]);
 
   useEffect(() => {
-    if (!directionsCache || !userLocation || !ENABLE_INTENT_MODE) return;
+    if (!directionsCache || !userLocation || !useIntentPipeline) return;
     
     const steps = directionsCache.steps;
     if (currentStepIndex >= steps.length) return;
@@ -431,7 +463,7 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
     };
     
     checkAndAdvanceStep();
-  }, [userLocation, directionsCache, currentStepIndex]);
+  }, [currentStepIndex, directionsCache, useIntentPipeline, userLocation]);
 
   /**
    * Calculate distances remaining in the current step of the route and the whole route 
@@ -598,7 +630,7 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
           let intent = -1;
           let intentDistance = 0;
         
-          if (ENABLE_INTENT_MODE && directionsCache && userLocation && routeProgress) {
+          if (useIntentPipeline && directionsCache && userLocation && routeProgress) {
             // Set intent for current step
             const currentStep = directionsCache.steps[currentStepIndex];
             if (currentStep) {
@@ -629,7 +661,7 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
         let intent = -1;
         let intentDistance = 0;
       
-        if (ENABLE_INTENT_MODE && directionsCache && userLocation && routeProgress) {
+        if (useIntentPipeline && directionsCache && userLocation && routeProgress) {
           // Set intent for current step
           const currentStep = directionsCache.steps[currentStepIndex];
           if (currentStep) {
@@ -742,7 +774,7 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
       // (1,1,2,2,...) to bootstrap sequence length faster.
       const isFirstPrediction = !hasFirstPredictionRef.current;
       const bufferedFrameCount = buffer.getFrameCount();
-      const pipelineLabel = useIntentPipeline ? 'Intent' : 'Wandering';
+      const pipelineLabel = activePipelineName;
       console.log(
         `[CONVLSTM-TRACE] Start | Pipeline: [${pipelineLabel}] | Buffered Frames: ${bufferedFrameCount}/${SEQ_LEN} | Bootstrap: ${isFirstPrediction ? 'ON' : 'OFF'}.`
       );
@@ -759,7 +791,7 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
       const preprocessor = preprocessorRef.current;
       const tensor = preprocessor.preprocessFrameSequence(frames);
       console.log(
-        `[CONVLSTM-TRACE] Tensor Ready | Frames Used: ${frames.length} | Shape: [1, ${SEQ_LEN}, 6, ${FRAME_HEIGHT}, ${FRAME_WIDTH}] | Preprocess: ${tensor.processingTimeMs.toFixed(1)} ms.`
+        `[CONVLSTM-TRACE] Tensor Ready | Frames Used: ${frames.length} | Shape: [1, ${SEQ_LEN}, ${preprocessorChannels}, ${FRAME_HEIGHT}, ${FRAME_WIDTH}] | Preprocess: ${tensor.processingTimeMs.toFixed(1)} ms.`
       );
       
       // Run prediction
@@ -878,7 +910,7 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
             Mode: {modeLabel}
           </Text>
           <Text style={styles.performanceText}>
-            ConvLSTM: {useIntentPipeline ? 'Intent pipeline' : 'Wandering pipeline'}
+            ConvLSTM: {activePipelineName}
           </Text>
           {mode === 'destination' && destinationLabel ? (
             <Text style={styles.performanceText} numberOfLines={2}>
@@ -887,7 +919,7 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
           ) : null}
           {mode === 'destination' ? (
             <Text style={styles.performanceText}>
-              Steps: {routeStepCount} | Dist: {totalDistanceMeters ? (totalDistanceMeters / 1000).toFixed(2) : '0.00'} km
+              Steps: {routeStepCount} | Dist: {formatDistanceForOverlay(currentDistance)}
             </Text>
           ) : null}
           <View style={styles.performanceDivider} />
