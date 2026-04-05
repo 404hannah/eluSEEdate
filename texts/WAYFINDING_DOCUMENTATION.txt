@@ -19,7 +19,7 @@ TABLE OF CONTENTS
      4h. Phase 4 – Geocoding via Nominatim API
      4i. Phase 5 – Confirmation Loop
      4j. Phase 6 – Fetching Directions via OSRM API
-     4k. Phase 7 – Navigation to IntentScreen
+    4k. Phase 7 – Navigation to ActiveCameraScreen
      4l. Render / UI
   5. API Deep-Dive: Nominatim (Geocoding)
      5a. What is Nominatim?
@@ -36,7 +36,7 @@ TABLE OF CONTENTS
      6f. Request/Response examples
      6g. How steps map to the study's Intent Feature
   7. Data Flow Summary (start to finish)
-  8. What IntentScreen receives
+  8. What ActiveCameraScreen receives
 
 
 ================================================================================
@@ -44,7 +44,7 @@ TABLE OF CONTENTS
 ================================================================================
 
 WayfindingScreen is the intermediate screen between ChoiceScreen and
-IntentScreen. It exists in the "Destination" path only (not the "Wandering"
+ActiveCameraScreen. It exists in the "Destination" path only (not the "Wandering"
 path). Its job:
 
   • Acquire the user's GPS position (origin)
@@ -53,7 +53,7 @@ path). Its job:
   • Read the resolved address back via TTS for VERIFICATION
   • Validate the destination is within a 10 km walking radius
   • Fetch step-by-step WALKING DIRECTIONS (with maneuvers per step)
-  • Pass the full route data to IntentScreen
+  • Pass the full route data to ActiveCameraScreen
 
 Everything is voice-driven (TTS + STT). There are no buttons or maps because
 the user cannot see them.
@@ -63,12 +63,12 @@ the user cannot see them.
 2. NAVIGATION FLOW
 ================================================================================
 
-  MainMenu ──("Start")──▶ Choice ──("Destination")──▶ Wayfinding ──▶ Destination (IntentScreen)
+  MainMenu ──("Start")──▶ Choice ──("Destination")──▶ Wayfinding ──▶ ActiveCameraScreen (destination mode)
                             │                              │
                             │                              │ (says "back")
                             ◀──────────────────────────────┘
                             │
-                            └──("Wandering")──▶ NoIntentScreen
+                            └──("Wandering")──▶ ActiveCameraScreen (wandering mode)
 
 
 ================================================================================
@@ -83,8 +83,8 @@ the user cannot see them.
 
   Modified files:
   ───────────────
-  src/navigation/types.ts             Added 'Wayfinding' route; 'Destination'
-                                      now accepts routeSteps, origin, etc.
+  src/navigation/types.ts             Added 'Wayfinding' route; 'ActiveCamera'
+                                      now accepts mode + routeSteps/origin payload.
   src/screens/index.ts                Added WayfindingScreen export
   src/screens/ChoiceScreen.tsx        "Destination" now navigates to Wayfinding
   src/services/index.ts               Exports geocodingService + directionsService
@@ -308,17 +308,19 @@ the user cannot see them.
   2. Calls fetchWalkingDirections(userLocation, pendingCoord)
      └─ OSRM API (see Section 6)
      └─ Returns { steps: RouteStep[], totalDistanceMeters, totalDurationSeconds }
-  3. Counts total steps and calculates minutes
-  4. TTS: "Route found. X steps. About Y minutes walking.
-           Starting destination mode."
-  5. On TTS done → navigates to Destination (IntentScreen)
+  3. Sets a transition lock so skip/back/listener auto-restart cannot
+     interrupt the committed destination handoff
+  4. Navigates immediately to ActiveCameraScreen (destination mode)
+     without waiting on a trailing TTS onDone callback
 
-  If OSRM fails → resets hasNavigatedRef → restartAskLocation with error message
+  If OSRM fails → clears the transition lock and restarts ask_location with
+  an error prompt
 
 
-── 4k. PHASE 7 – NAVIGATION TO IntentScreen (line ~335) ──────────────────────
+── 4k. PHASE 7 – NAVIGATION TO ActiveCameraScreen (line ~335) ─────────────────
 
-  navigation.navigate('Destination', {
+  navigation.navigate('ActiveCamera', {
+    mode: 'destination',
     origin:               userLocation,          // { latitude, longitude } from GPS
     destination:          pendingCoord,           // { latitude, longitude } from geocoding
     destinationLabel:     pendingLabel,           // "SM City Tarlac, ..."
@@ -327,8 +329,8 @@ the user cannot see them.
     totalDurationSeconds: directions.totalDurationSeconds,
   });
 
-  These params are defined in src/navigation/types.ts under the 'Destination'
-  route. IntentScreen can access them via route.params.
+  These params are defined in src/navigation/types.ts under the 'ActiveCamera'
+  route. ActiveCameraScreen can access them via route.params.
 
 
 ── 4l. RENDER / UI ────────────────────────────────────────────────────────────
@@ -701,7 +703,7 @@ the user cannot see them.
     • startLocation   → lat, lng
     • endLocation     → lat, lng
 
-  At runtime, IntentScreen matches the user's live GPS coordinate to the
+  At runtime, ActiveCameraScreen matches the user's live GPS coordinate to the
   nearest route segment to determine which step's maneuver to use.
 
 
@@ -765,23 +767,18 @@ the user cannot see them.
                  │
                  ▼
   ┌──────────────────────────────────────────────────────────────────┐
-  │  TTS – "Route found. 4 steps. About 48 minutes walking.         │
-  │         Starting destination mode."                              │
-  └──────────────┬───────────────────────────────────────────────────┘
-                 │
-                 ▼
   ┌──────────────────────────────────────────────────────────────────┐
-  │  NAVIGATE → IntentScreen ('Destination')                         │
+  │  NAVIGATE → ActiveCameraScreen ('ActiveCamera', mode='destination') │
   │  Passes: origin, destination, destinationLabel,                  │
   │          routeSteps[], totalDistanceMeters, totalDurationSeconds  │
   └──────────────────────────────────────────────────────────────────┘
 
 
 ================================================================================
-8. WHAT IntentScreen RECEIVES
+8. WHAT ActiveCameraScreen RECEIVES
 ================================================================================
 
-  The navigation params available via route.params in IntentScreen:
+  The navigation params available via route.params in ActiveCameraScreen:
 
   {
     origin: {
@@ -822,7 +819,7 @@ the user cannot see them.
     totalDurationSeconds: 2881.6
   }
 
-  IntentScreen can then (in future implementation):
+  ActiveCameraScreen can then (in future implementation):
     1. Track live GPS via expo-location watchPositionAsync()
     2. Match GPS to nearest RouteStep using distance to start/end locations
     3. Extract that step's maneuverOneHot + startLocation + endLocation

@@ -100,6 +100,8 @@ High-level sequence:
 Hardening behavior:
 - Auto-restart voice-listening timeout is tracked and cleared during cleanup to avoid stale delayed restarts.
 - Skip command/button can immediately interrupt prompts and move directly to listening state.
+- Destination confirmation now sets a transition lock so Skip/Back/listener auto-restart cannot interrupt the committed handoff.
+- On successful directions fetch, Wayfinding now navigates immediately to ActiveCamera (destination mode) instead of waiting on a trailing TTS onDone callback.
 
 ### 3.3 Shared Voice Interaction Hook
 
@@ -297,10 +299,9 @@ In src/config/modelConfig.ts:
 
 ---
 
-## 9. Troubleshooting Toolkit Results (2026-04-05)
+## 9. Troubleshooting Toolkit Results (2026-04-05, Destination Camera Transition Fix)
 
-Validation run performed on the current branch head after merge.
-This run includes the shared voice-hook refactor, Skip command/button behavior, and listening cue integration.
+Validation run performed after fixing a blocking runtime issue where destination mode could remain stuck at "Speaking instructions" or "Fetching route" instead of entering ActiveCamera.
 
 1. Expo Doctor
 	- Command: npx expo-doctor
@@ -315,8 +316,9 @@ This run includes the shared voice-hook refactor, Skip command/button behavior, 
 	- Result: Completed with no lint errors or warnings.
 
 Issue summary from this troubleshooting pass:
-1. No current blocking or non-blocking issues were reported by the three toolkits.
-2. No runtime source-code changes were required for Live GPS flow or preprocessor intent-channel behavior during this pass.
+1. Blocking runtime issue fixed in Wayfinding destination flow by removing the route-success dependency on trailing TTS completion.
+2. Added a destination transition lock to prevent Skip/Back/listener auto-restart from hijacking the handoff after confirmation.
+3. No static analysis or configuration issues were reported by the three toolkits after applying the fix.
 
 ---
 
