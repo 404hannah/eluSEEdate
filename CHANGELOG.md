@@ -2,6 +2,33 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.0.7] - 2026-04-06
+
+### Added
+- Added string utility `truncateToSecondComma` in `src/utils/stringUtils.ts` for display-only destination text normalization.
+
+### Changed
+- Updated ActiveCamera performance overlay metric flow to: Capture -> Inference (ConvLSTM) -> Preprocess -> YOLO -> Total.
+- Updated overlay total latency logic to display `preprocessingTimeMs + inferenceTimeMs + yoloInferenceTime`.
+- Applied destination label truncation only in the performance overlay Target field to reduce visual clutter.
+- Re-verified that the on-screen overlay Total metric includes YOLO latency.
+
+### Fixed
+- Fixed misleading total latency display that excluded YOLO latency from the on-screen Total metric.
+- Fixed destination Target overlay clutter by trimming long addresses at the second comma while preserving full internal destination text.
+
+### Validation
+- Ran `npx tsc --noEmit` (completed with no type errors).
+- Ran `npx expo-doctor` (17/17 checks passed).
+- Ran `npx expo lint` (0 errors, 1 warning):
+  - `src/hooks/useVoiceInteraction.ts`: unused variable warning (pre-existing).
+- Re-ran full validation on 2026-04-06 after metric verification with the same results.
+
+### Documentation
+- Updated Technical Appendix entries in `texts/DATA_DICTIONARY.txt` and `texts/VERSIONS.txt` with:
+  - Correct overlay Total latency formula.
+  - New `truncateToSecondComma` utility behavior and scope boundary.
+
 ## [1.0.6] - 2026-04-05
 
 ### Fixed

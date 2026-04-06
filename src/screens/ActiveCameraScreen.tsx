@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Active Camera Screen - EluSEEdate
  *
  * Live camera view with real-time turn prediction
@@ -54,7 +54,11 @@ import {
   FRAME_HEIGHT,
   CLASS_NAMES,
 } from '../config/modelConfig';
-import { decodeBase64ToPixels, decodeImageUriToPixels } from '../utils/imageUtils';
+import {
+  decodeBase64ToPixels,
+  decodeImageUriToPixels,
+  truncateToSecondComma,
+} from '../utils';
 import { fetchWalkingDirections, maneuverToIntent, DirectionsResult } from '../services/directionsService';
 import * as Location from 'expo-location';
 import getGeoDistance from 'geolib/es/getDistance';
@@ -268,6 +272,9 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
   const [yoloInferenceTime, setYoloInferenceTime] = useState<number>(0);
   const [audioState, setAudioState] = useState<'Ready' | 'Speaking' | 'Error'>('Ready');
   const [lastAnnouncedObject, setLastAnnouncedObject] = useState<string>('None');
+  const overlayTargetLabel = destinationLabel ? truncateToSecondComma(destinationLabel) : null;
+  const totalInferenceTime =
+    metrics.preprocessingTimeMs + metrics.inferenceTimeMs + yoloInferenceTime;
 
   // Object speech service (single instance for the screen lifecycle)
   const objectSpeechServiceRef = useRef<ObjectSpeechService>(new ObjectSpeechService());
@@ -1103,9 +1110,9 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
           <Text style={styles.performanceText}>
             ConvLSTM: {activePipelineName}
           </Text>
-          {mode === 'destination' && destinationLabel ? (
+          {mode === 'destination' && overlayTargetLabel ? (
             <Text style={styles.performanceText} numberOfLines={2}>
-              Target: {destinationLabel}
+              Target: {overlayTargetLabel}
             </Text>
           ) : null}
           {mode === 'destination' ? (
@@ -1118,16 +1125,16 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
             Capture: {lastCaptureTime} ms
           </Text>
           <Text style={styles.performanceText}>
-            Inference: {metrics.inferenceTimeMs.toFixed(0)} ms
+            Inference (ConvLSTM): {metrics.inferenceTimeMs.toFixed(0)} ms
           </Text>
           <Text style={styles.performanceText}>
             Preprocess: {metrics.preprocessingTimeMs.toFixed(0)} ms
           </Text>
           <Text style={styles.performanceText}>
-            Total: {metrics.totalLatencyMs.toFixed(0)} ms
+            YOLO: {yoloInferenceTime.toFixed(0)} ms
           </Text>
           <Text style={styles.performanceText}>
-            YOLO: {yoloInferenceTime.toFixed(0)} ms
+            Total: {totalInferenceTime.toFixed(0)} ms
           </Text>
           <View style={styles.performanceDivider} />
           <Text style={styles.performanceText}>
