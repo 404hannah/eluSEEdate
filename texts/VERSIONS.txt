@@ -195,15 +195,15 @@ Model Architecture: ConvLSTM Prototype 10
 
 RUNTIME OVERLAY METRICS (ActiveCameraScreen):
   - Capture: camera takePictureAsync duration
-  - Inference (ConvLSTM): ConvLSTM inference time only
   - Preprocess: tensor preprocessing time
   - YOLO: object detection inference time
-  - Total latency (overlay): preprocessingTimeMs + inferenceTimeMs + yoloInferenceTime
+  - Inference (ConvLSTM): ConvLSTM inference time only
+  - Total latency (overlay): lastCaptureTime + preprocessingTimeMs + yoloInferenceTime + inferenceTimeMs
   - Note: service-level metrics.totalLatencyMs remains ConvLSTM-only baseline latency
 
 DESTINATION TARGET DISPLAY NORMALIZATION:
-  - Utility: src/utils/stringUtils.ts -> truncateToSecondComma(value)
-  - Behavior: display text is trimmed to second comma in the performance overlay
+  - Utility: src/utils/stringUtils.ts -> truncateToFirstComma(value)
+  - Behavior: display text is trimmed to the first comma (inclusive) in the performance overlay
   - Scope boundary: full destination label remains unchanged for route logic and speech
 
 ================================================================================

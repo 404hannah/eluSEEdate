@@ -127,16 +127,16 @@ Inference outputs:
 2. directionLabel
 3. confidence
 4. metrics (preprocess, ConvLSTM inference, baseline latency, fps)
-5. totalInferenceTime (overlay display): preprocessingTimeMs + inferenceTimeMs + yoloInferenceTime
-6. Metric row order in overlay: Capture -> Inference (ConvLSTM) -> Preprocess -> YOLO -> Total
+5. totalInferenceTime (overlay display): lastCaptureTime + preprocessingTimeMs + yoloInferenceTime + inferenceTimeMs
+6. Metric row order in overlay: Capture -> Preprocess -> YOLO -> Inference (ConvLSTM) -> Total
 7. yoloDetections
 8. yoloInferenceTime
 9. metrics.totalLatencyMs remains ConvLSTM-only service latency (preprocess + ConvLSTM inference)
-10. Overlay Total is the user-facing full latency metric and includes YOLO
+10. Overlay Total is the user-facing full latency metric and includes capture + YOLO
 
 Overlay target display:
 1. destinationLabel remains full route text for runtime logic and TTS.
-2. Performance overlay uses truncateToSecondComma(destinationLabel) for visual-only display.
+2. Performance overlay uses truncateToFirstComma(destinationLabel) for visual-only display.
 
 Control refs:
 1. isInferencingRef
@@ -301,9 +301,12 @@ ConvLSTM with intent (convlstmWithIntentInference.ts):
 3. Uses 6-channel preprocessor allocation in ActiveCamera
 
 String utilities (src/utils/stringUtils.ts):
-1. truncateToSecondComma(value: string): string
-2. Returns text up to (excluding) the second comma.
-3. If zero or one comma exists, returns original string unchanged.
+1. truncateToFirstComma(value: string): string
+2. Returns text up to and including the first comma.
+3. If no comma exists, returns original string unchanged.
+4. truncateToSecondComma(value: string): string
+5. Returns text up to (excluding) the second comma.
+6. If zero or one comma exists, returns original string unchanged.
 
 YOLO (yoloInference.ts):
 1. Exposes initializeYOLOModel, runYOLODetection, cleanupYOLOModel

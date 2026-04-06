@@ -57,7 +57,7 @@ import {
 import {
   decodeBase64ToPixels,
   decodeImageUriToPixels,
-  truncateToSecondComma,
+  truncateToFirstComma,
 } from '../utils';
 import { fetchWalkingDirections, maneuverToIntent, DirectionsResult } from '../services/directionsService';
 import * as Location from 'expo-location';
@@ -272,9 +272,9 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
   const [yoloInferenceTime, setYoloInferenceTime] = useState<number>(0);
   const [audioState, setAudioState] = useState<'Ready' | 'Speaking' | 'Error'>('Ready');
   const [lastAnnouncedObject, setLastAnnouncedObject] = useState<string>('None');
-  const overlayTargetLabel = destinationLabel ? truncateToSecondComma(destinationLabel) : null;
+  const overlayTargetLabel = destinationLabel ? truncateToFirstComma(destinationLabel) : null;
   const totalInferenceTime =
-    metrics.preprocessingTimeMs + metrics.inferenceTimeMs + yoloInferenceTime;
+    lastCaptureTime + metrics.preprocessingTimeMs + yoloInferenceTime + metrics.inferenceTimeMs;
 
   // Object speech service (single instance for the screen lifecycle)
   const objectSpeechServiceRef = useRef<ObjectSpeechService>(new ObjectSpeechService());
@@ -1125,13 +1125,13 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
             Capture: {lastCaptureTime} ms
           </Text>
           <Text style={styles.performanceText}>
-            Inference (ConvLSTM): {metrics.inferenceTimeMs.toFixed(0)} ms
-          </Text>
-          <Text style={styles.performanceText}>
             Preprocess: {metrics.preprocessingTimeMs.toFixed(0)} ms
           </Text>
           <Text style={styles.performanceText}>
             YOLO: {yoloInferenceTime.toFixed(0)} ms
+          </Text>
+          <Text style={styles.performanceText}>
+            Inference (ConvLSTM): {metrics.inferenceTimeMs.toFixed(0)} ms
           </Text>
           <Text style={styles.performanceText}>
             Total: {totalInferenceTime.toFixed(0)} ms

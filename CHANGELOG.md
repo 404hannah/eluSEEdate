@@ -2,6 +2,35 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.0.8] - 2026-04-06
+
+### Added
+- Added `truncateToFirstComma` in `src/utils/stringUtils.ts` for cleaner destination target text in the performance overlay.
+
+### Changed
+- Updated ActiveCamera performance metric order to: Capture -> Preprocess -> YOLO -> Inference (ConvLSTM) -> Total.
+- Updated overlay total latency formula to include capture time: `lastCaptureTime + preprocessingTimeMs + yoloInferenceTime + inferenceTimeMs`.
+- Applied first-comma display truncation to the destination target label in the overlay only.
+
+### Fixed
+- Fixed underreported overlay Total latency by including camera capture duration in the displayed end-to-end total.
+- Fixed destination target overlay clutter by trimming to the first comma while preserving full underlying destination data.
+
+### Validation
+- Ran `npx tsc --noEmit` (completed with no type errors).
+- Ran `npx expo lint` (0 errors, 1 warning):
+  - `src/hooks/useVoiceInteraction.ts`: unused variable warning (pre-existing).
+- No hook dependency warnings were reported.
+
+### Documentation
+- Updated `texts/DATA_DICTIONARY.txt` with:
+  - Capture-inclusive overlay total formula.
+  - New overlay metric order.
+  - `truncateToFirstComma` utility definition and visual-only scope.
+- Updated `texts/VERSIONS.txt` with:
+  - Capture-inclusive overlay total formula.
+  - `truncateToFirstComma` target display behavior.
+
 ## [1.0.7] - 2026-04-06
 
 ### Added
