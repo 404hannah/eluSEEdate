@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.0.9] - 2026-04-06
+
+### Changed
+- Synced ActiveCamera bottom buffer progress UI with effective frame accumulation used by early inference readiness.
+- Added UI-side derived frame display logic so when physical buffer reaches early threshold, counter and bar reflect bootstrapped sequence readiness.
+
+### Fixed
+- Fixed mismatch where inference could start at 10 frames while the buffer counter still displayed raw accumulation only.
+
+### Validation
+- Ran `npx tsc --noEmit` (completed with no type errors).
+- Ran `npx expo lint` (0 errors, 1 warning):
+  - `src/hooks/useVoiceInteraction.ts`: unused variable warning (pre-existing).
+- No hook dependency warnings were reported in capture-loop logic.
+
 ## [1.0.8] - 2026-04-06
 
 ### Added

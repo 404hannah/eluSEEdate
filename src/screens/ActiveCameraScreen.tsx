@@ -265,6 +265,15 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
   const [predictionCount, setPredictionCount] = useState<number>(0);
   const [debugStatus, setDebugStatus] = useState<string>(`Initializing ${modeLabel} mode...`);
   const [lastCaptureTime, setLastCaptureTime] = useState<number>(0);
+  const [bufferProgress, setBufferProgress] = useState<{
+    physicalCount: number;
+    effectiveCount: number;
+    requiredCount: number;
+  }>({
+    physicalCount: 0,
+    effectiveCount: 0,
+    requiredCount: SEQ_LEN,
+  });
   
   // YOLO detection state
   const [isYOLOModelLoaded, setIsYOLOModelLoaded] = useState<boolean>(false);
@@ -275,6 +284,10 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
   const overlayTargetLabel = destinationLabel ? truncateToFirstComma(destinationLabel) : null;
   const totalInferenceTime =
     lastCaptureTime + metrics.preprocessingTimeMs + yoloInferenceTime + metrics.inferenceTimeMs;
+  const bufferProgressPercent =
+    bufferProgress.requiredCount > 0
+      ? (bufferProgress.effectiveCount / bufferProgress.requiredCount) * 100
+      : 0;
 
   // Object speech service (single instance for the screen lifecycle)
   const objectSpeechServiceRef = useRef<ObjectSpeechService>(new ObjectSpeechService());
@@ -303,6 +316,14 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
   
   // Capture interval reference (now using setTimeout for async control)
   const captureIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const syncBufferProgress = useCallback(() => {
+    setBufferProgress(frameBufferRef.current.getDisplayProgress());
+  }, []);
+
+  useEffect(() => {
+    syncBufferProgress();
+  }, [syncBufferProgress]);
 
   const configurePictureSize = useCallback(async () => {
     if (hasConfiguredPictureSizeRef.current || isConfiguringPictureSizeRef.current) {
@@ -655,6 +676,7 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
     setPredictionCount(0);
     setIsCapturing(true);
     setDebugStatus('Starting capture...');
+    syncBufferProgress();
     
     // Use recursive timeout instead of setInterval for proper async handling
     const captureLoop = async (): Promise<void> => {
@@ -820,6 +842,7 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
       
       if (wasAdded) {
         setFrameCount(prev => prev + 1);
+        syncBufferProgress();
         
         // Run inference when buffer is ready (or can predict early with padding)
         const buffer = frameBufferRef.current;
@@ -1207,12 +1230,12 @@ export default function ActiveCameraScreen({ navigation, route }: ActiveCameraSc
             <View 
               style={[
                 styles.bufferFill,
-                { width: `${(frameBufferRef.current.getFrameCount() / SEQ_LEN) * 100}%` }
+                { width: `${bufferProgressPercent}%` }
               ]} 
             />
           </View>
           <Text style={styles.bufferText}>
-            Buffer: {frameBufferRef.current.getFrameCount()}/{SEQ_LEN}
+            Buffer: {bufferProgress.effectiveCount}/{bufferProgress.requiredCount}
           </Text>
         </View>
           </>
