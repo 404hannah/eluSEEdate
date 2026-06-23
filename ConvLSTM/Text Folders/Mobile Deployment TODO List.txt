@@ -1,0 +1,155 @@
+═══════════════════════════════════════════════════════════════
+PHASE 1: MODEL OPTIMIZATION (CRITICAL - DO FIRST)
+═══════════════════════════════════════════════════════════════
+
+1.1 IMPLEMENT GLOBAL AVERAGE POOLING ⭐ HIGHEST PRIORITY
+   ────────────────────────────────────────────────────
+   [ ] Modify models/conv_lstm_classifier.py:
+       - Add: self.global_avg_pool = nn.AdaptiveAvgPool2d((1, 1))
+       - Change FC layer: nn.Linear(32, 3) instead of nn.Linear(524288, 3)
+       - In forward(): Apply GAP before FC layer
+   
+   Expected Impact:
+   ✓ Parameters: 1,572,867 → 99 (-99.99%)
+   ✓ Model size: 7.4 MB → ~1.5 MB (-80%)
+   ✓ Speed: 10-20% faster
+   ⚠ Accuracy: May drop 2-5% (acceptable)
+
+1.2 RETRAIN MODEL WITH GAP
+   ────────────────────────
+   [ ] Run: python train.py
+   [ ] Monitor: Training curves for convergence
+   [ ] Validate: Check accuracy on test set
+   [ ] Target: >= (original_accuracy - 5%)
+   [ ] Save: best_convlstm_optimized.pth
+
+1.3 OPTIONAL: MODEL PRUNING (if size still > 2 MB)
+   ────────────────────────────────────────────────
+   [ ] Apply L1 unstructured pruning (30% sparsity)
+   [ ] Remove least important weights from Conv layers
+   [ ] Expected: Additional 20-30% size reduction
+   [ ] Accuracy impact: < 1%
+
+═══════════════════════════════════════════════════════════════
+PHASE 2: MODEL CONVERSION
+═══════════════════════════════════════════════════════════════
+
+2.1 EXPORT TO ONNX (Universal Format)
+   ──────────────────────────────────
+   [ ] Install: pip install onnx onnxruntime
+   [ ] Run: python mobile_deploy.py --mode export
+   [ ] Verify: ONNX model validation passes
+   [ ] Test: ONNX inference with sample input
+   [ ] Output: convlstm_model.onnx
+
+2.2 CONVERT TO TENSORFLOW (Intermediate)
+   ─────────────────────────────────────
+   [ ] Install: pip install onnx-tf tensorflow
+   [ ] Run: python mobile_deploy.py --mode convert
+   [ ] Output: convlstm_tf_model/ (SavedModel directory)
+   [ ] Note: Some ops may not be supported (check logs)
+
+2.3 CONVERT TO TFLITE FLOAT32
+   ──────────────────────────
+   [ ] Automatically done by mobile_deploy.py
+   [ ] Output: convlstm_model_float32.tflite
+   [ ] Expected size: ~1.5 MB
+   [ ] Accuracy: Within 1% of PyTorch
+
+2.4 APPLY INT8 QUANTIZATION
+   ────────────────────────
+   [ ] Automatically done by mobile_deploy.py
+   [ ] Uses dynamic range quantization (weights only)
+   [ ] Output: convlstm_model_int8.tflite
+   [ ] Expected size: 400-800 KB
+   [ ] Accuracy: Within 2-5% of PyTorch
+   [ ] Speed: 2-4x faster inference
+
+2.5 OPTIONAL: FULL INTEGER QUANTIZATION (Advanced)
+   ──────────────────────────────────────────────
+   [ ] Prepare representative dataset (100-500 samples)
+   [ ] Calibrate quantization parameters
+   [ ] Expected: Best mobile performance
+   [ ] Trade-off: More accuracy loss (3-7%)
+
+═══════════════════════════════════════════════════════════════
+PHASE 3: VALIDATION & BENCHMARKING
+═══════════════════════════════════════════════════════════════
+
+3.1 ACCURACY VALIDATION
+   ────────────────────
+   [ ] Test PyTorch model accuracy: _____% (baseline)
+   [ ] Test ONNX model accuracy: _____% (should be ~baseline)
+   [ ] Test TFLite Float32 accuracy: _____% (within 1%)
+   [ ] Test TFLite INT8 accuracy: _____% (within 2-5%)
+   [ ] PASS CRITERIA: INT8 accuracy >= (baseline - 5%)
+
+3.2 LATENCY BENCHMARKING
+   ─────────────────────
+   [ ] Run: python mobile_deploy.py --mode benchmark
+   [ ] Record CPU latency:
+       - PyTorch (GPU): _____ ms
+       - ONNX (CPU): _____ ms
+       - TFLite Float32: _____ ms
+       - TFLite INT8: _____ ms
+   [ ] PASS CRITERIA: TFLite INT8 < 300 ms (ideal: <200 ms)
+
+3.3 MODEL SIZE VERIFICATION
+   ────────────────────────
+   [ ] PyTorch optimized: _____ MB (target: < 2 MB)
+   [ ] ONNX: _____ MB
+   [ ] TFLite Float32: _____ MB (target: ~1.5 MB)
+   [ ] TFLite INT8: _____ KB (target: < 1 MB)
+   [ ] PASS CRITERIA: INT8 model < 2 MB (ideal: < 1 MB)
+
+═══════════════════════════════════════════════════════════════
+PHASE 4: DOCUMENTATION & DELIVERY
+═══════════════════════════════════════════════════════════════
+
+4.1 CREATE MODEL ARTIFACTS
+   ───────────────────────
+   [ ] convlstm_model_int8.tflite (final mobile model)
+   [ ] model_metadata.json (input/output specs)
+   [ ] preprocessing_specs.txt (frame extraction steps)
+   [ ] performance_report.txt (accuracy & latency metrics)
+
+4.2 PREPARE TEST SAMPLES
+   ─────────────────────
+   [ ] Create test_samples/ directory
+   [ ] Include 5-10 sample video clips
+   [ ] Include expected predictions
+   [ ] For Android integration testing
+
+4.3 DOCUMENT PREPROCESSING REQUIREMENTS
+   ────────────────────────────────────
+   [ ] Input: 3-second video clip
+   [ ] Extract: 30 frames at 10 FPS
+   [ ] Resize: Each frame to 128×128
+   [ ] Normalize: [0, 255] → [0, 1] or match training
+   [ ] Intent channels: How to generate (if applicable)
+   [ ] Output: Tensor [1, 30, 6, 128, 128]
+
+═══════════════════════════════════════════════════════════════
+QUICK START COMMANDS
+═══════════════════════════════════════════════════════════════
+
+1. Full automated pipeline:
+   python mobile_deploy.py --model best_convlstm.pth --mode all
+
+2. Step-by-step:
+   python mobile_deploy.py --mode export    # PyTorch → ONNX
+   python mobile_deploy.py --mode convert   # ONNX → TFLite
+   python mobile_deploy.py --mode benchmark # Test performance
+
+3. Visualize ONNX model:
+   netron convlstm_model.onnx
+
+═══════════════════════════════════════════════════════════════
+SUCCESS CRITERIA (ALL MUST PASS)
+═══════════════════════════════════════════════════════════════
+
+✓ Model size < 2 MB (ideally < 1 MB)
+✓ Inference latency < 300 ms on mobile CPU
+✓ Accuracy drop < 5% from baseline
+✓ Successful TFLite conversion without errors
+✓ Valid ONNX model (passes onnx.checker)

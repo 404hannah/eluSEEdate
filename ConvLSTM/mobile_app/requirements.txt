@@ -1,0 +1,36 @@
+# Python Dependencies for Mobile ConvLSTM Preprocessor and Model
+# Prototype 9 - Mobile Deployment
+# Last Updated: February 24, 2026
+
+# Core Dependencies
+numpy>=1.19.0
+opencv-python>=4.5.0
+
+# Deep Learning Framework
+torch>=1.12.0
+torchvision>=0.13.0
+
+# Model Conversion (for TFLite mobile deployment)
+tensorflow>=2.10.0
+tf2onnx>=1.12.0
+
+# Optional: ONNX conversion (if needed for other platforms)
+# onnx>=1.12.0
+# onnxruntime>=1.12.0
+
+# Development/Testing
+# pytest>=7.0.0           # For unit tests
+# pillow>=9.0.0           # Image processing utilities
+# matplotlib>=3.5.0       # Visualization (optional)
+
+# Notes:
+# - opencv-python: Video frame extraction and preprocessing
+# - torch: Model loading and inference
+# - tensorflow/tf2onnx: Model conversion to TensorFlow Lite
+# 
+# For mobile deployment:
+# - TensorFlow Lite (for Android, integrated with Expo/React Native)
+# - On-device inference using TFLite Interpreter
+#
+# Installation:
+# pip install -r requirements.txt

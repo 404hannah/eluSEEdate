@@ -1,0 +1,98 @@
+# ConvLSTM Model Configuration for Mobile Deployment
+# Prototype 9 - Mobile-Optimized with Global Average Pooling
+# Last Updated: February 24, 2026
+
+# Model Architecture Parameters
+model:
+  input_dim: 6                    # RGB (3) + Intent (3) channels
+  hidden_dim: [64, 32]            # Hidden dimensions for each ConvLSTM layer
+  kernel_size: [3, 3]             # Convolutional kernel size
+  num_layers: 2                   # Number of stacked ConvLSTM layers
+  height: 128                     # Frame height (kept for compatibility, not used with GAP)
+  width: 128                      # Frame width (kept for compatibility, not used with GAP)
+  num_classes: 3                  # Output classes: Front (0), Left (1), Right (2)
+  dropout_rate: 0.5               # Dropout probability for regularization
+  batch_first: true               # Input shape is [Batch, Time, Channels, H, W]
+  bias: true                      # Use bias in convolutions
+  return_all_layers: false        # Only return final layer output
+  has_global_avg_pool: true       # ⭐ CRITICAL: GAP layer present (mobile optimization)
+
+# Preprocessing Parameters
+preprocessing:
+  seq_len: 20                     # Number of frames per sequence
+  fps: 10                         # Frames per second to extract
+  duration: 2                     # Video duration in seconds (fps × duration = seq_len)
+  height: 128                     # Target frame height after resize
+  width: 128                      # Target frame width after resize
+  channels: 6                     # Total channels: 3 RGB + 3 Intent
+  normalize: true                 # Normalize pixel values to [0, 1]
+  color_format: "RGB"             # Expected color format
+
+# Intent Configuration
+intent:
+  num_intent_channels: 3          # One channel per direction (Front, Left, Right)
+  intent_duration: 1              # Intent signal duration in seconds
+  intent_frames: 10               # Intent frames (intent_duration × fps)
+  intent_probability: 0.6         # Probability of intent being present during training
+  position_distribution: "normal" # Intent position distribution: normal (centered at frame 4.5)
+  position_range: [0, 9]          # Intent can start in first second (frames 0-9)
+
+# Class Labels
+classes:
+  - id: 0
+    name: "Front"
+    description: "Vehicle continues straight"
+  - id: 1
+    name: "Left"
+    description: "Vehicle turns left"
+  - id: 2
+    name: "Right"
+    description: "Vehicle turns right"
+
+# Model Performance (Expected)
+performance:
+  model_size_mb: 1.5              # Approximate model size with GAP
+  parameters: 272000              # Total trainable parameters (~272K)
+  expected_accuracy: 0.95         # Expected test accuracy (estimate)
+  inference_time_ms:
+    high_end_device: 50           # High-end Android device
+    mid_range_device: 100         # Mid-range Android device
+    low_end_device: 200           # Low-end Android device
+
+# Training Configuration (for reference)
+training:
+  optimizer: "Adam"
+  learning_rate: 0.0001
+  batch_size: 6                   # Physical batch size
+  accumulation_steps: 4           # Gradient accumulation (effective batch = 24)
+  num_epochs: 3                   # Maximum training epochs
+  loss_function: "CrossEntropyLoss"
+  early_stopping_patience: 5
+  grad_clip_norm: 1.0
+
+# Mobile Deployment Notes
+deployment:
+  target_platform: "Android"
+  framework: "Expo/React Native"
+  inference_backend: "TensorFlow Lite"      # Using TFLite for mobile inference
+  preprocessing_location: "On-device"       # Preprocess on mobile device
+  model_format: "TFLite"                    # .tflite model file
+  quantization: "INT8"                      # Recommended: 4x smaller model size
+  intent_position_source: "User input"      # Intent position from direction detection
+
+# Version Information
+version:
+  config_version: "1.0.0"
+  model_architecture: "Prototype 9"
+  last_updated: "2026-02-24"
+  compatibility: "PyTorch >= 1.12.0"
+
+# Notes
+notes: |
+  This configuration is for Prototype 9 as of 2/24/2026- the mobile-optimized version of the ConvLSTM model.
+  Key optimization: Global Average Pooling reduces model size from 7.4 MB to 1.5 MB.
+  
+  CRITICAL: Model must be trained with these exact parameters to work with mobile_app preprocessor.
+  
+  Input shape:  [Batch, 20, 6, 128, 128]
+  Output shape: [Batch, 3]

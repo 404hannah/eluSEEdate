@@ -1,0 +1,8 @@
+Abandon all hope, ye who enter here
+
+Do not:
+- Increase workers beyond 0 cuz windows
+- Do not use pin memory cuz windows
+- Do not use persistent workers cuz windows
+- Batch size 8 does not work
+- Rn best working batch size is 5, do not go over Eric

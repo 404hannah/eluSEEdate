@@ -1,0 +1,104 @@
+CONVLSTM PROJECT TODO LIST
+==========================
+Last Updated: February 18, 2026
+
+
+========================================
+ACTIVE TASKS - HANNAH
+========================================
+
+MEDIUM EFFORT, HIGH REWARD:
+---------------------------
+[✓] Validation metrics per class
+    - Track precision/recall per class during training
+
+
+BIG PROJECTS (HIGH IMPACT, TIME-INTENSIVE):
+-------------------------------------------
+[✓] TorchScript compilation OR ONNX export (choose one)
+    
+    Option A: TorchScript
+    - Use torch.jit.script() for faster inference
+    - Better inference speed
+    
+    Option B: ONNX export
+    - Run on optimized runtime
+    - May be unnecessary
+    
+    Notes: 
+    - Unsure if TorchScript can be applied for mobile deployment
+    - ONNX seems to be a way for mobile deployment
+
+
+NICE-TO-HAVE:
+-------------
+[✓] Resume training functionality
+    - Save/load optimizer state and epoch number
+
+[✓] Extended checkpointing
+    - Save model every N epochs (not just best)
+
+
+DEFERRED (WAITING FOR RESOURCES):
+----------------------------------
+[✓] Mixed precision training
+    - Use torch.cuda.amp for faster training
+    - Requires GPU (not available when created at Feb 14 whichever prototype that was)
+
+[ ] Increase DataLoader workers
+    - Failed on Windows
+    - Free tier Colab can't handle with current model
+
+[ ] Persistent workers
+    - Failed on Windows
+    - Free tier Colab can't handle with current model
+
+[ ] Pin memory optimization
+    - Non-pageable RAM to prevent OS disk swapping
+    - Requires more resources
+
+
+========================================
+COMPLETED - ERIC
+========================================
+
+[✓] Gradient clipping - Prevent exploding gradients
+[✓] Early stopping - Stop training when validation stops improving
+[✓] Dropout layers - Prevent overfitting in linear layer
+[✓] Track inference time during validation
+[✓] Learning rate scheduling - ReduceLROnPlateau
+[✓] Delete intermediate tensors - Memory management (del)
+[✓] Gradient accumulation - Simulate larger batches with less memory
+[✓] Video preprocessing - Pre-extract and cache frames to disk
+[✓] Dynamic Cache Manager with LRU Eviction - Large scale training optimization
+[✓] Documentation - README files
+[✓] YAML config - Human-readable data serialization for configs
+[✓] TensorBoard logging - Track loss curves, accuracy, learning rate
+
+
+========================================
+REJECTED FEATURES
+========================================
+
+[✗] Batch normalization after ConvLSTM layers
+    - Tested but gave worse results
+    - See Prototype 2 README for discussion
+
+
+========================================
+NOTES
+========================================
+
+Current Status:
+- Training stable with all core features implemented
+- Prototype 7 is production-ready for server deployment
+- Mobile deployment planning in progress
+
+Platform Compatibility:
+- Works on: Windows (local), Google Colab (free tier)
+- GPU: Not required but beneficial
+
+Known Limitations:
+- DataLoader workers limited on Windows
+- Free Colab tier has memory constraints
+- Batch size limited by available memory

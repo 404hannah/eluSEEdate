@@ -1,0 +1,100 @@
+{
+  "_comment": "ConvLSTM Model Configuration for Mobile Deployment - Prototype 9",
+  "_last_updated": "2026-02-24",
+  
+  "model": {
+    "input_dim": 6,
+    "hidden_dim": [64, 32],
+    "kernel_size": [3, 3],
+    "num_layers": 2,
+    "height": 128,
+    "width": 128,
+    "num_classes": 3,
+    "dropout_rate": 0.5,
+    "batch_first": true,
+    "bias": true,
+    "return_all_layers": false,
+    "has_global_avg_pool": true,
+    "_notes": "has_global_avg_pool=true is CRITICAL for mobile optimization"
+  },
+  
+  "preprocessing": {
+    "seq_len": 20,
+    "fps": 10,
+    "duration": 2,
+    "height": 128,
+    "width": 128,
+    "channels": 6,
+    "normalize": true,
+    "color_format": "RGB",
+    "_notes": "seq_len = fps × duration = 10 × 2 = 20 frames"
+  },
+  
+  "intent": {
+    "num_intent_channels": 3,
+    "intent_duration": 1,
+    "intent_frames": 10,
+    "intent_probability": 0.6,
+    "position_distribution": "normal",
+    "position_range": [0, 9],
+    "_notes": "Intent starts in first second (frames 0-9), lasts for 1 second (10 frames)"
+  },
+  
+  "classes": [
+    {
+      "id": 0,
+      "name": "Front",
+      "description": "Vehicle continues straight"
+    },
+    {
+      "id": 1,
+      "name": "Left",
+      "description": "Vehicle turns left"
+    },
+    {
+      "id": 2,
+      "name": "Right",
+      "description": "Vehicle turns right"
+    }
+  ],
+  
+  "performance": {
+    "model_size_mb": 1.5,
+    "parameters": 272000,
+    "expected_accuracy": 0.95,
+    "inference_time_ms": {
+      "high_end_device": 50,
+      "mid_range_device": 100,
+      "low_end_device": 200
+    }
+  },
+  
+  "training": {
+    "optimizer": "Adam",
+    "learning_rate": 0.0001,
+    "batch_size": 6,
+    "accumulation_steps": 4,
+    "num_epochs": 3,
+    "loss_function": "CrossEntropyLoss",
+    "early_stopping_patience": 5,
+    "grad_clip_norm": 1.0
+  },
+  
+  "deployment": {
+    "target_platform": "Android",
+    "framework": "Expo/React Native",
+    "inference_backend": "TensorFlow Lite",
+    "preprocessing_location": "On-device",
+    "model_format": "TFLite",
+    "quantization": "INT8",
+    "intent_position_source": "User input",
+    "_notes": "Intent position should come from direction detection by model"
+  },
+  
+  "version": {
+    "config_version": "1.0.0",
+    "model_architecture": "Prototype 9",
+    "last_updated": "2026-02-24",
+    "compatibility": "PyTorch >= 1.12.0"
+  }
+}

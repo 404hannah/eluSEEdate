@@ -1,0 +1,88 @@
+# Prototype 7 Configuration File
+
+# Data Config
+# ----------------------------------------------------------------------------
+data:
+  height: 128                    # Frame height in pixels
+  width: 128                     # Frame width in pixels
+  channels: 3                    # RGB channels (3) or RGB+Intent (6)
+  fps: 10                        # Frames per second
+  duration: 3                    # Video clip duration in seconds
+  seq_len: 30                    # Total frames per sequence (fps × duration)
+
+# PATHS
+# ----------------------------------------------------------------------------
+paths:
+  video_dir:  '/content/drive/MyDrive/test_data/videos/'
+  label_dir:  '/content/drive/MyDrive/test_data/labels/'
+  cache_dir:  '/content/cache/'  # Local SSD for fast access
+  model_save: 'best_convlstm.pth'
+
+# TRAINING CONFIGURATION
+# ----------------------------------------------------------------------------
+training:
+  batch_size: 6                  # Physical batch size (limited by GPU RAM)
+  accumulation_steps: 4          # Gradient accumulation (effective batch = 24)
+  num_epochs: 3                  # Maximum training epochs
+  learning_rate: 0.0001          # Initial learning rate (1e-4)
+  seed: 8                        # Random seed for reproducibility
+
+# EARLY STOPPING
+# ----------------------------------------------------------------------------
+early_stopping:
+  patience: 5                    # Epochs without improvement before stopping
+  min_delta: 0.01                # Minimum improvement threshold (0.01%)
+
+# REGULARIZATION
+# ----------------------------------------------------------------------------
+regularization:
+  dropout_rate: 0.5              # Dropout probability in classifier head
+  max_grad_norm: 1.0             # Gradient clipping threshold
+
+# LEARNING RATE SCHEDULER
+# ----------------------------------------------------------------------------
+lr_scheduler:
+  factor: 0.5                    # LR reduction factor
+  patience: 3                    # Epochs without improvement before LR reduction
+  min_lr: 0.0000001              # Minimum learning rate (1e-7)
+
+# MODEL ARCHITECTURE
+# ----------------------------------------------------------------------------
+# Network Structure:
+#   Input [Batch, 30, 3, 128, 128]
+#     ↓
+#   ConvLSTM Layer 1 (64 hidden dims, 3×3 kernel)
+#     ↓
+#   ConvLSTM Layer 2 (32 hidden dims, 3×3 kernel)
+#     ↓
+#   Last Time Step [Batch, 32, 128, 128] → Flatten [Batch, 524288]
+#     ↓
+#   Dropout (0.5) → Linear [524288 → 3] → Class Logits
+# ----------------------------------------------------------------------------
+model:
+  input_dim: 3                   # Input channels (3 for RGB)
+  hidden_dim: [64, 32]           # Hidden dimensions per layer [Layer1, Layer2]
+  kernel_size: [3, 3]            # Convolutional kernel size (height, width)
+  num_layers: 2                  # Number of ConvLSTM layers
+  num_classes: 3                 # Output classes: Front(0), Left(1), Right(2)
+
+# CACHE MANAGER
+# ----------------------------------------------------------------------------
+cache:
+  reserve_gb: 10.0               # Storage to keep free (GB)
+  eviction_check_interval: 10    # Check for eviction every N cache misses
+  eviction_buffer_percent: 0.10  # Extra space to free during eviction (10%)
+
+# DATALOADER SETTINGS
+# ----------------------------------------------------------------------------
+dataloader:
+  num_workers: 0                 # 0 for Colab free tier (avoid CPU RAM issues)
+  pin_memory: true               # Enable pinned memory for faster GPU transfer
+  persistent_workers: false      # Not used when num_workers=0
+
+# LABEL MAPPING
+# ----------------------------------------------------------------------------
+labels:
+  front: 0                       # Straight/no turn
+  left: 1                        # Left turn
+  right: 2                       # Right turn

@@ -1,0 +1,5 @@
+{
+  "devDependencies": {
+    "@expo/cli": "^55.0.14"
+  }
+}

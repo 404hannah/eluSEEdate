@@ -1,0 +1,522 @@
+================================================================================
+CONCEPTUAL NOTES FOR MOBILE DEPLOYMENT
+================================================================================
+ConvLSTM Turn Prediction Model - Understanding Key Concepts
+Last Updated: February 25, 2026
+================================================================================
+
+This document explains important concepts that may not be immediately obvious
+from the code. Read this to understand WHY things work the way they do.
+
+================================================================================
+1. FRAME PROCESSING & FPS
+================================================================================
+
+QUESTION: "Does the preprocessor need 20 frames per second?"
+ANSWER: No. It needs 20 frames TOTAL, sampled at 10 FPS from a 2-second video.
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ KEY PARAMETERS                                                          │
+├─────────────────────────────────────────────────────────────────────────┤
+│ • Target FPS:        10 frames per second (not camera's native FPS)     │
+│ • Sequence Length:   20 frames total                                    │
+│ • Video Duration:    2 seconds                                          │
+│ • Formula:           10 FPS × 2 seconds = 20 frames                     │
+└─────────────────────────────────────────────────────────────────────────┘
+
+ADAPTIVE FRAME SAMPLING:
+The preprocessor is smart - it works with ANY camera FPS by downsampling.
+
+Example 1: Camera runs at 30 FPS
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Camera captures:  30 frames per second                                  │
+│ We want:          10 frames per second                                  │
+│ Sampling:         Take every 3rd frame (30 ÷ 10 = 3)                    │
+│ Result:           20 frames extracted from 60 total frames              │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Example 2: Camera runs at 60 FPS
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Camera captures:  60 frames per second                                  │
+│ We want:          10 frames per second                                  │
+│ Sampling:         Take every 6th frame (60 ÷ 10 = 6)                    │
+│ Result:           20 frames extracted from 120 total frames             │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Example 3: Camera runs at 15 FPS
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Camera captures:  15 frames per second                                  │
+│ We want:          10 frames per second                                  │
+│ Sampling:         Take every frame (15 ÷ 10 = 1.5 ≈ 1)                  │
+│ Result:           20 frames extracted from ~30 total frames             │
+└─────────────────────────────────────────────────────────────────────────┘
+
+CODE REFERENCE (preprocessor.py lines 92-96):
+```python
+original_fps = cap.get(cv2.CAP_PROP_FPS)        # Get camera's native FPS
+frame_interval = max(1, int(original_fps / 10))  # Calculate sampling rate
+if frame_idx % frame_interval == 0:             # Sample at desired rate
+    # Process this frame
+```
+
+WHY DOWNSAMPLE TO 10 FPS?
+1. Model was trained on 10 FPS data
+2. Reduces computational load (fewer frames = faster processing)
+3. Still captures enough motion for turn prediction
+4. Consistent across all devices regardless of camera specs
+5. Input shape must be [20, 6, 128, 128] - changing this breaks the model.
+
+================================================================================
+2. SEQUENCE LENGTH: WHY 20 FRAMES?
+================================================================================
+
+The model expects EXACTLY 20 frames. This is not arbitrary.
+
+DESIGN RATIONALE:
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Duration:        2 seconds of video                                     │
+│ Human context:   Enough time to see turn intention                      │
+│ Motion capture:  Sufficient for detecting vehicle direction changes     │
+│ Computation:     Small enough for real-time mobile inference            │
+│ Training data:   All training videos were 2 seconds at 10 FPS           │
+└─────────────────────────────────────────────────────────────────────────┘
+
+TEMPORAL DISTRIBUTION:
+Frame Index:  0   1   2   3   4   5   6   7   8   9   10  11  12  13  14  15  16  17  18  19
+              |-------- First Second --------|-------- Second Second -------|
+Time (sec):   0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9
+
+What if you want 30 frames?
+→ You CANNOT. The model architecture is hardcoded for 20-frame sequences.
+→ Changing this requires complete model retraining.
+
+What if video is shorter than 2 seconds?
+→ Preprocessor pads with zero frames (black frames) to reach 20 frames.
+
+================================================================================
+3. CHANNEL STRUCTURE: 6 CHANNELS EXPLAINED
+================================================================================
+
+Model input has 6 channels per frame, not the usual 3 (RGB).
+
+CHANNEL BREAKDOWN:
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Channels 0-2:  RGB Color Channels                                       │
+│   • Channel 0: Red intensity [0, 1]                                     │
+│   • Channel 1: Green intensity [0, 1]                                   │
+│   • Channel 2: Blue intensity [0, 1]                                    │
+│                                                                         │
+│ Channels 3-5:  Intent Detection Channels (binary: 0 or 1)               │
+│   • Channel 3: Front intent (straight ahead)                            │
+│   • Channel 4: Left turn intent                                         │
+│   • Channel 5: Right turn intent                                        │
+└─────────────────────────────────────────────────────────────────────────┘
+
+INTENT ENCODING EXAMPLE:
+Model detects LEFT turn direction at frame 5:
+
+Frame:     0  1  2  3  4  5  6  7  8  9  10 11 12 13 14 15 16 17 18 19
+RGB (0-2): [Always present - video frames]
+Front (3): 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  ← All zeros
+Left (4):  0  0  0  0  0  1  1  1  1  1  1  1  1  1  1  0  0  0  0  0  ← Active frames 5-14
+Right (5): 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  ← All zeros
+
+Intent duration: 10 frames = 1 second (frames 5-14)
+Only ONE intent channel is active (value = 1.0) at a time.
+Inactive channels are all zeros.
+
+WHY BINARY ENCODING (0 or 1)?
+• Simple for model to learn
+• No ambiguity - clear ON/OFF detection
+• Matches how direction detection works (detected or not)
+• Efficient for neural network processing
+
+================================================================================
+4. INTENT POSITION: CRITICAL FOR MOBILE APPS
+================================================================================
+
+Intent position = frame index where direction is detected by the model
+
+MOBILE APP WORKFLOW:
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 1. User is driving, app is capturing frames continuously                │
+│ 2. Frame buffer maintains last 20 frames (rolling window)               │
+│ 3. Model detects turn direction automatically                           │
+│ 4. App records EXACT frame index when direction detected                │
+│ 5. Continue capturing until buffer has 20 frames                        │
+│ 6. Send to preprocessor with recorded intent position                   │
+│ 7. Provide audio feedback to user ("Turn left", "Go straight", etc.)    │
+└─────────────────────────────────────────────────────────────────────────┘
+
+EXAMPLE TIMELINE:
+Time:      0.0   0.3   0.6   0.9   1.2   1.5   1.8   2.1   2.4   2.7
+Frame:     0     3     6     9     12    15    18    21    24    27
+Action:    └────── Capturing frames ──────┘
+                           ↑
+                    MODEL DETECTS DIRECTION (frame 9)
+                    intent_position = 9
+
+After direction is detected:
+Frame 9-18 (10 frames): Intent channel = 1.0 (active for 1 second)
+Frame 0-8:              Intent channel = 0.0 (before direction detection)
+Frame 19:               Intent channel = 0.0 (after 1-second duration)
+
+CRITICAL:
+• Always pass explicit intent_position from your app.
+• Track the EXACT frame when direction is detected.
+• Don't use default (frame 0) in production - that's for testing only.
+• Model learns that intent appears at realistic times.
+
+TRAINING vs INFERENCE:
+┌────────────────────────────────────────────────────────────────────┐
+│ TRAINING (Prototype 9):                                            │
+│   • Random intent positions (data augmentation)                    │
+│   • Intent can start at frames 0-9 (first second)                  │
+│   • Helps model learn flexible intent detection                    │
+│                                                                    │
+│ INFERENCE (Mobile App):                                            │
+│   • Use EXACT frame when direction is detected                     │
+│   • No randomness - deterministic behavior                         │
+│   • More realistic and predictable                                 │
+└────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+5. TENSOR SHAPES: UNDERSTANDING DIMENSIONS
+================================================================================
+
+SHAPE NOTATION: [Batch, Sequence, Channels, Height, Width]
+
+PREPROCESSOR OUTPUT:
+┌─────────────────────────────────────────────────────────────────────────┐
+│ preprocess_video():                    [20, 6, 128, 128]                │
+│   • 20 frames                                                           │
+│   • 6 channels (RGB + Intent)                                           │
+│   • 128×128 pixel resolution                                            │
+│   • No batch dimension (single video)                                   │
+│                                                                         │
+│ preprocess_for_inference():            [1, 20, 6, 128, 128]             │ 
+│   • 1 video (batch dimension added)                                     │
+│   • Ready for model input                                               │
+└─────────────────────────────────────────────────────────────────────────┘
+
+LIVE CAMERA:
+┌─────────────────────────────────────────────────────────────────────────┐
+│ preprocess_frame_sequence():           [20, 6, 128, 128]                │
+│   • Same as preprocess_video()                                          │
+│   • Takes pre-captured frames instead of video file                     │
+└─────────────────────────────────────────────────────────────────────────┘
+
+MODEL EXPECTS:
+Input:  [Batch, 20, 6, 128, 128]
+Output: [Batch, 3]  ← 3 class probabilities (Front, Left, Right)
+
+DIMENSION ORDER MATTERS:
+PyTorch uses "channels-first" format: [C, H, W]
+OpenCV uses "channels-last" format: [H, W, C]
+
+Preprocessor handles the conversion:
+Camera frame [128, 128, 3] → Preprocessed [3, 128, 128]
+
+================================================================================
+6. NORMALIZATION: WHY [0, 1] INSTEAD OF [0, 255]?
+================================================================================
+
+Camera/video frames typically have pixel values in range [0, 255] (uint8).
+Preprocessor converts to [0, 1] (float32).
+
+WHY NORMALIZE?
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 1. Neural Network Training:                                             │
+│    • Models train better with small input values                        │
+│    • Gradients are more stable                                          │
+│    • Prevents numerical overflow                                        │
+│                                                                         │
+│ 2. Consistency:                                                         │
+│    • All training data was normalized to [0, 1]                         │
+│    • Inference MUST use same normalization                              │
+│    • Mismatch = terrible predictions.                                   │
+│                                                                         │
+│ 3. Computation:                                                         │
+│    • float32 operations are optimized on GPUs                           │
+│    • Easier to apply augmentations                                      │
+└─────────────────────────────────────────────────────────────────────────┘
+
+CONVERSION:
+pixel_value_normalized = pixel_value_uint8 / 255.0
+Example: 255 → 1.0, 128 → 0.502, 0 → 0.0
+
+================================================================================
+7. MODEL ARCHITECTURE: GLOBAL AVERAGE POOLING (GAP)
+================================================================================
+
+CRITICAL DIFFERENCE: Prototype 9 vs Earlier Versions
+
+WITHOUT GAP (Prototype 1-8):
+┌─────────────────────────────────────────────────────────────────────────┐
+│ ConvLSTM Output: [Batch, HiddenDim, Height, Width]                      │
+│                  [1, 32, 128, 128]                                      │
+│ Flatten:         [1, 524288] ← HUGE.                                    │
+│ Fully Connected: [524288, 3]                                            │
+│ Model Size:      ~7 MB                                                  │
+└─────────────────────────────────────────────────────────────────────────┘
+
+WITH GAP (Prototype 9 - MOBILE VERSION):
+┌─────────────────────────────────────────────────────────────────────────┐
+│ ConvLSTM Output:     [Batch, HiddenDim, Height, Width]                  │
+│                      [1, 32, 128, 128]                                  │
+│ Global Avg Pool:     [1, 32] ← Much smaller.                            │
+│ Fully Connected:     [32, 3]                                            │
+│ Model Size:          ~1.5 MB (80% smaller)                              │
+└─────────────────────────────────────────────────────────────────────────┘
+
+HOW GAP WORKS:
+For each channel, average all spatial locations:
+Input Channel (128×128):  [many pixel values]
+Output Value:             mean([all pixel values]) ← Single number per channel
+
+BENEFITS FOR MOBILE:
+• 80% reduction in model size (7 MB → 1.5 MB)
+• Faster inference (~50% reduction in compute)
+• Less memory usage
+• Better for resource-constrained devices
+• Minimal accuracy loss (~2-3% typically)
+
+VERIFICATION:
+Check if your model has GAP:
+• Model file size should be ~1.5 MB
+• If it's 7+ MB, GAP is missing.
+• model_config.yaml: has_global_avg_pool: true
+
+================================================================================
+8. FRAME BUFFER: ROLLING WINDOW FOR LIVE CAMERA
+================================================================================
+
+Mobile apps use a rolling buffer to maintain the last 20 frames continuously.
+
+ROLLING BUFFER CONCEPT:
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Buffer Size: 20 frames (fixed)                                          │
+│ Behavior:    When buffer is full, oldest frame is removed               │
+│              Newest frame is added (FIFO - First In First Out)          │
+└─────────────────────────────────────────────────────────────────────────┘
+
+EXAMPLE:
+Initial state (empty):
+Buffer: []
+
+After 5 frames:
+Buffer: [F0, F1, F2, F3, F4]
+
+After 20 frames (buffer full):
+Buffer: [F0, F1, F2, F3, F4, F5, ..., F18, F19]
+
+After 21 frames (rolling):
+Buffer: [F1, F2, F3, F4, F5, F6, ..., F19, F20]  ← F0 removed, F20 added
+
+After 25 frames:
+Buffer: [F5, F6, F7, F8, F9, F10, ..., F23, F24]  ← Always last 20 frames
+
+PREDICTION TRIGGER:
+User can request prediction at ANY time after buffer is full (20 frames).
+The prediction uses the CURRENT 20 frames in the buffer.
+
+CODE REFERENCE (example_live_camera.py):
+```python
+from collections import deque
+frame_buffer = deque(maxlen=20)  # Automatically removes oldest when full
+
+# Add frames continuously
+frame_buffer.append(new_frame)  # Oldest auto-removed if buffer full
+
+# Check if ready
+if len(frame_buffer) == 20:
+    # Can make prediction now
+    frames = list(frame_buffer)
+    video_tensor = preprocessor.preprocess_frame_sequence(frames, ...)
+```
+
+================================================================================
+9. COLOR SPACE: BGR vs RGB
+================================================================================
+
+IMPORTANT: OpenCV and PyTorch use DIFFERENT color channel orders.
+
+OPENCV (cv2):
+• Reads images/video as BGR (Blue, Green, Red)
+• Channel order: [B, G, R]
+• Historical reason (legacy compatibility)
+
+PYTORCH MODEL:
+• Expects RGB (Red, Green, Blue)
+• Channel order: [R, G, B]
+• Standard for deep learning
+
+PREPROCESSOR HANDLES CONVERSION:
+```python
+frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+```
+
+IF YOU FORGET THIS:
+• Model receives wrong colors (blue and red swapped)
+• Predictions will be inaccurate
+• Training used RGB, inference MUST use RGB
+
+MOBILE TEAM:
+• If capturing with OpenCV: Convert BGR → RGB
+• If using native camera APIs: Check color format (usually RGB)
+• JavaScript/TypeScript: Most libraries use RGB by default
+
+================================================================================
+10. INTENT PROBABILITY (Training Only)
+================================================================================
+
+In model_config.yaml/json, you'll see:
+  intent_probability: 0.6
+
+WHAT THIS MEANS:
+• During TRAINING: 60% of videos have intent signals
+• During TRAINING: 40% of videos have no intent (all zeros)
+• This is DATA AUGMENTATION to make model robust
+
+FOR MOBILE INFERENCE:
+• This parameter is IGNORED
+• You control whether intent is present or not
+• Pass intent=None for no intent
+• Pass intent=0/1/2 with intent_position for detection
+
+TRAINING RATIONALE:
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Model learns to handle both scenarios:                                  │
+│   1. Video with direction detection (intent present)                    │
+│   2. Video without direction detection (intent = None)                  │
+│                                                                         │
+│ This makes the model more robust and prevents overfitting.              │
+└─────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+11. PERFORMANCE CONSIDERATIONS FOR MOBILE
+================================================================================
+
+BOTTLENECKS:
+1. Frame Capture:        ~50-100 ms (depends on camera)
+2. Preprocessing:        ~100-200 ms (resize, normalize, stack)
+3. Model Inference:      ~50-150 ms (depends on device)
+4. Total Latency:        ~200-450 ms (acceptable for turn prediction)
+
+OPTIMIZATION TIPS:
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 1. Use GPU acceleration if available (Android GPU delegate)             │
+│ 2. Apply INT8 quantization to model (~4× smaller, ~2-3× faster)         │
+│ 3. Consider lower resolution (64×64 instead of 128×128) if needed       │
+│    • Requires model retraining.                                         │
+│ 4. Cache preprocessed frames if possible                                │
+│ 5. Use hardware-accelerated video decoding                              │
+│ 6. Profile on target devices (not just high-end phones)                 │
+└─────────────────────────────────────────────────────────────────────────┘
+
+MEMORY USAGE:
+Per frame: 128 × 128 × 3 × 4 bytes (float32) = 196 KB
+20 frames: ~4 MB (manageable on mobile)
+
+================================================================================
+12. COMMON MISTAKES TO AVOID
+================================================================================
+
+❌ MISTAKE 1: Using camera's native FPS directly
+    ✓ FIX: Let preprocessor downsample to 10 FPS
+
+❌ MISTAKE 2: Forgetting to convert BGR to RGB
+    ✓ FIX: Always use cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+❌ MISTAKE 3: Using wrong intent_position (default = 0)
+    ✓ FIX: Track exact frame when direction is detected
+
+❌ MISTAKE 4: Wrong normalization (keeping [0, 255])
+    ✓ FIX: Divide by 255.0 to get [0, 1]
+
+❌ MISTAKE 5: Wrong channel order [H, W, C] instead of [C, H, W]
+    ✓ FIX: Transpose: np.transpose(frame, (2, 0, 1))
+
+❌ MISTAKE 6: Missing batch dimension for inference
+    ✓ FIX: Use preprocess_for_inference() or np.expand_dims(tensor, 0)
+
+❌ MISTAKE 7: Trying to change sequence length (20 frames)
+    ✓ FIX: Don't. Model is hardcoded for 20 frames. Retraining needed.
+
+❌ MISTAKE 8: Loading model without checking for Global Average Pooling
+    ✓ FIX: Verify model file is ~1.5 MB, not 7+ MB
+
+================================================================================
+13. TESTING YOUR INTEGRATION
+================================================================================
+
+VALIDATION CHECKLIST:
+┌─────────────────────────────────────────────────────────────────────────┐
+│ □ Preprocessor output shape is [20, 6, 128, 128]                        │
+│ □ Pixel values are in range [0, 1], not [0, 255]                        │
+│ □ Color channels are RGB, not BGR                                       │
+│ □ Intent position matches when direction was detected                   │
+│ □ Intent channel has correct values (1.0 for active frames)             │
+│ □ Model input shape is [1, 20, 6, 128, 128] (with batch dimension)      │
+│ □ Model outputs shape [1, 3] (3 class probabilities)                    │
+│ □ Predictions are reasonable (not random guessing)                      │
+│ □ Latency is acceptable (<500ms total)                                  │
+│ □ Memory usage is reasonable (<100 MB)                                  │
+└─────────────────────────────────────────────────────────────────────────┘
+
+DEBUGGING TIPS:
+• Print shapes at each step
+• Visualize frames before and after preprocessing
+• Check min/max values of tensors
+• Test with known videos first (not live camera)
+• Use example files as reference implementation
+
+================================================================================
+14. QUESTIONS & ANSWERS
+================================================================================
+
+Q: Can I use 30 frames instead of 20?
+A: No, model is trained for 20 frames. Changing requires retraining.
+
+Q: Can I use 30 FPS instead of 10 FPS?
+A: The preprocessor downsamples automatically. You'll still get 20 frames.
+
+Q: What if my camera only does 15 FPS?
+A: Preprocessor adapts. It will take nearly every frame to get 20 frames.
+
+Q: Can I skip the intent channels?
+A: Yes, pass intent=None. But model accuracy may be lower without intent.
+
+Q: Why 128×128 resolution? Can I use higher?
+A: Model is trained on 128×128. Higher resolution requires retraining.
+
+Q: Do I need to implement preprocessing in JavaScript?
+A: Recommended for production. Python works for testing/prototyping.
+
+Q: What format should the model be for mobile?
+A: TensorFlow Lite (.tflite) with INT8 quantization is recommended.
+
+Q: How do I convert PyTorch model to TFLite?
+A: PyTorch → ONNX → TensorFlow → TFLite (see conversion/ folder)
+
+Q: What if predictions are wrong?
+A: Check: BGR→RGB conversion, normalization, intent position, model file
+
+Q: Can I use this on iOS?
+A: Code is for Android/Expo, but concepts apply. Use Core ML for iOS.
+
+================================================================================
+ADDITIONAL RESOURCES
+================================================================================
+
+• README.md - Complete API documentation
+• example_recorded_video.py - 7 examples for video files
+• example_live_camera.py - 7 examples for live camera + mobile workflow
+• model_config.yaml/json - Model and preprocessing configuration
+• FILES_FOR_MOBILE_TEAM.txt - Deployment checklist and file list
+
+Questions? Review the example files or check model_config.yaml for parameters.
+
+================================================================================
+END OF CONCEPTUAL NOTES
+================================================================================

@@ -1,0 +1,203 @@
+================================================================================
+FILES TO PROVIDE TO MOBILE APP TEAM
+================================================================================
+Last Updated: February 25, 2026
+Purpose: Mobile deployment of ConvLSTM turn prediction model on Android/Expo
+================================================================================
+
+CRITICAL REQUIREMENTS:
+1. All files must be from the SAME training run to ensure compatibility
+2. Model architecture must have Global Average Pooling (Prototype 9)
+3. Model must be trained with input_dim=6, seq_len=20, height=width=128
+
+================================================================================
+REQUIRED FILES
+================================================================================
+
+📂 1. PREPROCESSING MODULE (mobile_app/ folder)
+   └─ Path: mobile_app/
+   
+   Files to provide:
+   ✓ __init__.py                  - Package initialization
+   ✓ config.py                    - Configuration constants (FPS, seq_len, etc.)
+   ✓ preprocessor.py              - Main VideoPreprocessor class
+   ✓ README.md                    - Complete API documentation and usage guide
+   ✓ example_recorded_video.py    - Example usage for pre-recorded videos (7 examples)
+   ✓ example_live_camera.py       - Example usage for live camera feeds (7 examples)
+   ✓ CONCEPTUAL_NOTES.txt         - Detailed explanations of key concepts (FPS, shapes, etc.)
+   ✓ model_config.yaml            - Model configuration (YAML format)
+   ✓ model_config.json            - Model configuration (JSON format)
+   ✓ requirements.txt             - Python dependencies list
+   ✓ FILES_FOR_MOBILE_TEAM.txt    - This file (deployment guide)
+   
+   Why needed:
+   - Provides exact preprocessing pipeline used during training
+   - Ensures mobile app preprocesses videos identically to training data
+   - Includes both video file and live camera feed preprocessing
+   - Output shape: [20, 6, 128, 128] matches model's expected input
+   
+   Dependencies:
+   - numpy >= 1.19.0
+   - opencv-python >= 4.5.0
+   - scipy >= 1.6.0
+
+
+📄 2. MODEL ARCHITECTURE FILE
+   └─ Path: models/conv_lstm_classifier.py
+   
+   Why needed:
+   - Defines the ConvLSTMModel class structure
+   - Contains Global Average Pooling layer (mobile-optimized)
+   - Required to load the trained model weights (.pth file)
+   - Must match the architecture used during training
+   
+   Key configuration:
+   - input_dim: 6 (RGB + Intent channels)
+   - hidden_dim: [64, 32]
+   - seq_len: 20 frames
+   - Global Average Pooling: YES (reduces model size by 80%)
+   - num_classes: 3 (Front, Left, Right)
+   
+   Dependencies:
+   - torch >= 1.12.0
+
+
+💾 3. TRAINED MODEL WEIGHTS
+   └─ Path: notebooks/best_convlstm.pth (or trained .pth file)
+   
+   Why needed:
+   - Contains the learned parameters from training
+   - Must match the architecture in conv_lstm_classifier.py
+   - Load using: model.load_state_dict(torch.load("best_convlstm.pth"))
+   
+   IMPORTANT:
+   - Model MUST be trained with Prototype 9 architecture (with GAP)
+   - Model MUST be trained on 20-frame sequences with 6 channels
+   - If you haven't trained this model yet, you need to train it first
+
+
+📋 4. MODEL CONFIGURATION FILES
+   └─ Path: mobile_app/model_config.yaml (YAML format)
+   └─ Path: mobile_app/model_config.json (JSON format)
+   
+   Both files contain identical configuration:
+   - Model architecture parameters (input_dim, hidden_dim, etc.)
+   - Preprocessing settings (seq_len, fps, height, width, etc.)
+   - Intent configuration (channels, duration, position range)
+   - Class definitions (Front, Left, Right)
+   - Performance metrics (model size, inference time estimates)
+   - Training configuration (for reference)
+   - Deployment settings (platform, framework, backend)
+   
+   Use whichever format is easier for your integration:
+   - YAML: More human-readable, good for configuration files
+   - JSON: Easier to parse in JavaScript/TypeScript, better for Expo apps
+   
+   Why needed:
+   - Ensures mobile team uses correct model initialization parameters
+   - Documents exact configuration used during training
+   - Prevents configuration mismatches
+   - Single source of truth for all model parameters
+
+
+📦 5. DEPENDENCIES FILE
+   └─ Path: mobile_app/requirements.txt
+   
+   Contents:
+   - numpy >= 1.19.0              (Array operations)
+   - opencv-python >= 4.5.0       (Video processing)
+   - torch >= 1.12.0              (Model loading and inference)
+   - torchvision >= 0.13.0        (PyTorch utilities)
+   - tensorflow >= 2.10.0         (For TFLite conversion and inference)
+   - tf2onnx >= 1.12.0            (TensorFlow/ONNX conversion utilities)
+   
+   Optional (commented out):
+   - onnx, onnxruntime            (If ONNX format needed instead of TFLite)
+   - pytest, pillow, matplotlib    (Development/testing)
+   
+   Installation:
+   pip install -r requirements.txt
+   
+   Why needed:
+   - Lists all Python dependencies with minimum versions
+   - Ensures mobile team has correct package versions
+   - Facilitates quick environment setup
+   - Documents exact dependencies used in development
+
+================================================================================
+ADDITIONAL DOCUMENTATION
+================================================================================
+
+📚 6. ADDITIONAL DOCUMENTATION
+   
+   Provide these existing docs:
+   ✓ notebooks/PROTOTYPE_9_README.md     - Model architecture details
+   ✓ SUBREADMES/MOBILE_DEPLOYMENT.md     - Deployment instructions (if exists)
+   ✓ mobile_app/README.md                - Already included, comprehensive guide
+   
+   Should create:
+   □ DEPLOYMENT_CHECKLIST.md             - Step-by-step mobile deployment guide
+   □ API_REFERENCE.md                    - Quick API reference for mobile team
+   □ TROUBLESHOOTING.md                  - Common issues and solutions
+
+
+================================================================================
+VALIDATION CHECKLIST
+================================================================================
+
+Before sending files to mobile team, verify:
+
+✓ Model architecture has Global Average Pooling (check conv_lstm_classifier.py)
+✓ Model expects input shape [B, 20, 6, 128, 128]
+✓ Preprocessor outputs shape [20, 6, 128, 128] (or [1, 20, 6, 128, 128])
+✓ Model weights (.pth) are from a completed training run
+✓ Model and preprocessor use same configuration (seq_len=20, channels=6)
+✓ All dependencies are listed in requirements.txt
+✓ model_config.yaml and model_config.json match the trained model
+✓ Example inference script runs successfully
+✓ Model size is ~1.5 MB (not 7+ MB, which means GAP is missing)
+✓ Test inference on sample video produces reasonable predictions
+✓ All files in mobile_app/ folder are present and up-to-date
+
+================================================================================
+INTEGRATION WORKFLOW FOR MOBILE TEAM
+================================================================================
+
+The mobile team should follow this workflow:
+
+1. SETUP PYTHON ENVIRONMENT
+   - Install dependencies: `pip install -r mobile_app/requirements.txt`
+   - Test imports: `from mobile_app import VideoPreprocessor`
+   - Verify configuration: Load model_config.yaml or model_config.json
+
+2. TEST PREPROCESSING WITH EXAMPLES
+   - Run example_recorded_video.py to test video file preprocessing
+   - Run example_live_camera.py to test real-time camera processing
+   - Review Example 4 in example_live_camera.py for mobile app workflow
+   - Verify output shapes and intent encoding
+
+3. TEST PYTORCH MODEL
+   - Load model using examples in example_recorded_video.py (Example 5)
+   - Test on sample videos
+   - Verify predictions are reasonable
+   - Or just test it live
+
+4. CONVERT TO MOBILE FORMAT
+   - Export to TensorFlow Lite (.tflite)
+   - Apply INT8 quantization for size reduction
+   - Test converted model matches PyTorch predictions
+   - Measure model size and inference speed
+
+5. INTEGRATE INTO MOBILE APP
+   - Implement preprocessing in JavaScript/TypeScript OR
+   - Use Python bridge (Chaquopy for Android)
+   - Load TFLite model using react-native-tensorflow or TFLite Java API
+   - **IMPORTANT**: Pass intent_position based on when direction is detected by model
+   - Test end-to-end pipeline
+
+6. OPTIMIZE FOR MOBILE
+   - Apply quantization (INT8)
+   - Enable GPU acceleration
+   - Optimize preprocessing for real-time performance
+   - Test on various Android devices maybe
+   - Reference performance monitoring in example_live_camera.py (Example 5)
