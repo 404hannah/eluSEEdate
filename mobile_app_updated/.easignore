@@ -1,0 +1,4 @@
+# Ignore native folders - let EAS regenerate them with prebuild
+# This ensures all native modules are properly linked
+android/
+ios/

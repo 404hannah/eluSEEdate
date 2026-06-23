@@ -1,0 +1,325 @@
+================================================================================
+                        DATA DICTIONARY
+                     EluSEEDate Mobile App
+================================================================================
+
+This document defines the main runtime variables, route params, and configuration
+values used by the current app architecture.
+
+Last updated: April 6, 2026
+
+================================================================================
+ARCHITECTURE SUMMARY
+================================================================================
+
+Core architecture now uses one unified camera screen:
+1. ActiveCameraScreen.tsx
+
+Removed duplicate screens:
+1. NoIntentScreen.tsx (removed)
+2. IntentScreen.tsx (removed)
+
+Unified behavior is selected via route param:
+1. mode: 'wandering' | 'destination'
+
+Behavior matrix:
+1. mode='wandering' -> lightweight ConvLSTM path
+2. mode='destination' -> wayfinding (intent-aware) ConvLSTM path
+
+================================================================================
+NAVIGATION CONTRACT (src/navigation/types.ts)
+================================================================================
+
+RootStackParamList routes:
+1. MainMenu: undefined
+2. Choice: undefined
+3. Wayfinding: undefined
+4. ActiveCamera: ActiveCameraParams
+5. Logs: undefined
+
+ActiveCameraParams:
+1. mode: 'wandering' | 'destination' (required)
+2. origin?: { latitude: number; longitude: number }
+3. destination?: { latitude: number; longitude: number }
+4. destinationLabel?: string
+5. routeSteps?: RouteStep[]
+6. totalDistanceMeters?: number
+7. totalDurationSeconds?: number
+
+Current route graph:
+1. MainMenu -> Choice
+2. Choice (Wandering) -> ActiveCamera { mode: 'wandering' }
+3. Choice (Destination) -> Wayfinding
+4. Wayfinding (confirmed) -> ActiveCamera { mode: 'destination', ...route payload }
+5. MainMenu -> Logs
+
+================================================================================
+MODEL CONFIGURATION (src/config/modelConfig.ts)
+================================================================================
+
+ConvLSTM model metadata:
+1. inputDim: 6 (RGB 3 + Intent 3)
+2. hiddenDim: [64, 32]
+3. kernelSize: [3, 3]
+4. numLayers: 2
+5. height: 128
+6. width: 128
+7. numClasses: 3 (Front, Left, Right)
+
+Preprocessing:
+1. seqLen: 20
+2. fps: 20
+3. channels: 6 for ConvLSTM runtime in both pipelines
+   - channels 0-2: RGB
+   - channels 3-5: intent planes (zeroed for no-intent)
+4. normalize: true
+
+Runtime switch:
+1. MODEL_CONFIG.runtime.enableIntentMode: boolean
+2. ENABLE_INTENT_MODE: exported alias available for config-level experiments
+3. ActiveCamera pipeline selection is mode-driven in current runtime
+
+Convenience exports:
+1. SEQ_LEN
+2. FPS
+3. FRAME_HEIGHT
+4. FRAME_WIDTH
+5. CHANNELS
+6. NUM_CLASSES
+7. CLASS_NAMES
+8. INTENT_FRAMES
+9. ENABLE_INTENT_MODE
+
+================================================================================
+ACTIVE CAMERA SCREEN (src/screens/ActiveCameraScreen.tsx)
+================================================================================
+
+Route-driven mode state:
+1. mode: 'wandering' | 'destination' (from route params)
+2. modeLabel: display label derived from mode
+3. useIntentPipeline: boolean derived from mode
+4. convlstmService: selected service module (with-intent or without-intent)
+5. preprocessorChannels: 3 | 6 selected from mode
+6. activePipelineName: 'Wandering pipeline' | 'Wayfinding pipeline' (overlay label)
+
+Destination metadata (optional, destination mode):
+1. destinationLabel
+2. routeStepCount
+3. totalDistanceMeters
+4. currentDistance: live straight-line distance from GPS to destination (meters)
+5. routeProgress.distanceRemaining: route-step-based remaining distance cache (meters)
+6. routeProgress.distanceToStepEnd: distance to current step end for intent-distance channel (meters)
+
+Camera/runtime state:
+1. permission
+2. cameraRef
+3. isCameraReady
+4. isModelLoaded
+5. isYOLOModelLoaded
+6. isCapturing
+7. frameCount
+8. predictionCount
+9. debugStatus
+10. lastCaptureTime
+
+Inference outputs:
+1. currentPrediction
+2. directionLabel
+3. confidence
+4. metrics (preprocess, ConvLSTM inference, baseline latency, fps)
+5. totalInferenceTime (overlay display): lastCaptureTime + preprocessingTimeMs + yoloInferenceTime + inferenceTimeMs
+6. Metric row order in overlay: Capture -> Preprocess -> YOLO -> Inference (ConvLSTM) -> Total
+7. yoloDetections
+8. yoloInferenceTime
+9. metrics.totalLatencyMs remains ConvLSTM-only service latency (preprocess + ConvLSTM inference)
+10. Overlay Total is the user-facing full latency metric and includes capture + YOLO
+
+Overlay target display:
+1. destinationLabel remains full route text for runtime logic and TTS.
+2. Performance overlay uses truncateToFirstComma(destinationLabel) for visual-only display.
+
+Control refs:
+1. isInferencingRef
+2. isCapturingRef
+3. isYOLOInferencingRef
+4. isModelLoadedRef
+5. isYOLOModelLoadedRef
+6. hasFirstPredictionRef
+7. captureSequenceRef
+8. predictionCountRef
+9. captureIntervalRef
+
+Frame strategy:
+1. REALISTIC_CAPTURE_FPS = 2
+2. First inference: getFramesBootstrapDoubled()
+3. Later inference: getFramesPadded()
+
+================================================================================
+WAYFINDING PIPELINE (src/screens/WayfindingScreen.tsx)
+================================================================================
+
+Purpose:
+1. Collect a spoken destination
+2. Geocode destination
+3. Confirm yes/no/back
+4. Fetch walking directions
+5. Navigate to ActiveCamera in destination mode
+
+Important constants:
+1. MAX_RADIUS_KM = 10
+
+Main state:
+1. userLocation
+2. phase: 'ask_location' | 'confirming'
+3. pendingCoord
+4. pendingLabel
+5. pendingDistance
+6. readyToListen
+7. voiceStatus
+8. isListening (from shared voice hook)
+
+Navigation payload to ActiveCamera:
+1. mode: 'destination'
+2. origin
+3. destination
+4. destinationLabel
+5. routeSteps
+6. totalDistanceMeters
+7. totalDurationSeconds
+
+================================================================================
+CHOICE SCREEN (src/screens/ChoiceScreen.tsx)
+================================================================================
+
+Wandering action:
+1. navigation.navigate('ActiveCamera', { mode: 'wandering' })
+
+Destination action:
+1. navigation.navigate('Wayfinding')
+
+Voice grammar:
+1. wandering
+2. destination
+3. back
+4. skip
+5. [unk]
+
+================================================================================
+SHARED VOICE INTERACTION HOOK (src/hooks/useVoiceInteraction.ts)
+================================================================================
+
+Purpose:
+1. Unify TTS + STT control across MainMenu, Choice, and Wayfinding.
+2. Provide centralized timer/listener cleanup with ownership guards to reduce cross-screen race conditions.
+3. Support skipSpeech flow, pre-TTS earcon playback, and listening readiness haptics.
+4. Emit standardized audio lifecycle logs with [AUDIO-DEBUG] prefix.
+
+Core state returned by hook:
+1. isListening
+2. isSpeaking
+3. readyToListen
+4. voiceStatus
+5. setVoiceStatus
+
+Core control methods:
+1. speakMessage
+2. speakThenListen
+3. transitionToListening
+4. skipSpeech
+5. startVoskListening / stopVoskListening
+6. startExpoListening / stopExpoListening
+7. stopAllVoiceActivity
+
+Listening cue dependencies:
+1. expo-haptics (impactAsync)
+2. expo-av (Audio.Sound replayAsync)
+3. assets/sounds/ping.wav (singleton preload)
+
+Earcon behavior:
+1. Ping plays immediately before TTS prompts in MainMenu, Choice, and Wayfinding.
+2. Ping is intentionally not used by ActiveCamera object announcements (YOLO/ConvLSTM).
+
+AUDIO-DEBUG log category:
+1. [AUDIO-DEBUG] TTS Start: <phrase>
+2. [AUDIO-DEBUG] TTS Finished: <phrase>
+3. [AUDIO-DEBUG] Earcon Triggered: ping.wav
+4. [AUDIO-DEBUG] Voice Listener Status: Active/Inactive/Error
+5. Logs are visible in both IDE console and LogsScreen.
+
+LogsScreen category dropdown mapping (src/screens/LogsScreen.tsx):
+1. All Logs: no filter applied
+2. YOLO: [INFERENCE-DEBUG] and [PRIORITY-DEBUG]
+3. ConvLSTM: [CONVLSTM-TRACE]
+4. Audio: [AUDIO-DEBUG] and [AUDIO-TRACE]
+5. Errors: console.error entries and any message containing [ERROR]
+
+================================================================================
+PREPROCESSOR (src/services/preprocessor.ts)
+================================================================================
+
+FrameData:
+1. data: Uint8Array (RGBA)
+2. width: number
+3. height: number
+4. timestamp: number
+5. sequenceId?: number
+
+ProcessedTensor:
+1. data: Float32Array
+2. shape: [batch, seq, channels, height, width]
+3. processingTimeMs: number
+
+FrameBuffer helpers:
+1. addFrame
+2. isReady
+3. canPredictEarly
+4. getFrames
+5. getFramesPadded
+6. getFramesBootstrapDoubled
+
+Tensor/channel semantics:
+1. ConvLSTM shape is fixed at [1, 20, 6, 128, 128] in both wandering and destination modes.
+2. Packing math is channel-first (NCHW-style):
+   - frameStride = height * width * 6
+   - channel base index = frameOffset + channel * (height * width)
+   - pixel index = channelBase + (y * width + x)
+3. no-intent path: channels 3-5 are explicitly cleared to 0 every frame.
+4. intent-aware path: channels 3-5 are populated by step intent and distance thresholds.
+
+================================================================================
+INFERENCE SERVICES
+================================================================================
+
+ConvLSTM without intent (convlstmWithoutIntentInference.ts):
+1. Current baseline classification path
+2. Uses 6-channel preprocessor allocation with channels 3-5 zeroed in ActiveCamera
+3. Exposes initializeModel, runPrediction, cleanupModel
+
+ConvLSTM with intent (convlstmWithIntentInference.ts):
+1. Parallel service API with same interface
+2. Selected by ActiveCamera when mode='destination'
+3. Uses 6-channel preprocessor allocation in ActiveCamera
+
+String utilities (src/utils/stringUtils.ts):
+1. truncateToFirstComma(value: string): string
+2. Returns text up to and including the first comma.
+3. If no comma exists, returns original string unchanged.
+4. truncateToSecondComma(value: string): string
+5. Returns text up to (excluding) the second comma.
+6. If zero or one comma exists, returns original string unchanged.
+
+YOLO (yoloInference.ts):
+1. Exposes initializeYOLOModel, runYOLODetection, cleanupYOLOModel
+2. Produces Detection[] with normalized bounding boxes
+
+================================================================================
+KEY NOTES
+================================================================================
+
+1. ActiveCamera is now the single camera runtime entry point.
+2. Route parameter mode is mandatory and controls screen behavior.
+3. Route mode currently controls whether destination uses wayfinding (intent-aware) pipeline.
+4. Legacy Wandering/Destination/Camera routes were removed from RootStackParamList.
+5. Update this file whenever route params or config toggles change.
+
+================================================================================

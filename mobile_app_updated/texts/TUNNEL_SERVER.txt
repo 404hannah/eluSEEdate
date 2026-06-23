@@ -1,0 +1,89 @@
+TUNNEL SERVER GUIDE
+===================
+
+WHAT IS A TUNNEL?
+-----------------
+
+A tunnel creates a public URL that works from anywhere.
+Use this when:
+- Phone and computer are on different networks
+- Local server connection fails
+- Testing from a remote location
+- Firewall is blocking local connections
+
+
+STARTING A TUNNEL SERVER
+------------------------
+
+1. Open terminal in your project folder
+
+2. Start server with tunnel flag
+   npx expo start --tunnel
+
+3. Wait for "Tunnel ready" message
+
+4. Scan QR code or use the tunnel URL displayed
+
+
+FOR DEVELOPMENT BUILDS
+----------------------
+
+1. Start with both flags
+   npx expo start --dev-client --tunnel
+
+2. Open EluSEEdate app on your phone
+
+3. Scan QR code or tap "Fetch development servers"
+
+
+TUNNEL URL FORMAT
+-----------------
+
+The tunnel URL looks like:
+https://xxxx-username-8081.exp.direct
+
+This URL works from anywhere with internet access.
+
+
+COMMON OPTIONS
+--------------
+
+npx expo start --tunnel                    Basic tunnel
+npx expo start --dev-client --tunnel       Tunnel for dev builds
+npx expo start --tunnel --clear            Clear cache + tunnel
+
+
+FIRST TIME SETUP
+----------------
+
+If you get "ngrok not found" error:
+1. Install ngrok package
+   npm install -g @expo/ngrok
+
+2. Try again
+   npx expo start --tunnel
+
+
+TROUBLESHOOTING
+---------------
+
+"Tunnel URL not loading":
+→ Check internet connection
+→ Wait a few more seconds for tunnel to establish
+→ Try restarting the tunnel
+
+"Tunnel keeps disconnecting":
+→ This is normal after ~2 hours of inactivity
+→ Just restart with: npx expo start --tunnel
+
+Slow performance:
+→ Tunnel adds some latency (normal)
+→ Use local server when possible for faster development
+
+
+STOPPING THE TUNNEL
+-------------------
+
+Press Ctrl+C in the terminal
+
+The tunnel URL will stop working immediately.

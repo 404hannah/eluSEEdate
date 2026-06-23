@@ -1,0 +1,57 @@
+EXPO DEVELOPMENT BUILD GUIDE
+=============================
+
+FROM SCRATCH SETUP
+------------------
+
+1. Install EAS CLI globally
+   npm install -g eas-cli
+
+2. Login to your Expo account
+   eas login
+
+3. Configure EAS for your project
+   eas build:configure
+
+4. Add expo-dev-client to your project
+   npx expo install expo-dev-client
+
+5. Create eas.json with development profile
+   {
+     "build": {
+       "development": {
+         "developmentClient": true,
+         "distribution": "internal"
+       }
+     }
+   }
+
+6. Build development client for Android
+   eas build --profile development --platform android
+
+7. Build development client for iOS
+   eas build --profile development --platform ios
+
+8. Download and install the build on your device
+   - Scan QR code from EAS dashboard, or
+   - Download APK directly for Android
+
+9. Start the development server
+   npx expo start --dev-client
+
+10. Open the dev client app and connect to your server
+
+
+REBUILDING AFTER NATIVE CHANGES
+-------------------------------
+
+1. Clean and regenerate native projects
+   npx expo prebuild --clean
+
+2. Build new development client
+   eas build --profile development --platform android
+
+3. Install new build on device
+
+4. Restart dev server
+   npx expo start --dev-client

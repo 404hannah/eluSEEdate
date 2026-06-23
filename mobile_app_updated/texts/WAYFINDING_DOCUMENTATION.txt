@@ -1,0 +1,830 @@
+================================================================================
+ WAYFINDING SCREEN – DETAILED TECHNICAL DOCUMENTATION
+ EluSEEdate Mobile Application
+================================================================================
+
+TABLE OF CONTENTS
+─────────────────
+  1. Purpose & Role in the App
+  2. Navigation Flow
+  3. File Map (new & modified files)
+  4. WayfindingScreen.tsx – Line-by-Line Breakdown
+     4a. Imports & Dependencies
+     4b. Types & Constants
+     4c. Haversine Distance Formula
+     4d. Component State
+     4e. Phase 1 – GPS Acquisition
+     4f. Phase 2 – TTS Greeting
+     4g. Phase 3 – Voice Recognition (expo-speech-recognition)
+     4h. Phase 4 – Geocoding via Nominatim API
+     4i. Phase 5 – Confirmation Loop
+     4j. Phase 6 – Fetching Directions via OSRM API
+    4k. Phase 7 – Navigation to ActiveCameraScreen
+     4l. Render / UI
+  5. API Deep-Dive: Nominatim (Geocoding)
+     5a. What is Nominatim?
+     5b. Forward Geocoding – how it works
+     5c. Reverse Geocoding – how it works
+     5d. Request/Response examples
+     5e. Rate limits & usage policy
+  6. API Deep-Dive: OSRM (Walking Directions)
+     6a. What is OSRM?
+     6b. Route request – how it works
+     6c. OSRM maneuver system (type + modifier)
+     6d. Maneuver mapping to 7 canonical classes
+     6e. One-hot encoding
+     6f. Request/Response examples
+     6g. How steps map to the study's Intent Feature
+  7. Data Flow Summary (start to finish)
+  8. What ActiveCameraScreen receives
+
+
+================================================================================
+1. PURPOSE & ROLE IN THE APP
+================================================================================
+
+WayfindingScreen is the intermediate screen between ChoiceScreen and
+ActiveCameraScreen. It exists in the "Destination" path only (not the "Wandering"
+path). Its job:
+
+  • Acquire the user's GPS position (origin)
+  • Let the user SPEAK a destination name (the user is visually impaired)
+  • Convert that spoken text into geographic coordinates (geocoding)
+  • Read the resolved address back via TTS for VERIFICATION
+  • Validate the destination is within a 10 km walking radius
+  • Fetch step-by-step WALKING DIRECTIONS (with maneuvers per step)
+  • Pass the full route data to ActiveCameraScreen
+
+Everything is voice-driven (TTS + STT). There are no buttons or maps because
+the user cannot see them.
+
+
+================================================================================
+2. NAVIGATION FLOW
+================================================================================
+
+  MainMenu ──("Start")──▶ Choice ──("Destination")──▶ Wayfinding ──▶ ActiveCameraScreen (destination mode)
+                            │                              │
+                            │                              │ (says "back")
+                            ◀──────────────────────────────┘
+                            │
+                            └──("Wandering")──▶ ActiveCameraScreen (wandering mode)
+
+
+================================================================================
+3. FILE MAP
+================================================================================
+
+  New files created:
+  ──────────────────
+  src/services/geocodingService.ts    Nominatim forward/reverse geocoding
+  src/services/directionsService.ts   OSRM walking directions + maneuver mapping
+  src/screens/WayfindingScreen.tsx    The voice-first wayfinding screen
+
+  Modified files:
+  ───────────────
+  src/navigation/types.ts             Added 'Wayfinding' route; 'ActiveCamera'
+                                      now accepts mode + routeSteps/origin payload.
+  src/screens/index.ts                Added WayfindingScreen export
+  src/screens/ChoiceScreen.tsx        "Destination" now navigates to Wayfinding
+  src/services/index.ts               Exports geocodingService + directionsService
+  App.tsx                             Registered <Stack.Screen name="Wayfinding">
+  app.json                            Added location permissions + expo-location
+                                      plugin + expo-speech-recognition plugin
+  AndroidManifest.xml                 Added ACCESS_FINE/COARSE_LOCATION permissions
+
+  Deleted files:
+  ──────────────
+  src/config/mapsConfig.ts            Google Maps API key (no longer needed)
+
+  Removed packages:
+  ─────────────────
+  react-native-geocoding              Was a Google Geocoding API wrapper
+  react-native-maps                   Was a Google Maps SDK wrapper
+
+  Installed packages:
+  ──────────────────
+  expo-location                       GPS / foreground location permission
+  expo-speech-recognition             Cloud speech-to-text (Google/Apple)
+                                      Used by WayfindingScreen for accurate
+                                      free-form place name recognition
+
+
+================================================================================
+4. WayfindingScreen.tsx – LINE-BY-LINE BREAKDOWN
+================================================================================
+
+── 4a. IMPORTS & DEPENDENCIES ─────────────────────────────────────────────────
+
+  import * as Location from 'expo-location';
+    └─ GPS library. Provides requestForegroundPermissionsAsync() and
+       getCurrentPositionAsync(). Returns { coords: { latitude, longitude } }.
+
+  import { ExpoSpeechRecognitionModule } from 'expo-speech-recognition';
+    └─ Cloud-based speech-to-text (Google Speech on Android, Apple Speech
+       on iOS). Far more accurate than offline Vosk for free-form place
+       names. Uses ExpoSpeechRecognitionModule.start() to begin listening
+       and .addListener('result', ...) to receive transcription events.
+       Free – uses built-in OS speech services, no API key required.
+
+  import * as Speech from 'expo-speech';
+    └─ Text-to-speech. Speech.speak(text, { language, onDone }) speaks aloud
+       and fires onDone when finished.
+
+  import { geocodeForward } from '../services/geocodingService';
+    └─ Nominatim API wrapper. Converts a place name string into
+       { latitude, longitude, displayName }.
+
+  import { fetchWalkingDirections, RouteStep } from '../services/directionsService';
+    └─ OSRM API wrapper. Converts origin + destination coordinates into an
+       array of RouteStep objects with maneuvers.
+
+
+── 4b. TYPES & CONSTANTS ─────────────────────────────────────────────────────
+
+  MAX_RADIUS_KM = 10
+    └─ Maximum walkable distance. Anything beyond this is "Out of Bounds".
+
+  type Coordinate = { latitude: number; longitude: number }
+    └─ Internal coordinate type (used for GPS and geocoded results).
+
+  type Phase = 'ask_location' | 'confirming'
+    └─ State machine for the conversation:
+       • ask_location: expo-speech-recognition listens free-form (any words)
+       • confirming:   expo-speech-recognition listens with contextualStrings
+                       hint ['yes', 'no', 'back'] for better accuracy
+
+
+── 4c. HAVERSINE DISTANCE FORMULA ────────────────────────────────────────────
+
+  function haversineKm(a: Coordinate, b: Coordinate): number
+
+  Calculates the straight-line (great-circle) distance between two points on
+  Earth's surface. Used to check if the destination is within 10 km.
+
+  Formula:
+    h = sin²(Δlat/2) + cos(lat₁) × cos(lat₂) × sin²(Δlng/2)
+    distance = 2 × R × arcsin(√h)     where R = 6371 km
+
+
+── 4d. COMPONENT STATE ────────────────────────────────────────────────────────
+
+  GPS state:
+    userLocation    Current GPS coordinates (set once on mount)
+    loading         True until GPS returns
+    errorMsg        Set if permission denied or GPS fails
+
+  Conversation state:
+    phase           'ask_location' or 'confirming'
+    pendingCoord    Candidate destination coordinates (not committed yet)
+    pendingLabel    Candidate destination's display address
+    pendingDistance  Distance from user to candidate (km)
+
+  Voice state:
+    isListening     Whether speech recognition is actively listening
+    voiceStatus     Status label shown on screen
+    readyToListen   Gate that opens after TTS finishes + 1s delay
+    hasNavigatedRef Ref flag to prevent double-navigation
+
+
+── 4e. PHASE 1 – GPS ACQUISITION (lines ~100-135) ────────────────────────────
+
+  Runs once on mount via useEffect([]).
+
+  1. Calls Location.requestForegroundPermissionsAsync()
+     └─ Android shows "Allow EluSEEdate to use your location?" dialog
+  2. If granted → speaks "Getting your location. Please wait."
+  3. Calls Location.getCurrentPositionAsync({ accuracy: High })
+     └─ Uses the best available provider (GPS + WiFi + cell towers)
+  4. Stores { latitude, longitude } in userLocation state
+  5. Sets loading = false → triggers the TTS greeting
+
+  If permission is denied or GPS fails → sets errorMsg → shows error screen +
+  speaks the error.
+
+
+── 4f. PHASE 2 – TTS GREETING (lines ~138-160) ───────────────────────────────
+
+  Runs via useFocusEffect (fires every time the screen gains focus).
+  Only fires after loading = false AND userLocation is set.
+
+  1. Resets all conversation state (phase → ask_location, pending → null)
+  2. Speaks: "Choose your location. Say the name of your destination.
+             Or say back to return."
+  3. On TTS completion → waits 1 second → sets readyToListen = true
+     └─ The 1s delay prevents the speech recognizer from immediately capturing
+        the tail end of the TTS audio.
+
+  Cleanup: Speech.stop() on blur, readyToListen = false
+
+
+── 4g. PHASE 3 – VOICE RECOGNITION (lines ~170-275) ──────────────────────────
+
+  Runs via useFocusEffect, re-fires when [readyToListen, phase] changes.
+  This is the CORE state machine.
+
+  Uses expo-speech-recognition (ExpoSpeechRecognitionModule) instead of Vosk.
+  This uses Google's cloud speech engine on Android and Apple Speech on iOS,
+  providing significantly better accuracy for free-form place names.
+
+  When readyToListen becomes true:
+
+  1. Requests microphone + speech recognition permissions
+  2. Calls ExpoSpeechRecognitionModule.start({ lang: 'en-US', ... })
+
+  IF phase === 'ask_location':
+    • Starts with default settings (free-form, any words)
+    • On result (isFinal = true):
+      - If includes "back" → speak "Going back" → navigate to Choice
+      - Otherwise → treat the entire transcript as a place name
+        → .abort() → call geocodePlace(transcript)
+
+  IF phase === 'confirming':
+    • Starts with contextualStrings: ['yes', 'no', 'back']
+      and androidIntentOptions: { EXTRA_LANGUAGE_MODEL: 'web_search' }
+      and iosTaskHint: 'confirmation'
+      These hints improve single-word recognition accuracy.
+    • On result (isFinal = true):
+      - "yes"  → handleConfirmYes()
+      - "no"   → handleConfirmNo()
+      - "back" → navigate to Choice
+
+  Auto-restart: An 'end' event listener automatically restarts listening
+  after silence timeouts (500ms delay), so the user can speak again
+  without the app needing manual restart.
+
+  Error handling: 'aborted' and 'no-speech' errors are silently ignored
+  (they are expected during normal operation). Only unexpected errors
+  (e.g., 'audio-capture', 'network', 'not-allowed') are logged.
+
+  Cleanup: removes all listeners, calls .abort(), clears timeout
+
+
+── 4h. PHASE 4 – GEOCODING VIA NOMINATIM API (lines ~245-290) ────────────────
+
+  async geocodePlace(placeName: string)
+
+  Called when the user says a place name in ask_location phase.
+
+  1. TTS: "Looking up [placeName]."
+  2. Calls geocodeForward(placeName)  ← Nominatim API (see Section 5)
+     └─ Sends HTTP GET to nominatim.openstreetmap.org/search?q=...
+     └─ Returns { latitude, longitude, displayName } or null
+  3. If null → restartAskLocation("I could not find that place...")
+  4. If found:
+     a. Stores in pendingCoord, pendingLabel
+     b. Calculates distance via haversineKm()
+     c. Sets phase → 'confirming'
+     d. TTS: "Did you mean [address]? It is X.X km away.
+              Say yes to confirm, no to try again, or back to return."
+     e. After TTS → 1s delay → readyToListen = true
+        └─ This re-triggers the voice recognition useFocusEffect
+           with phase = 'confirming', so recognition now uses
+           contextualStrings hints for yes/no/back
+
+
+── 4i. PHASE 5 – CONFIRMATION LOOP (lines ~295-330) ──────────────────────────
+
+  handleConfirmYes():
+    1. Validates pendingDistance ≤ 10 km
+       └─ If over → TTS: "Out of bounds" → restartAskLocation
+    2. If valid → proceeds to fetch directions (Phase 6)
+
+  handleConfirmNo():
+    1. Calls restartAskLocation("Okay, say another destination.")
+    2. This resets phase → ask_location, clears pending state
+    3. After TTS → 1s delay → speech recognition restarts in free-form mode
+
+  restartAskLocation(message):
+    Utility that clears all pending state, speaks the message,
+    then re-enables listening after a 1s post-TTS delay.
+
+
+── 4j. PHASE 6 – FETCHING DIRECTIONS VIA OSRM API (lines ~300-340) ───────────
+
+  Inside handleConfirmYes(), after radius validation passes:
+
+  1. TTS: "Destination confirmed. Fetching walking directions. Please wait."
+  2. Calls fetchWalkingDirections(userLocation, pendingCoord)
+     └─ OSRM API (see Section 6)
+     └─ Returns { steps: RouteStep[], totalDistanceMeters, totalDurationSeconds }
+  3. Sets a transition lock so skip/back/listener auto-restart cannot
+     interrupt the committed destination handoff
+  4. Navigates immediately to ActiveCameraScreen (destination mode)
+     without waiting on a trailing TTS onDone callback
+
+  If OSRM fails → clears the transition lock and restarts ask_location with
+  an error prompt
+
+
+── 4k. PHASE 7 – NAVIGATION TO ActiveCameraScreen (line ~335) ─────────────────
+
+  navigation.navigate('ActiveCamera', {
+    mode: 'destination',
+    origin:               userLocation,          // { latitude, longitude } from GPS
+    destination:          pendingCoord,           // { latitude, longitude } from geocoding
+    destinationLabel:     pendingLabel,           // "SM City Tarlac, ..."
+    routeSteps:           directions.steps,       // RouteStep[] from OSRM
+    totalDistanceMeters:  directions.totalDistanceMeters,
+    totalDurationSeconds: directions.totalDurationSeconds,
+  });
+
+  These params are defined in src/navigation/types.ts under the 'ActiveCamera'
+  route. ActiveCameraScreen can access them via route.params.
+
+
+── 4l. RENDER / UI ────────────────────────────────────────────────────────────
+
+  Three possible renders:
+
+  1. loading = true
+     → Black screen with white spinner + "Getting your location..."
+
+  2. errorMsg is set
+     → Black screen with red error text + "Say Back to return"
+
+  3. Normal (GPS ready)
+     → Header: "Choose Your Location"
+     → Center: depends on phase
+       • ask_location: "Say the name of your destination"
+       • confirming:   Shows the address, distance, and "Say Yes / No"
+     → Footer: green/grey voice indicator dot + status text + "Say Back"
+
+  The UI is minimal (black & white, large text) because the user is visually
+  impaired. The screen is driven entirely by voice — no buttons to press.
+
+
+================================================================================
+5. API DEEP-DIVE: NOMINATIM (Geocoding)
+================================================================================
+
+── 5a. WHAT IS NOMINATIM? ────────────────────────────────────────────────────
+
+  Nominatim is OpenStreetMap's free geocoding service. It converts:
+    • Place names → coordinates (forward geocoding)
+    • Coordinates → addresses (reverse geocoding)
+
+  It uses the OpenStreetMap database, which is community-maintained and covers
+  the entire world. No API key or account is required.
+
+  Official docs: https://nominatim.org/release-docs/latest/api/Overview/
+
+
+── 5b. FORWARD GEOCODING – HOW IT WORKS ──────────────────────────────────────
+
+  File: src/services/geocodingService.ts → geocodeForward()
+
+  When the user says "SM City Tarlac", the app calls:
+
+    GET https://nominatim.openstreetmap.org/search
+        ?q=SM%20City%20Tarlac
+        &format=json
+        &limit=1
+        &addressdetails=1
+
+  Parameters:
+    q              The search query (URL-encoded place name)
+    format=json    Response format
+    limit=1        Only return the top/best match
+    addressdetails=1   Include structured address components
+
+  Headers:
+    User-Agent: EluSEEdate-MobileApp/1.0 (thesis project)
+    Accept: application/json
+
+  The User-Agent is REQUIRED by Nominatim's usage policy. Requests without
+  it may be blocked.
+
+  The response is a JSON array. We take results[0] and extract:
+    • lat, lon → parsed to floats → become our coordinates
+    • display_name → the full formatted address string
+
+  If the array is empty → the place was not found → return null.
+
+
+── 5c. REVERSE GEOCODING – HOW IT WORKS ──────────────────────────────────────
+
+  File: src/services/geocodingService.ts → geocodeReverse()
+
+  Currently exported but not called by WayfindingScreen (available for future
+  use, e.g., to tell the user their current address).
+
+    GET https://nominatim.openstreetmap.org/reverse
+        ?lat=15.4450
+        &lon=120.5900
+        &format=json
+        &addressdetails=1
+
+  Returns a single JSON object with display_name.
+
+
+── 5d. REQUEST/RESPONSE EXAMPLES ─────────────────────────────────────────────
+
+  Forward geocoding example:
+
+  REQUEST:
+    GET /search?q=SM+City+Tarlac&format=json&limit=1&addressdetails=1
+
+  RESPONSE (simplified):
+    [
+      {
+        "lat": "15.4775407",
+        "lon": "120.5945195",
+        "display_name": "SM City Tarlac, MacArthur Highway, San Sebastian, Tarlac City, ...",
+        "address": {
+          "shop": "SM City Tarlac",
+          "road": "MacArthur Highway",
+          "quarter": "San Sebastian",
+          "city": "Tarlac City",
+          "state": "Central Luzon",
+          "country": "Philippines"
+        }
+      }
+    ]
+
+  What the app extracts:
+    latitude:    15.4775407   (parseFloat from "lat")
+    longitude:   120.5945195  (parseFloat from "lon")
+    displayName: "SM City Tarlac, MacArthur Highway, San Sebastian, Tarlac City, ..."
+
+
+── 5e. RATE LIMITS & USAGE POLICY ────────────────────────────────────────────
+
+  • Max 1 request per second (absolute limit)
+  • Must provide a valid User-Agent header
+  • No bulk/automated geocoding
+  • Attribution: "Data © OpenStreetMap contributors"
+
+  For this app, we only fire ONE geocoding request per spoken place name,
+  and the user must wait for TTS + voice before speaking again, so the
+  1 req/sec limit is naturally respected.
+
+
+================================================================================
+6. API DEEP-DIVE: OSRM (Walking Directions)
+================================================================================
+
+── 6a. WHAT IS OSRM? ─────────────────────────────────────────────────────────
+
+  OSRM (Open Source Routing Machine) is a free, open-source routing engine
+  that computes shortest paths on road networks. It uses OpenStreetMap data.
+
+  The public demo server at router.project-osrm.org is free to use.
+  No API key required.
+
+  It supports multiple profiles: car, bicycle, and FOOT (walking).
+  We use the FOOT profile.
+
+  Official docs: https://project-osrm.org/docs/v5.24.0/api/
+
+
+── 6b. ROUTE REQUEST – HOW IT WORKS ──────────────────────────────────────────
+
+  File: src/services/directionsService.ts → fetchWalkingDirections()
+
+  When the user confirms a destination, the app calls:
+
+    GET https://router.project-osrm.org/route/v1/foot/
+        {origin_lng},{origin_lat};{dest_lng},{dest_lat}
+        ?steps=true
+        &overview=full
+        &geometries=polyline
+        &annotations=false
+
+  ⚠️ IMPORTANT: OSRM uses longitude,latitude order (the opposite of Google
+  Maps which uses latitude,longitude). The code handles this:
+
+    const coords = `${origin.longitude},${origin.latitude};
+                     ${destination.longitude},${destination.latitude}`;
+
+  Parameters:
+    /route/v1/foot/   The "foot" walking profile
+    steps=true        Include turn-by-turn step instructions
+    overview=full     Return the full route polyline
+    geometries=polyline   Encode geometry as a polyline string
+    annotations=false     Skip speed/duration annotations per node
+
+  The response structure:
+    {
+      "code": "Ok",
+      "routes": [
+        {
+          "distance": 2456.7,       // total metres
+          "duration": 1834.5,       // total seconds
+          "geometry": "encoded...",  // polyline
+          "legs": [
+            {
+              "steps": [ ... ]      // array of RouteStep objects
+            }
+          ]
+        }
+      ]
+    }
+
+
+── 6c. OSRM MANEUVER SYSTEM (TYPE + MODIFIER) ────────────────────────────────
+
+  Unlike Google Maps which returns a single "maneuver" string, OSRM splits
+  turn information into TWO fields per step:
+
+    step.maneuver.type      What kind of action:
+                            "depart", "arrive", "turn", "new name",
+                            "continue", "roundabout", "fork", "merge", etc.
+
+    step.maneuver.modifier  The direction of the action:
+                            "left", "slight left", "sharp left",
+                            "right", "slight right", "sharp right",
+                            "straight", "uturn"
+
+  Example OSRM step:
+    {
+      "maneuver": {
+        "type": "turn",
+        "modifier": "slight left",
+        "location": [120.594, 15.456]    // [lng, lat]
+      },
+      "name": "MacArthur Highway",
+      "distance": 145.3,
+      "duration": 108.7,
+      "intersections": [
+        { "location": [120.594, 15.456] },
+        { "location": [120.596, 15.457] }
+      ]
+    }
+
+
+── 6d. MANEUVER MAPPING TO 7 CANONICAL CLASSES ───────────────────────────────
+
+  The study defines 7 walking maneuvers. We map OSRM's modifier field:
+
+    OSRM modifier       →  Canonical class         →  One-hot index
+    ─────────────────────────────────────────────────────────────────
+    "left"               →  turn-left               →  0
+    "slight left"        →  turn-slight-left        →  1
+    "sharp left"         →  turn-sharp-left         →  2
+    "right"              →  turn-right              →  3
+    "slight right"       →  turn-slight-right       →  4
+    "sharp right"        →  turn-sharp-right        →  5
+    "straight"           →  straight                →  6
+    (missing/unknown)    →  straight                →  6
+
+  The mapping function is normalizeOsrmManeuver(type, modifier):
+
+    1. If no modifier → return 'straight'
+    2. Try exact match on lowercase modifier
+    3. Fallback: if contains "left" → turn-left, "right" → turn-right
+    4. Otherwise → straight
+
+
+── 6e. ONE-HOT ENCODING ──────────────────────────────────────────────────────
+
+  Each maneuver is one-hot encoded as a 7-element array:
+
+    MANEUVER_CLASSES = [
+      'turn-left',         // index 0
+      'turn-slight-left',  // index 1
+      'turn-sharp-left',   // index 2
+      'turn-right',        // index 3
+      'turn-slight-right', // index 4
+      'turn-sharp-right',  // index 5
+      'straight',          // index 6
+    ]
+
+  Example: "turn-slight-left" → [0, 1, 0, 0, 0, 0, 0]
+  Example: "straight"         → [0, 0, 0, 0, 0, 0, 1]
+
+  This one-hot vector is pre-computed and stored in each RouteStep as
+  maneuverOneHot, ready for the model to consume without further processing.
+
+
+── 6f. REQUEST/RESPONSE EXAMPLES ─────────────────────────────────────────────
+
+  Walking route from GPS position to SM City Tarlac:
+
+  REQUEST:
+    GET /route/v1/foot/120.5900,15.4450;120.5945,15.4775
+        ?steps=true&overview=full&geometries=polyline&annotations=false
+
+  RESPONSE (simplified):
+    {
+      "code": "Ok",
+      "routes": [{
+        "distance": 3842.1,
+        "duration": 2881.6,
+        "geometry": "uqg}Aov__V...",
+        "legs": [{
+          "steps": [
+            {
+              "maneuver": { "type": "depart", "location": [120.5900, 15.4450] },
+              "name": "A. Mabini Avenue",
+              "distance": 412.3,
+              "duration": 296.9,
+              "intersections": [
+                { "location": [120.5900, 15.4450] },
+                { "location": [120.5914, 15.4558] }
+              ]
+            },
+            {
+              "maneuver": { "type": "turn", "modifier": "left",
+                            "location": [120.5914, 15.4558] },
+              "name": "MacArthur Highway",
+              "distance": 856.7,
+              "duration": 617.0,
+              "intersections": [
+                { "location": [120.5914, 15.4558] },
+                { "location": [120.5960, 15.4657] }
+              ]
+            },
+            {
+              "maneuver": { "type": "turn", "modifier": "slight right",
+                            "location": [120.5960, 15.4657] },
+              "name": "",
+              "distance": 234.1,
+              "duration": 168.5,
+              "intersections": [ ... ]
+            },
+            {
+              "maneuver": { "type": "arrive", "location": [120.5945, 15.4775] },
+              "name": "",
+              "distance": 0,
+              "duration": 0,
+              "intersections": [ ... ]
+            }
+          ]
+        }]
+      }]
+    }
+
+  What the app extracts per step:
+
+    Step 0: index=0, startLocation={lat:15.4450, lng:120.5900}
+            endLocation={lat:15.4558, lng:120.5914}
+            instruction="Head towards A. Mabini Avenue"
+            maneuver="straight", maneuverOneHot=[0,0,0,0,0,0,1]
+            distanceMeters=412.3, durationSeconds=296.9
+
+    Step 1: index=1, startLocation={lat:15.4558, lng:120.5914}
+            endLocation={lat:15.4657, lng:120.5960}
+            instruction="Left onto MacArthur Highway"
+            maneuver="turn-left", maneuverOneHot=[1,0,0,0,0,0,0]
+            distanceMeters=856.7, durationSeconds=617.0
+
+    Step 2: index=2, startLocation={lat:15.4657, lng:120.5960}
+            endLocation=...
+            instruction="Continue slight right"
+            maneuver="turn-slight-right", maneuverOneHot=[0,0,0,0,1,0,0]
+            distanceMeters=234.1, durationSeconds=168.5
+
+    Step 3: index=3, instruction="Arrive at destination"
+            maneuver="straight", maneuverOneHot=[0,0,0,0,0,0,1]
+
+
+── 6g. HOW STEPS MAP TO THE STUDY'S INTENT FEATURE ───────────────────────────
+
+  Per the study, at each timestep during walking, the system needs:
+
+    Intent Feature = [ maneuverOneHot(7), startLat, startLng, endLat, endLng ]
+                     ───────────────────  ──────────────────────────────────
+                     from RouteStep.       from RouteStep.startLocation
+                     maneuverOneHot        and RouteStep.endLocation
+
+  Combined with the user's live GPS:
+
+    Full Input = [ Intent Feature(11), liveGPS_lat, liveGPS_lng ]
+                                                    ─────────────
+                                                    from expo-location
+                                                    (real-time tracking)
+
+  This 13-dimensional vector is then passed through a linear embedding layer
+  to produce the Intent Embedding, which conditions the ConvLSTM model.
+
+  The RouteStep[] array from OSRM provides EXACTLY the data needed:
+    • maneuverOneHot  → 7 values
+    • startLocation   → lat, lng
+    • endLocation     → lat, lng
+
+  At runtime, ActiveCameraScreen matches the user's live GPS coordinate to the
+  nearest route segment to determine which step's maneuver to use.
+
+
+================================================================================
+7. DATA FLOW SUMMARY (start to finish)
+================================================================================
+
+  ┌──────────────────────────────────────────────────────────────────┐
+  │                         USER SPEAKS                              │
+  │                    "SM City Tarlac"                                 │
+  └──────────────┬───────────────────────────────────────────────────┘
+                 │
+                 ▼
+  ┌──────────────────────────────────────────────────────────────────┐
+  │  expo-speech-recognition (STT) – Cloud speech recognition         │
+  │  Google Speech (Android) / Apple Speech (iOS)                      │
+  │  Converts audio → text: "SM City Tarlac"                           │
+  └──────────────┬───────────────────────────────────────────────────┘
+                 │
+                 ▼
+  ┌──────────────────────────────────────────────────────────────────┐
+  │  NOMINATIM API (Geocoding) – Forward geocode                     │
+  │  GET /search?q=sm+city+tarlac&format=json&limit=1                  │
+  │  Returns: lat=15.4775, lng=120.5945                              │
+  │           displayName="SM City Tarlac, MacArthur Hwy, Tarlac City"│
+  └──────────────┬───────────────────────────────────────────────────┘
+                 │
+                 ▼
+  ┌──────────────────────────────────────────────────────────────────┐
+  │  TTS (expo-speech) – Read back for verification                  │
+  │  "Did you mean SM City Tarlac, MacArthur Highway, Tarlac City?   │
+  │   It is 3.8 kilometres away. Say yes to confirm."                │
+  └──────────────┬───────────────────────────────────────────────────┘
+                 │
+                 ▼
+  ┌──────────────────────────────────────────────────────────────────┐
+  │  USER SAYS "YES"                                                 │
+  │  expo-speech-recognition (contextualStrings hint) recognizes "yes"│
+  └──────────────┬───────────────────────────────────────────────────┘
+                 │
+                 ▼
+  ┌──────────────────────────────────────────────────────────────────┐
+  │  HAVERSINE CHECK – 3.8 km ≤ 10 km ✓ (within bounds)             │
+  └──────────────┬───────────────────────────────────────────────────┘
+                 │
+                 ▼
+  ┌──────────────────────────────────────────────────────────────────┐
+  │  OSRM API (Directions) – Walking route                           │
+  │  GET /route/v1/foot/120.5900,15.4450;120.5945,15.4775            │
+  │       ?steps=true&overview=full                                  │
+  │                                                                  │
+  │  Returns: 4 steps, 3842m, 48 min                                 │
+  │  Each step has:                                                  │
+  │    • startLocation { lat, lng }                                  │
+  │    • endLocation   { lat, lng }                                  │
+  │    • maneuver      "turn-left"                                   │
+  │    • maneuverOneHot [1,0,0,0,0,0,0]                              │
+  │    • distanceMeters, durationSeconds                             │
+  │    • instruction    "Left onto MacArthur Highway"                │
+  └──────────────┬───────────────────────────────────────────────────┘
+                 │
+                 ▼
+  ┌──────────────────────────────────────────────────────────────────┐
+  ┌──────────────────────────────────────────────────────────────────┐
+  │  NAVIGATE → ActiveCameraScreen ('ActiveCamera', mode='destination') │
+  │  Passes: origin, destination, destinationLabel,                  │
+  │          routeSteps[], totalDistanceMeters, totalDurationSeconds  │
+  └──────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+8. WHAT ActiveCameraScreen RECEIVES
+================================================================================
+
+  The navigation params available via route.params in ActiveCameraScreen:
+
+  {
+    origin: {
+      latitude: 15.4450,
+      longitude: 120.5900
+    },
+    destination: {
+      latitude: 15.4775,
+      longitude: 120.5945
+    },
+    destinationLabel: "SM City Tarlac, MacArthur Highway, San Sebastian, Tarlac City, ...",
+
+    routeSteps: [
+      {
+        index: 0,
+        startLocation: { lat: 15.4450, lng: 120.5900 },
+        endLocation: { lat: 15.4558, lng: 120.5914 },
+        instruction: "Head towards A. Mabini Avenue",
+        distanceMeters: 412.3,
+        durationSeconds: 296.9,
+        maneuver: "straight",
+        maneuverOneHot: [0, 0, 0, 0, 0, 0, 1]
+      },
+      {
+        index: 1,
+        startLocation: { lat: 15.4558, lng: 120.5914 },
+        endLocation: { lat: 15.4657, lng: 120.5960 },
+        instruction: "Left onto MacArthur Highway",
+        distanceMeters: 856.7,
+        durationSeconds: 617.0,
+        maneuver: "turn-left",
+        maneuverOneHot: [1, 0, 0, 0, 0, 0, 0]
+      },
+      ...
+    ],
+
+    totalDistanceMeters: 3842.1,
+    totalDurationSeconds: 2881.6
+  }
+
+  ActiveCameraScreen can then (in future implementation):
+    1. Track live GPS via expo-location watchPositionAsync()
+    2. Match GPS to nearest RouteStep using distance to start/end locations
+    3. Extract that step's maneuverOneHot + startLocation + endLocation
+    4. Combine with live GPS → 13-dim Intent Feature vector
+    5. Pass through linear embedding → Intent Embedding
+    6. Inject into ConvLSTM's intent channels (the 3 extra channels in 6-ch input)
+
+================================================================================

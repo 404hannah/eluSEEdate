@@ -1,0 +1,120 @@
+================================================================================
+WAYFINDING FEATURE – SETUP & INSTALLATION
+================================================================================
+
+================================================================================
+1. REQUIRED PACKAGES
+================================================================================
+
+All packages are already listed in package.json. Run:
+
+  npm install
+
+Then regenerate native code and build:
+
+  npx expo prebuild --clean
+  eas build --platform android --profile development
+
+OR build locally:
+
+  npx expo run:android
+
+Packages used by the wayfinding feature:
+
+  Package                     Purpose                        Native?
+  ─────────────────────────── ────────────────────────────── ───────
+  expo-location               GPS / foreground location      Yes
+  expo-speech                 Text-to-speech (TTS)           Yes
+  expo-speech-recognition     Cloud speech-to-text (STT)     Yes
+  react-native-vosk           Offline speech-to-text (STT)   Yes
+
+  expo-speech-recognition is used by WayfindingScreen for accurate free-form
+  place name recognition (Google Speech on Android, Apple Speech on iOS).
+
+  react-native-vosk is used by MainMenuScreen and ChoiceScreen for simple
+  word recognition (offline, grammar-restricted).
+
+No API keys are needed. All external APIs are free:
+
+  API                         Endpoint                                  Key?
+  ─────────────────────────── ───────────────────────────────────────── ────
+  Nominatim (Geocoding)       https://nominatim.openstreetmap.org       No
+  OSRM (Walking Directions)   https://router.project-osrm.org           No
+
+
+================================================================================
+2. REBUILDING AFTER ADDING NATIVE LIBRARIES
+================================================================================
+
+Any package with a config plugin or native code requires a new development
+build. A JS-only hot-reload is NOT enough.
+
+Steps:
+  1. Install the package:
+       npm install <package-name>
+
+  2. Regenerate the native project (picks up config plugins):
+       npx expo prebuild --clean
+
+  3. Build a new development client:
+       eas build --platform android --profile development
+     OR build locally:
+       npx expo run:android
+
+If you skip step 2 or 3, the app will crash at runtime with a "module not
+found" error because the native code for the library is missing from the
+binary.
+
+Rule of thumb:
+  - JS-only packages (e.g., a utility library) → no rebuild needed
+  - Packages with a config plugin or native code → rebuild required
+  You can check by looking at the package's docs or seeing if it has an
+  entry in the "plugins" array of app.json.
+
+
+================================================================================
+3. PERMISSIONS (already configured in app.json)
+================================================================================
+
+  Android:
+    android.permission.CAMERA
+    android.permission.RECORD_AUDIO
+    android.permission.ACCESS_FINE_LOCATION
+    android.permission.ACCESS_COARSE_LOCATION
+
+  iOS (infoPlist):
+    NSCameraUsageDescription
+    NSMicrophoneUsageDescription
+
+  Config plugins handle the rest automatically:
+    expo-location              → location permission prompts
+    expo-speech-recognition    → microphone + speech recognition permissions
+    react-native-vosk          → microphone permission + model bundling
+
+
+================================================================================
+4. REFERENCE: FILES ADDED / MODIFIED BY WAYFINDING
+================================================================================
+
+New files created:
+  - src/screens/WayfindingScreen.tsx    (voice-first destination picker)
+  - src/services/geocodingService.ts    (Nominatim API wrapper)
+  - src/services/directionsService.ts   (OSRM API wrapper + maneuver one-hot)
+
+Modified files:
+  - App.tsx                             (added WayfindingScreen to navigator)
+  - src/screens/ChoiceScreen.tsx        (Destination routes to Wayfinding first)
+  - src/screens/index.ts                (added WayfindingScreen export)
+  - src/services/index.ts               (added geocoding + directions exports)
+  - src/navigation/types.ts             (added Wayfinding route + RouteStep type)
+  - app.json                            (added location permissions + plugin +
+                                         expo-speech-recognition plugin)
+  - android/app/src/main/AndroidManifest.xml (added location permissions)
+  - package.json                        (added expo-location, expo-speech-recognition)
+
+Removed files/packages (previously Google-based, replaced with free APIs):
+  - src/config/mapsConfig.ts            (deleted — contained Google API key)
+  - react-native-geocoding              (uninstalled)
+  - react-native-maps                   (uninstalled)
+
+================================================================================

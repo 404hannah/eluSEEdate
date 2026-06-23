@@ -1,0 +1,56 @@
+STANDALONE APK BUILD GUIDE
+==========================
+
+I recommend you do this, experience less errors here
+pero try mo parin the servers if you want
+---------------------------------------------
+
+PREVIEW BUILD (for testing, no server needed)
+---------------------------------------------
+
+1. Build preview APK for Android
+   npx eas build --profile preview --platform android
+
+2. Wait for build to complete (~10-15 minutes)
+
+3. Download APK from the link provided
+
+4. Install on your device and run directly
+
+
+PRODUCTION BUILD (for final release)
+------------------------------------
+
+1. Build production AAB for Android
+   npx eas build --profile production --platform android
+
+2. Wait for build to complete
+
+3. Download AAB from the link provided
+
+4. Submit to Google Play Store or convert to APK
+
+
+KEY DIFFERENCES
+---------------
+
+Development Build:
+- Requires dev server running (npx expo start --dev-client)
+- Hot reload enabled
+- Debugging tools available
+- Larger file size
+
+Preview/Production Build:
+- Runs standalone (no server needed)
+- No hot reload
+- Optimized and minified
+- Smaller file size
+- Can be distributed directly
+
+
+QUICK COMMANDS
+--------------
+
+Preview APK:  eas build --profile preview --platform android
+Production:   npx eas build --profile production --platform android
+Check builds: npx eas build:list

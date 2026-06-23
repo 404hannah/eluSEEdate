@@ -1,0 +1,59 @@
+LOCAL SERVER GUIDE
+==================
+
+STARTING A LOCAL DEVELOPMENT SERVER
+------------------------------------
+
+1. Open terminal in your project folder
+
+2. Start local server
+   npx expo start
+
+3. Your phone must be on the SAME WiFi network as your computer
+
+4. Connect your device:
+   - Scan QR code with Expo Go app (for Expo Go builds)
+   - Scan QR code with EluSEEdate app (for dev builds)
+   - Or enter the URL manually: http://<YOUR_IP>:8081
+
+
+FOR DEVELOPMENT BUILDS SPECIFICALLY
+------------------------------------
+
+1. Start server with dev-client flag
+   npx expo start --dev-client
+
+2. Open the EluSEEdate dev build app on your phone
+
+3. It should auto-detect the server, or scan QR code
+
+
+COMMON OPTIONS
+--------------
+
+npx expo start                 Basic local server
+npx expo start --dev-client    For development builds
+npx expo start --clear         Clear cache and start
+npx expo start -c              Same as --clear
+
+
+TROUBLESHOOTING
+---------------
+
+"Failed to connect":
+→ Make sure phone and computer are on same WiFi
+→ Try disabling firewall temporarily
+→ Check that port 8081 is not blocked
+
+"Network timeout":
+→ Use tunnel instead (see TUNNEL_SERVER.txt)
+
+Server keeps disconnecting:
+→ Keep terminal window open and active
+→ Don't let computer go to sleep
+
+
+STOPPING THE SERVER
+-------------------
+
+Press Ctrl+C in the terminal to stop the server

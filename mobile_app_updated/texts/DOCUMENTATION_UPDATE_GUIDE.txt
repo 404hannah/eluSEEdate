@@ -1,0 +1,364 @@
+================================================================================
+                    DOCUMENTATION UPDATE GUIDE
+                  For Future Reference & Maintenance
+================================================================================
+
+This document lists all documentation files that need to be updated whenever
+changes are made to the codebase. Use this as a checklist to ensure all docs
+stay in sync with code changes.
+
+================================================================================
+WHEN YOU CHANGE: MODEL CONFIGURATION
+================================================================================
+
+If you modify src/config/modelConfig.ts:
+
+1. texts/DATA_DICTIONARY.txt
+   - Update MODEL CONFIGURATION section
+   - Update DEVICE CONFIGURATION section
+   - Update EXPORTED CONSTANTS section
+   - Update any affected variable descriptions
+
+2. README.md
+   - Update "Model Configuration" table
+   - Update "Intent Channels" section if changed
+   - Update "Performance Metrics" section if metrics change
+   - Update "Target Device" section if device changes
+
+3. MODEL_CONVERSION_GUIDE.md
+   - Update if model architecture changes
+   - Update if input/output shapes change
+
+================================================================================
+WHEN YOU CHANGE: PREPROCESSING LOGIC
+================================================================================
+
+If you modify src/services/preprocessor.ts:
+
+1. texts/DATA_DICTIONARY.txt
+   - Update PREPROCESSOR section
+   - Update FRAME DATA section
+   - Update PROCESSED TENSOR section
+
+2. README.md
+   - Update "Frame Capture & Preprocessing" section
+   - Update "Preprocessing Pipeline" steps if changed
+
+3. MODEL_CONVERSION_GUIDE.md
+   - Update preprocessing requirements if changed
+
+================================================================================
+WHEN YOU CHANGE: INFERENCE SERVICES
+================================================================================
+
+If you modify src/services/convlstmWithoutIntentInference.ts,
+convlstmWithIntentInference.ts, or yoloInference.ts:
+
+1. texts/DATA_DICTIONARY.txt
+   - Update relevant INFERENCE section (ConvLSTM or YOLO)
+   - Update MODEL STATE section
+   - Update PREDICTION/DETECTION RESULT sections
+
+2. README.md
+   - Update "Model Configuration" tables
+   - Update "TFLite Implementation" section
+   - Update "Performance Metrics" section
+
+3. MODEL_CONVERSION_GUIDE.md
+   - Update if model requirements change
+   - Update conversion steps if needed
+
+================================================================================
+WHEN YOU CHANGE: YOLO OBJECT DETECTION
+================================================================================
+
+If you add the real YOLO model or modify yoloInference.ts:
+
+1. texts/DATA_DICTIONARY.txt
+   - Update YOLO INFERENCE section
+   - Update DETECTION and BOUNDING BOX sections
+   - Update src/config/modelConfig.ts YOLO section
+
+2. README.md
+   - Update "YOLOv12 Obstacle Detection" table
+   - Update model status from "Placeholder" to actual details
+   - Update features if detection capabilities change
+
+3. MODEL_CONVERSION_GUIDE.md
+   - Update YOLOv12 conversion section with actual model details
+   - Update expected specs table with real values
+
+4. texts/TROUBLESHOOTING.txt
+   - Update "YOLO not working" section with real troubleshooting
+   - Add issues specific to your YOLO model implementation
+
+5. src/config/modelConfig.ts
+   - Update YOLO_CONFIG with actual model parameters
+   - Update YOLO_CLASS_NAMES if using custom classes
+   - Adjust confidence/IoU thresholds as needed
+
+================================================================================
+WHEN YOU CHANGE: UI COMPONENTS
+================================================================================
+
+If you modify BoundingBoxOverlay.tsx or add new visual components:
+
+1. texts/DATA_DICTIONARY.txt
+   - Update relevant component section
+   - Document component props and behavior
+
+2. README.md
+   - Update "Features" section if visuals change
+   - Update screenshots if provided
+
+================================================================================
+WHEN YOU CHANGE: CAMERA SCREEN
+================================================================================
+
+If you modify src/screens/CameraScreen.tsx:
+
+1. texts/DATA_DICTIONARY.txt
+   - Update CAMERA SCREEN section
+   - Update state variables if changed
+
+2. README.md
+   - Update "Features" section if UI changes
+   - Update "Usage" section if interaction changes
+   - Update "Frame Capture & Preprocessing" if capture logic changes
+
+================================================================================
+WHEN YOU CHANGE: UI/UX OR FEATURES
+================================================================================
+
+If you add/remove/modify features:
+
+1. README.md
+   - Update "Features" section
+   - Update "Usage" section
+   - Update "Design" section if visual changes
+
+2. texts/DATA_DICTIONARY.txt
+   - Add new variables if introduced
+   - Remove obsolete variables
+
+================================================================================
+WHEN YOU CHANGE: DEPENDENCIES
+================================================================================
+
+If you modify package.json dependencies:
+
+1. texts/PACKAGE_DEPENDENCIES.txt
+   - Add new dependency with simple explanation
+   - Include what it does, why it's needed, and where it's used
+   - Update version notes if applicable
+
+2. texts/VERSIONS.txt
+   - Update dependency versions
+   - Add detailed rationale for new dependencies
+
+3. README.md
+   - Update "Prerequisites" if requirements change
+   - Update installation steps if needed
+
+4. INSTALLATION_GUIDE.md
+   - Update installation steps
+
+================================================================================
+WHEN YOU CHANGE: BUILD CONFIGURATION
+================================================================================
+
+If you modify eas.json, app.json, or build configs:
+
+1. README.md
+   - Update "Building for Production" section
+   - Update build commands if changed
+
+2. INSTALLATION_GUIDE.md
+   - Update build instructions
+
+3. texts/EXPO_DEV_BUILD_GUIDE.txt
+   - Update if dev build process changes
+
+4. texts/STANDALONE_APK_BUILD.txt
+   - Update if APK build process changes
+
+================================================================================
+WHEN YOU CHANGE: NAVIGATION
+================================================================================
+
+If you modify src/navigation/types.ts or add/remove screens:
+
+1. texts/DATA_DICTIONARY.txt
+   - Update NAVIGATION section
+   - Update ROUTE PARAMS
+
+2. README.md
+   - Update "Features" section
+   - Update flow descriptions
+
+================================================================================
+WHEN YOU CHANGE: UTILITIES
+================================================================================
+
+If you modify src/utils/ files:
+
+1. texts/DATA_DICTIONARY.txt
+   - Update relevant utility sections
+   - Document new utility functions
+
+2. README.md
+   - Update if utilities affect user-facing features
+
+================================================================================
+WHEN YOU ADD: NEW VARIABLES
+================================================================================
+
+If you introduce new variables anywhere:
+
+1. texts/DATA_DICTIONARY.txt
+   - Add variable to appropriate section
+   - Include: name, type, purpose, default value, range/options
+
+2. README.md
+   - Update if variable affects user-facing features or configuration
+
+================================================================================
+WHEN YOU ADD: NEW FILES OR FOLDERS
+================================================================================
+
+If you create new source files:
+
+1. README.md
+   - Update "Project Structure" section
+   - Add description of new file's purpose
+
+2. texts/DATA_DICTIONARY.txt
+   - Add new section for the file
+   - Document its variables
+
+3. texts/TROUBLESHOOTING.txt
+   - Add relevant debugging commands if applicable
+   - Add common errors and solutions for the new feature
+
+================================================================================
+WHEN YOU CHANGE: CLASS LABELS OR PREDICTIONS
+================================================================================
+
+If you modify the output classes (Front/Left/Right):
+
+1. texts/DATA_DICTIONARY.txt
+   - Update CLASS LABELS section
+   - Update PREDICTION TYPES section
+
+2. README.md
+   - Update "Overview" section
+   - Update "Model Configuration" table
+   - Update "Usage" section
+
+3. src/config/modelConfig.ts
+   - Update classes array
+   - Update type definitions
+
+================================================================================
+WHEN YOU CHANGE: TTS / SPEECH
+================================================================================
+
+If you modify TTS functionality (expo-speech usage):
+
+1. src/screens/MainMenuScreen.tsx
+   - TTS greeting is triggered here on initial mount
+   - hasSpokenGreeting module-level flag controls one-time playback
+
+2. texts/DATA_DICTIONARY.txt
+   - Update MAIN MENU SCREEN section
+   - Update TTS STATE variables if changed
+
+3. texts/VERSIONS.txt
+   - Update TEXT-TO-SPEECH section if library version changes
+
+4. README.md
+   - Update "Features" section if TTS behavior changes
+   - Update "Usage" section if user-facing flow changes
+
+5. INSTALLATION_GUIDE.md
+   - Update testing steps if TTS behavior changes
+
+================================================================================
+WHEN YOU FIX: BUGS OR ISSUES
+================================================================================
+
+Document significant bug fixes:
+
+1. Consider adding to texts/ folder as reference
+   - Create KNOWN_ISSUES.txt if it doesn't exist
+   - Document the issue and resolution
+
+================================================================================
+PERIODIC MAINTENANCE
+================================================================================
+
+Every major release:
+
+1. Review ALL documentation files
+2. Update "LAST UPDATED" dates in:
+   - texts/DATA_DICTIONARY.txt
+   - Other relevant .txt files
+
+3. Verify all code examples in README.md still work
+4. Check that all file paths in docs are still accurate
+5. Update version numbers if applicable
+
+================================================================================
+QUICK CHECKLIST FOR ANY CHANGE
+================================================================================
+
+Before committing code changes, ask yourself:
+
+[ ] Did I update DATA_DICTIONARY.txt if variables changed?
+[ ] Did I update README.md if user-facing features changed?
+[ ] Did I update relevant .txt guides if processes changed?
+[ ] Did I update MODEL_CONVERSION_GUIDE.md if model changed?
+[ ] Did I update INSTALLATION_GUIDE.md if setup changed?
+[ ] Are all code examples still accurate?
+[ ] Are all file paths still correct?
+
+================================================================================
+DOCUMENTATION FILE LOCATIONS
+================================================================================
+
+Main Documentation:
+- README.md                           (Root - primary docs)
+- INSTALLATION_GUIDE.md               (Root - setup instructions)
+- MODEL_CONVERSION_GUIDE.md           (Root - model conversion)
+
+Reference Documents (texts/ folder):
+- texts/DATA_DICTIONARY.txt           (THIS IS THE DATA DICTIONARY)
+- texts/DOCUMENTATION_UPDATE_GUIDE.txt (This file)
+- texts/CAUTION.txt
+- texts/EXPO_DEV_BUILD_GUIDE.txt
+- texts/LOCAL_SERVER.txt
+- texts/STANDALONE_APK_BUILD.txt
+- texts/TUNNEL_SERVER.txt
+- texts/USEFUL_COMMANDS.txt
+- texts/VERSIONS.txt
+- texts/VOSK_INSTALLATION.txt
+
+Configuration Files:
+- src/config/modelConfig.ts           (Model & device configuration)
+
+================================================================================
+TIPS FOR MAINTAINING DOCUMENTATION
+================================================================================
+
+1. Update docs IMMEDIATELY after code changes (not later)
+2. Keep descriptions brief but clear
+3. Include units (ms, pixels, etc.) for numeric values
+4. Document WHY, not just WHAT
+5. Note any limitations or known issues
+6. Keep the DATA_DICTIONARY organized by file/section
+7. Use consistent terminology across all docs
+8. Date your updates for tracking
+
+================================================================================
+LAST UPDATED: March 4, 2026
+================================================================================

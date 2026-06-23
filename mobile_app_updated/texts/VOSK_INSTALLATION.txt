@@ -1,0 +1,32 @@
+VOSK INSTALLATION GUIDE
+=======================
+
+1. Install the package
+   npm install -S react-native-vosk
+
+2. Download a Vosk model from https://alphacephei.com/vosk/models
+   - Use vosk-model-small-en-us-0.15 (~40MB) for English, one could try another version
+
+3. Extract model contents to assets/model-en-us/
+   - Folder must start with "model-" prefix
+   - Place all model files directly in the folder (am/, conf/, graph/, etc.)
+
+4. Add plugin to app.json
+   "plugins": [
+     [
+       "react-native-vosk",
+       {
+         "models": ["assets/model-en-us"],
+         "iOSMicrophonePermission": "Your microphone permission message"
+       }
+     ]
+   ]
+
+5. Rebuild the app
+   npx expo prebuild --clean
+   eas build --profile development --platform android
+
+6. Install the new dev build on your device
+
+Note: Vosk requires native code - it will NOT work with Expo Go.
+      You must use Expo Development Builds.

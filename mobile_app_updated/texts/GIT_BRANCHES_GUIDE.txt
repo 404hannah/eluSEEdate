@@ -1,0 +1,415 @@
+================================================================================
+                        GIT BRANCHES GUIDE
+                     Branch Naming Conventions
+                       EluSEEDate Mobile App
+================================================================================
+
+This guide explains the branch naming conventions and workflow for organizing
+development in the EluSEEDate repository. Follow these conventions to keep
+the repository clean and organized.
+
+================================================================================
+BRANCH NAMING FORMAT
+================================================================================
+
+General format:
+    <type>/<short-description>
+
+Example:
+    feature/voice-commands
+    bugfix/camera-crash
+    refactor/preprocessor-optimization
+
+================================================================================
+BRANCH TYPES
+================================================================================
+
+feature/
+    Purpose: New features or functionality
+    Example: feature/audio-feedback
+             feature/multi-camera-support
+             feature/gesture-controls
+    
+    Use when: Adding new capabilities to the app
+
+bugfix/
+    Purpose: Bug fixes and issue resolution
+    Example: bugfix/prediction-crash
+             bugfix/camera-permission-issue
+             bugfix/memory-leak-inference
+    
+    Use when: Fixing bugs found in development or testing
+
+refactor/
+    Purpose: Code improvement without changing functionality
+    Example: refactor/camera-screen-cleanup
+             refactor/preprocessor-optimization
+             refactor/reduce-duplicate-code
+    
+    Use when: Improving code quality, readability, or performance
+
+hotfix/
+    Purpose: Urgent fixes for production issues
+    Example: hotfix/critical-crash-on-startup
+             hotfix/model-loading-failure
+    
+    Use when: Fixing critical bugs in production builds
+
+docs/
+    Purpose: Documentation updates only
+    Example: docs/update-readme
+             docs/add-setup-guide
+             docs/api-documentation
+    
+    Use when: Updating README, guides, or comments (no code changes)
+
+test/
+    Purpose: Adding or updating tests
+    Example: test/camera-unit-tests
+             test/inference-integration-tests
+    
+    Use when: Adding test coverage or fixing test issues
+
+chore/
+    Purpose: Maintenance tasks, dependencies, config
+    Example: chore/update-dependencies
+             chore/eslint-config
+             chore/cleanup-assets
+    
+    Use when: Updating dependencies, configs, or housekeeping
+
+experiment/
+    Purpose: Experimental features or proof of concepts
+    Example: experiment/gpu-preprocessing
+             experiment/new-model-architecture
+    
+    Use when: Testing ideas that may not be merged
+
+================================================================================
+BRANCH NAMING BEST PRACTICES
+================================================================================
+
+DO:
+✓ Use lowercase letters
+✓ Use hyphens (-) to separate words
+✓ Keep names short but descriptive (2-5 words)
+✓ Be specific about what the branch does
+✓ Use present tense verbs when applicable
+✓ Match issue numbers if tracking (e.g., bugfix/issue-42-camera-crash)
+
+DON'T:
+✗ Use spaces or special characters (except hyphen and slash)
+✗ Use CamelCase or snake_case
+✗ Make names too long or too vague
+✗ Include your name (Git tracks author automatically)
+✗ Use generic names like "fix" or "update"
+
+GOOD EXAMPLES:
+    feature/voice-command-integration
+    bugfix/camera-orientation-fix
+    refactor/inference-service-cleanup
+    docs/add-data-dictionary
+    test/preprocessor-unit-tests
+
+BAD EXAMPLES:
+    myFeature               (no type prefix)
+    fix_bug                 (snake_case, too vague)
+    Feature/New Stuff       (spaces, uppercase, vague)
+    johns-work              (includes name)
+    feature/add-a-new-feature-that-does-voice-commands-and-audio-feedback
+                            (too long)
+
+================================================================================
+MAIN BRANCHES
+================================================================================
+
+main (or master)
+    - Production-ready code
+    - Always stable
+    - Protected branch (no direct commits)
+    - Only merge from develop or hotfix branches
+
+develop
+    - Integration branch for features
+    - Pre-production code
+    - Used for testing before merging to main
+    - Merge feature branches here first
+
+================================================================================
+WORKFLOW
+================================================================================
+
+Creating a New Branch:
+    1. Start from the appropriate base branch:
+       - Features: branch from 'develop'
+       - Hotfixes: branch from 'main'
+       - Others: usually from 'develop'
+
+    2. Create branch with proper naming:
+       git checkout develop
+       git pull origin develop
+       git checkout -b feature/your-feature-name
+
+    3. Work on your changes:
+       - Make commits regularly
+       - Use descriptive commit messages
+       - Keep commits focused and atomic
+
+    4. Push your branch:
+       git push -u origin feature/your-feature-name
+
+    5. Create Pull Request:
+       - Target: develop (or main for hotfixes)
+       - Add description of changes
+       - Request review if working in team
+
+    6. After merge:
+       - Delete the feature branch
+       - Pull latest develop/main
+       - Start next branch
+
+================================================================================
+COMMIT MESSAGE CONVENTIONS
+================================================================================
+
+Format:
+    <type>: <short description>
+    
+    [optional body]
+
+Types (similar to branches):
+    feat:     New feature
+    fix:      Bug fix
+    refactor: Code refactoring
+    docs:     Documentation changes
+    test:     Test additions/changes
+    chore:    Maintenance tasks
+    style:    Formatting, no code change
+    perf:     Performance improvements
+
+Examples:
+    feat: add voice command support
+    fix: resolve camera crash on Android 11
+    refactor: optimize frame preprocessing
+    docs: update README with v1.0.3 changes
+    test: add unit tests for inference service
+    chore: update expo to v54
+    perf: reduce inference latency by 30ms
+
+================================================================================
+BRANCH LIFECYCLE
+================================================================================
+
+1. CREATE
+   git checkout -b feature/my-feature
+
+2. DEVELOP
+   - Make changes
+   - Commit regularly
+   - Keep branch up to date:
+     git checkout develop
+     git pull origin develop
+     git checkout feature/my-feature
+     git merge develop
+
+3. PUSH
+   git push -u origin feature/my-feature
+
+4. PULL REQUEST
+   - Create PR on GitHub/GitLab
+   - Get code review
+   - Make requested changes
+   - Wait for approval
+
+5. MERGE
+   - Merge to develop (or main)
+   - Resolve any conflicts
+   - Verify build passes
+
+6. CLEANUP
+   git checkout develop
+   git pull origin develop
+   git branch -d feature/my-feature
+   git push origin --delete feature/my-feature
+
+================================================================================
+SPECIAL CASES
+================================================================================
+
+Version Releases:
+    release/v1.0.3
+    release/v1.1.0
+    
+    Use when preparing a new version release
+
+Dependencies:
+    chore/update-expo-sdk
+    chore/bump-react-native
+    
+    Use when updating major dependencies
+
+Configuration:
+    chore/setup-eslint
+    chore/update-tsconfig
+    
+    Use when changing project configuration
+
+Multiple Issues:
+    bugfix/camera-and-inference-issues
+    
+    Combine related fixes if they're tightly coupled
+
+================================================================================
+QUICK REFERENCE
+================================================================================
+
+Create new feature:
+    git checkout develop
+    git pull origin develop
+    git checkout -b feature/feature-name
+    [make changes]
+    git add .
+    git commit -m "feat: add feature description"
+    git push -u origin feature/feature-name
+
+Fix a bug:
+    git checkout develop
+    git pull origin develop
+    git checkout -b bugfix/bug-description
+    [fix bug]
+    git add .
+    git commit -m "fix: resolve bug description"
+    git push -u origin bugfix/bug-description
+
+Update documentation:
+    git checkout develop
+    git pull origin develop
+    git checkout -b docs/what-you-updated
+    [update docs]
+    git add .
+    git commit -m "docs: update description"
+    git push -u origin docs/what-you-updated
+
+Critical production fix:
+    git checkout main
+    git pull origin main
+    git checkout -b hotfix/critical-issue
+    [fix issue]
+    git add .
+    git commit -m "fix: resolve critical issue"
+    git push -u origin hotfix/critical-issue
+    [merge to main AND develop]
+
+================================================================================
+TIPS FOR SUCCESS
+================================================================================
+
+1. Branch Often
+   - Create a new branch for each feature/fix
+   - Don't work directly on main or develop
+
+2. Keep Branches Small
+   - One feature or fix per branch
+   - Easier to review and merge
+   - Faster integration
+
+3. Stay Up to Date
+   - Regularly merge develop into your feature branch
+   - Reduces merge conflicts later
+
+4. Clean Up
+   - Delete branches after merging
+   - Keeps repository organized
+
+5. Communicate
+   - Use descriptive names and commit messages
+   - Others should understand your work without asking
+
+6. Test Before PR
+   - Make sure your changes work
+   - Run the app and test your feature
+   - Check for errors
+
+================================================================================
+EXAMPLE WORKFLOW
+================================================================================
+
+Scenario: Adding a new dark mode toggle feature
+
+1. Create branch:
+   $ git checkout develop
+   $ git pull origin develop
+   $ git checkout -b feature/dark-mode-toggle
+
+2. Develop:
+   $ [create toggle component]
+   $ git add src/components/DarkModeToggle.tsx
+   $ git commit -m "feat: add dark mode toggle component"
+   
+   $ [integrate with main menu]
+   $ git add src/screens/MainMenuScreen.tsx
+   $ git commit -m "feat: integrate dark mode toggle in menu"
+   
+   $ [update theme config]
+   $ git add src/config/theme.ts
+   $ git commit -m "feat: add dark mode theme configuration"
+
+3. Keep updated:
+   $ git checkout develop
+   $ git pull origin develop
+   $ git checkout feature/dark-mode-toggle
+   $ git merge develop
+
+4. Push:
+   $ git push -u origin feature/dark-mode-toggle
+
+5. Create Pull Request:
+   - Go to GitHub/GitLab
+   - Create PR: feature/dark-mode-toggle → develop
+   - Add description, screenshots
+   - Request review
+
+6. After merge:
+   $ git checkout develop
+   $ git pull origin develop
+   $ git branch -d feature/dark-mode-toggle
+   $ git push origin --delete feature/dark-mode-toggle
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+Wrong branch name?
+    git branch -m old-name new-name
+    git push origin :old-name new-name
+    git push origin -u new-name
+
+Forgot to branch?
+    git stash
+    git checkout -b feature/new-branch
+    git stash pop
+
+Need to switch branches mid-work?
+    git stash
+    git checkout other-branch
+    [do other work]
+    git checkout original-branch
+    git stash pop
+
+Merge conflicts?
+    git merge develop
+    [resolve conflicts in files]
+    git add .
+    git commit -m "merge: resolve conflicts with develop"
+
+================================================================================
+RELATED DOCUMENTATION
+================================================================================
+
+- texts/DOCUMENTATION_UPDATE_GUIDE.txt - What docs to update after changes
+- texts/DATA_DICTIONARY.txt - Variable documentation
+- texts/USEFUL_COMMANDS.txt - Common Git and development commands
+
+================================================================================
+LAST UPDATED: March 4, 2026
+================================================================================
